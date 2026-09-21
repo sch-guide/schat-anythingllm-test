@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 72" role="img" aria-labelledby="title">
+  <title id="title">병원 실무지침 AI</title>
+  <rect width="64" height="64" y="4" rx="16" fill="#007e87"/>
+  <path d="M20 36h24M32 24v24" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+  <text x="82" y="29" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#007e87">SCH</text>
+  <text x="82" y="55" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#152b40">병원 실무지침 AI</text>
+</svg>

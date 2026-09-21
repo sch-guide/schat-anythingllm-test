@@ -1,5 +1,17 @@
 <a name="readme-top"></a>
 
+# SCHAT 기능 비교용 테스트 저장소
+
+이 저장소는 문서 검색·답변, 직원 로그인, 사용자 권한, Agent와 도구 기능을 시험하기 위한 별도 테스트 환경입니다.
+
+- 실제 웹 화면의 기본 이름: **병원 실무지침 AI**
+- 디자인: 기존 SCHAT의 청록색·남색 병원 화면
+- 용도: 기존 SCHAT과 기능·사용성을 비교하는 테스트
+- 주의: 현재 SCHAT의 임상 안전 validator가 연결된 운영 서비스가 아닙니다.
+- 실행 안내: [SCHAT_테스트_실행안내.md](SCHAT_테스트_실행안내.md)
+
+---
+
 > [!NOTE]
 > We are also working on [Open Computer](/open-computer) which gives an entire computer environment for AI Agents to use.
 >

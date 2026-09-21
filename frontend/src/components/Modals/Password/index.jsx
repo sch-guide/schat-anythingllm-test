@@ -12,14 +12,36 @@ import useLogo from "../../../hooks/useLogo";
 export default function PasswordModal({ mode = "single" }) {
   const { loginLogo, isCustomLogo } = useLogo();
   return (
-    <div className="fixed inset-0 bg-zinc-950 light:bg-slate-50 flex flex-col items-center justify-center overflow-hidden">
-      <img
-        src={loginLogo}
-        alt="Logo"
-        className={`max-h-[80px] ${isCustomLogo ? "rounded-lg" : ""}`}
-        style={{ objectFit: "contain" }}
-      />
-      {mode === "single" ? <SingleUserAuth /> : <MultiUserAuth />}
+    <div className="schat-login fixed inset-0 flex items-center justify-center overflow-auto">
+      <main className="schat-login__shell">
+        <section className="schat-login__brand" aria-label="서비스 소개">
+          <div className="schat-login__hospital">
+            <span className="schat-login__mark">SCH</span>
+            <span>순천향대학교 부속 천안병원</span>
+          </div>
+          <div>
+            <p className="schat-login__eyebrow">HOSPITAL KNOWLEDGE ASSISTANT</p>
+            <h1>병원 실무지침 AI</h1>
+            <p className="schat-login__description">
+              등록된 실무지침을 근거로 질문하고 출처와 함께 확인합니다.
+            </p>
+          </div>
+          <div className="schat-login__trust">
+            <span>직원 전용</span>
+            <span>근거 기반 답변</span>
+            <span>개인정보 입력 금지</span>
+          </div>
+        </section>
+        <section className="schat-login__form">
+          <img
+            src={loginLogo}
+            alt="병원 실무지침 AI"
+            className={`schat-login__logo ${isCustomLogo ? "rounded-lg" : ""}`}
+            style={{ objectFit: "contain" }}
+          />
+          {mode === "single" ? <SingleUserAuth /> : <MultiUserAuth />}
+        </section>
+      </main>
     </div>
   );
 }

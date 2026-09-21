@@ -28,7 +28,7 @@ export function useTheme() {
   const [theme, _setTheme] = useState(() => {
     const stored = localStorage.getItem("theme");
     if (stored === "default") return "dark"; // migrate legacy value
-    return stored || "system";
+    return stored || "light";
   });
 
   const [systemTheme, setSystemTheme] = useState(() =>

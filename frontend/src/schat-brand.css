@@ -1,0 +1,204 @@
+:root,
+[data-theme="light"],
+[data-theme="dark"] {
+  --schat-accent: #007e87;
+  --schat-accent-strong: #00656e;
+  --schat-accent-soft: #e4f3f3;
+  --schat-navy: #152b40;
+  --schat-page: #f7f9fb;
+  --schat-sidebar: #f1f5f7;
+  --schat-border: #dde5eb;
+  --theme-loader: var(--schat-accent);
+  --theme-bg-primary: var(--schat-page);
+  --theme-bg-secondary: #ffffff;
+  --theme-bg-sidebar: var(--schat-sidebar);
+  --theme-bg-container: #ffffff;
+  --theme-bg-chat: #ffffff;
+  --theme-bg-chat-input: #ffffff;
+  --theme-text-primary: var(--schat-navy);
+  --theme-text-secondary: #52677b;
+  --theme-placeholder: #718294;
+  --theme-sidebar-item-default: transparent;
+  --theme-sidebar-item-selected: #e0edee;
+  --theme-sidebar-item-hover: #e8f3f3;
+  --theme-sidebar-item-text-active: var(--schat-accent-strong);
+  --theme-sidebar-item-text-inactive: #52677b;
+  --theme-sidebar-item-workspace-active: var(--schat-navy);
+  --theme-sidebar-item-workspace-inactive: #52677b;
+  --theme-sidebar-subitem-selected: #e0edee;
+  --theme-sidebar-thread-selected: #e4f3f3;
+  --theme-sidebar-subitem-hover: #e8f3f3;
+  --theme-sidebar-border: var(--schat-border);
+  --theme-sidebar-footer-icon: #ffffff;
+  --theme-sidebar-footer-icon-fill: #52677b;
+  --theme-sidebar-footer-icon-hover: #e0edee;
+  --theme-chat-input-border: #c9d8e2;
+  --theme-action-menu-bg: #ffffff;
+  --theme-action-menu-item-hover: #e8f3f3;
+  --theme-settings-input-bg: #f7fafc;
+  --theme-settings-input-placeholder: #718294;
+  --theme-settings-input-active: rgb(0 126 135 / 0.12);
+  --theme-settings-input-text: var(--schat-navy);
+  --theme-modal-border: var(--schat-border);
+  --theme-button-primary: var(--schat-accent);
+  --theme-button-primary-hover: var(--schat-accent-strong);
+  --theme-button-cta: var(--schat-accent);
+  --theme-home-text: var(--schat-navy);
+  --theme-home-text-secondary: #52677b;
+  --theme-home-bg-card: #ffffff;
+  --theme-home-bg-button: #f1f5f7;
+  --theme-home-border: var(--schat-border);
+  --theme-home-button-primary: var(--schat-accent);
+  --theme-home-button-primary-hover: var(--schat-accent-strong);
+}
+
+html,
+body {
+  color: var(--schat-navy);
+  background: var(--schat-page);
+  font-family: Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+}
+
+.schat-login {
+  padding: 24px;
+  color: var(--schat-navy);
+  background: linear-gradient(145deg, #eef5f7 0%, var(--schat-page) 62%);
+}
+
+.schat-login__shell {
+  display: grid;
+  grid-template-columns: minmax(340px, 1.05fr) minmax(380px, 0.95fr);
+  width: min(980px, 100%);
+  min-height: 580px;
+  overflow: hidden;
+  border: 1px solid var(--schat-border);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 22px 60px rgb(0 79 113 / 0.12);
+}
+
+.schat-login__brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 48px;
+  color: #ffffff;
+  background: #004f71;
+}
+
+.schat-login__hospital {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.22);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.schat-login__mark {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 44px;
+  border-radius: 9px;
+  color: #004f71;
+  background: #ffffff;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.schat-login__eyebrow {
+  margin: 0;
+  color: #9edff0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.schat-login__brand h1 {
+  margin: 16px 0 14px;
+  color: #ffffff;
+  font-size: 40px;
+  font-weight: 750;
+  letter-spacing: -0.05em;
+}
+
+.schat-login__description {
+  max-width: 330px;
+  margin: 0;
+  color: #d7e8ee;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.schat-login__trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.schat-login__trust span {
+  padding: 7px 10px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 7px;
+  color: #eaf4f7;
+  font-size: 11px;
+}
+
+.schat-login__form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 44px 52px;
+  background: #ffffff;
+}
+
+.schat-login__logo {
+  width: min(320px, 100%);
+  max-height: 72px;
+  margin-bottom: 20px;
+}
+
+.schat-login input {
+  border: 1px solid #c7d6de !important;
+  color: var(--schat-navy) !important;
+  background: #f7fafc !important;
+}
+
+.schat-login button[type="submit"] {
+  color: #ffffff !important;
+  background: var(--schat-accent) !important;
+}
+
+@media (max-width: 760px) {
+  .schat-login {
+    align-items: flex-start;
+    padding: 14px;
+  }
+
+  .schat-login__shell {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    border-radius: 16px;
+  }
+
+  .schat-login__brand {
+    min-height: 220px;
+    padding: 26px;
+  }
+
+  .schat-login__brand h1 {
+    margin: 10px 0 7px;
+    font-size: 28px;
+  }
+
+  .schat-login__description {
+    font-size: 13px;
+  }
+
+  .schat-login__form {
+    padding: 30px 22px;
+  }
+}
