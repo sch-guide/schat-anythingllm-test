@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { NativeEmbedder } = require("../../EmbeddingEngines/native");
+const { GeminiEmbedder } = require("../../EmbeddingEngines/gemini");
 const {
   LLMPerformanceMonitor,
 } = require("../../helpers/chat/LLMPerformanceMonitor");
@@ -23,6 +23,31 @@ const NO_SYSTEM_PROMPT_MODELS = [
   "gemma-3-12b-it",
   "gemma-3-27b-it",
 ];
+
+function buildGeminiChatRequest({
+  model,
+  messages,
+  temperature,
+  responseSchema = null,
+}) {
+  return {
+    model,
+    messages,
+    temperature,
+    ...(responseSchema && typeof responseSchema === "object"
+      ? {
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "schat_controlled_answer",
+              strict: true,
+              schema: responseSchema,
+            },
+          },
+        }
+      : {}),
+  };
+}
 
 class GeminiLLM {
   constructor(embedder = null, modelPreference = null) {
@@ -49,7 +74,7 @@ class GeminiLLM {
       user: this.promptWindowLimit() * 0.7,
     };
 
-    this.embedder = embedder ?? new NativeEmbedder();
+    this.embedder = embedder ?? new GeminiEmbedder();
     this.defaultTemp = 0.7;
 
     if (!fs.existsSync(cacheFolder))
@@ -377,14 +402,20 @@ class GeminiLLM {
     ];
   }
 
-  async getChatCompletion(messages = null, { temperature = 0.7 }) {
+  async getChatCompletion(
+    messages = null,
+    { temperature = 0.7, responseSchema = null }
+  ) {
     const result = await LLMPerformanceMonitor.measureAsyncFunction(
       this.openai.chat.completions
-        .create({
-          model: this.model,
-          messages,
-          temperature: temperature,
-        })
+        .create(
+          buildGeminiChatRequest({
+            model: this.model,
+            messages,
+            temperature,
+            responseSchema,
+          })
+        )
         .catch((e) => {
           console.error(e);
           throw new Error(e.message);
@@ -454,4 +485,5 @@ class GeminiLLM {
 module.exports = {
   GeminiLLM,
   NO_SYSTEM_PROMPT_MODELS,
+  buildGeminiChatRequest,
 };

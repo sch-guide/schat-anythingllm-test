@@ -3,37 +3,11 @@ import Sidebar from "@/components/SettingsSidebar";
 import { isMobile } from "react-device-detect";
 import System from "@/models/system";
 import showToast from "@/utils/toast";
-import SCHATIcon from "@/media/logo/schat-logo.svg";
-import OpenAiLogo from "@/media/llmprovider/openai.png";
-import AzureOpenAiLogo from "@/media/llmprovider/azure.png";
 import GeminiAiLogo from "@/media/llmprovider/gemini.png";
-import LocalAiLogo from "@/media/llmprovider/localai.png";
-import OllamaLogo from "@/media/llmprovider/ollama.png";
-import LMStudioLogo from "@/media/llmprovider/lmstudio.png";
-import CohereLogo from "@/media/llmprovider/cohere.png";
-import VoyageAiLogo from "@/media/embeddingprovider/voyageai.png";
-import LiteLLMLogo from "@/media/llmprovider/litellm.png";
-import GenericOpenAiLogo from "@/media/llmprovider/generic-openai.png";
-import MistralAiLogo from "@/media/llmprovider/mistral.jpeg";
-import OpenRouterLogo from "@/media/llmprovider/openrouter.jpeg";
-import LemonadeLogo from "@/media/llmprovider/lemonade.png";
 
 import PreLoader from "@/components/Preloader";
 import ChangeWarningModal from "@/components/ChangeWarning";
-import OpenAiOptions from "@/components/EmbeddingSelection/OpenAiOptions";
-import AzureAiOptions from "@/components/EmbeddingSelection/AzureAiOptions";
 import GeminiOptions from "@/components/EmbeddingSelection/GeminiOptions";
-import LocalAiOptions from "@/components/EmbeddingSelection/LocalAiOptions";
-import NativeEmbeddingOptions from "@/components/EmbeddingSelection/NativeEmbeddingOptions";
-import OllamaEmbeddingOptions from "@/components/EmbeddingSelection/OllamaOptions";
-import LMStudioEmbeddingOptions from "@/components/EmbeddingSelection/LMStudioOptions";
-import CohereEmbeddingOptions from "@/components/EmbeddingSelection/CohereOptions";
-import VoyageAiOptions from "@/components/EmbeddingSelection/VoyageAiOptions";
-import LiteLLMOptions from "@/components/EmbeddingSelection/LiteLLMOptions";
-import GenericOpenAiEmbeddingOptions from "@/components/EmbeddingSelection/GenericOpenAiOptions";
-import OpenRouterOptions from "@/components/EmbeddingSelection/OpenRouterOptions";
-import MistralAiOptions from "@/components/EmbeddingSelection/MistralAiOptions";
-import LemonadeOptions from "@/components/EmbeddingSelection/LemonadeOptions";
 
 import EmbedderItem from "@/components/EmbeddingSelection/EmbedderItem";
 import { CaretUpDown, MagnifyingGlass, X } from "@phosphor-icons/react";
@@ -44,107 +18,11 @@ import { useTranslation } from "react-i18next";
 
 const EMBEDDERS = [
   {
-    name: "SCHAT Embedder",
-    value: "native",
-    logo: SCHATIcon,
-    options: (settings) => <NativeEmbeddingOptions settings={settings} />,
-    description:
-      "Use the built-in embedding provider for SCHAT. Zero setup!",
-  },
-  {
-    name: "OpenAI",
-    value: "openai",
-    logo: OpenAiLogo,
-    options: (settings) => <OpenAiOptions settings={settings} />,
-    description: "The standard option for most non-commercial use.",
-  },
-  {
-    name: "Azure OpenAI",
-    value: "azure",
-    logo: AzureOpenAiLogo,
-    options: (settings) => <AzureAiOptions settings={settings} />,
-    description: "The enterprise option of OpenAI hosted on Azure services.",
-  },
-  {
-    name: "Gemini",
+    name: "Gemini Embedding 2",
     value: "gemini",
     logo: GeminiAiLogo,
     options: (settings) => <GeminiOptions settings={settings} />,
-    description: "Run powerful embedding models from Google AI.",
-  },
-  {
-    name: "Local AI",
-    value: "localai",
-    logo: LocalAiLogo,
-    options: (settings) => <LocalAiOptions settings={settings} />,
-    description: "Run embedding models locally on your own machine.",
-  },
-  {
-    name: "Ollama",
-    value: "ollama",
-    logo: OllamaLogo,
-    options: (settings) => <OllamaEmbeddingOptions settings={settings} />,
-    description: "Run embedding models locally on your own machine.",
-  },
-  {
-    name: "LM Studio",
-    value: "lmstudio",
-    logo: LMStudioLogo,
-    options: (settings) => <LMStudioEmbeddingOptions settings={settings} />,
-    description:
-      "Discover, download, and run thousands of cutting edge LLMs in a few clicks.",
-  },
-  {
-    name: "Lemonade",
-    value: "lemonade",
-    logo: LemonadeLogo,
-    options: (settings) => <LemonadeOptions settings={settings} />,
-    description:
-      "Run embedding models locally on your own machine using Lemonade.",
-  },
-  {
-    name: "OpenRouter",
-    value: "openrouter",
-    logo: OpenRouterLogo,
-    options: (settings) => <OpenRouterOptions settings={settings} />,
-    description: "Run embedding models from OpenRouter.",
-  },
-  {
-    name: "LiteLLM",
-    value: "litellm",
-    logo: LiteLLMLogo,
-    options: (settings) => <LiteLLMOptions settings={settings} />,
-    description: "Run powerful embedding models from LiteLLM.",
-  },
-  {
-    name: "Cohere",
-    value: "cohere",
-    logo: CohereLogo,
-    options: (settings) => <CohereEmbeddingOptions settings={settings} />,
-    description: "Run powerful embedding models from Cohere.",
-  },
-  {
-    name: "Voyage AI",
-    value: "voyageai",
-    logo: VoyageAiLogo,
-    options: (settings) => <VoyageAiOptions settings={settings} />,
-    description: "Run powerful embedding models from Voyage AI.",
-  },
-  {
-    name: "Mistral AI",
-    value: "mistral",
-    logo: MistralAiLogo,
-    options: (settings) => <MistralAiOptions settings={settings} />,
-    description: "Run powerful embedding models from Mistral AI.",
-  },
-  {
-    name: "Generic OpenAI",
-    value: "generic-openai",
-    logo: GenericOpenAiLogo,
-    options: (settings) => (
-      <GenericOpenAiEmbeddingOptions settings={settings} />
-    ),
-    description: "Run embedding models from any OpenAI compatible API service.",
+    description: "병원 지침의 문맥을 찾는 SCHAT 전용 임베딩 설정입니다.",
   },
 ];
 
@@ -228,7 +106,7 @@ export default function GeneralEmbeddingPreference() {
     async function fetchKeys() {
       const _settings = await System.keys();
       setSettings(_settings);
-      setSelectedEmbedder(_settings?.EmbeddingEngine || "native");
+      setSelectedEmbedder("gemini");
       setHasEmbeddings(_settings?.HasExistingEmbeddings || false);
       setHasCachedEmbeddings(_settings?.HasCachedEmbeddings || false);
       setLoading(false);

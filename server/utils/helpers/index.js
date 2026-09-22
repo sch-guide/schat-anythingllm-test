@@ -85,45 +85,13 @@
  * @returns { BaseVectorDatabaseProvider}
  */
 function getVectorDbClass(getExactly = null) {
-  const vectorSelection = getExactly ?? process.env.VECTOR_DB ?? "lancedb";
-  switch (vectorSelection) {
-    case "pinecone":
-      const { Pinecone } = require("../vectorDbProviders/pinecone");
-      return new Pinecone();
-    case "chroma":
-      const { Chroma } = require("../vectorDbProviders/chroma");
-      return new Chroma();
-    case "chromacloud":
-      const { ChromaCloud } = require("../vectorDbProviders/chromacloud");
-      return new ChromaCloud();
-    case "lancedb":
-      const { LanceDb } = require("../vectorDbProviders/lance");
-      return new LanceDb();
-    case "weaviate":
-      const { Weaviate } = require("../vectorDbProviders/weaviate");
-      return new Weaviate();
-    case "qdrant":
-      const { QDrant } = require("../vectorDbProviders/qdrant");
-      return new QDrant();
-    case "milvus":
-      const { Milvus } = require("../vectorDbProviders/milvus");
-      return new Milvus();
-    case "zilliz":
-      const { Zilliz } = require("../vectorDbProviders/zilliz");
-      return new Zilliz();
-    case "astra":
-      const { AstraDB } = require("../vectorDbProviders/astra");
-      return new AstraDB();
-    case "pgvector":
-      const { PGVector } = require("../vectorDbProviders/pgvector");
-      return new PGVector();
-    default:
-      console.error(
-        `\x1b[31m[ENV ERROR]\x1b[0m No VECTOR_DB value found in environment! Falling back to LanceDB`
-      );
-      const { LanceDb: DefaultLanceDb } = require("../vectorDbProviders/lance");
-      return new DefaultLanceDb();
-  }
+  const vectorSelection = getExactly ?? process.env.VECTOR_DB ?? "chroma";
+  if (vectorSelection !== "chroma")
+    throw new Error(
+      `SCHAT document search requires ChromaDB. Got: ${vectorSelection}`
+    );
+  const { Chroma } = require("../vectorDbProviders/chroma");
+  return new Chroma();
 }
 
 /**
@@ -270,57 +238,13 @@ function getLLMProvider({ provider = null, model = null } = {}) {
  * @returns {BaseEmbedderProvider}
  */
 function getEmbeddingEngineSelection() {
-  const { NativeEmbedder } = require("../EmbeddingEngines/native");
-  const engineSelection = process.env.EMBEDDING_ENGINE;
-  switch (engineSelection) {
-    case "openai":
-      const { OpenAiEmbedder } = require("../EmbeddingEngines/openAi");
-      return new OpenAiEmbedder();
-    case "azure":
-      const {
-        AzureOpenAiEmbedder,
-      } = require("../EmbeddingEngines/azureOpenAi");
-      return new AzureOpenAiEmbedder();
-    case "localai":
-      const { LocalAiEmbedder } = require("../EmbeddingEngines/localAi");
-      return new LocalAiEmbedder();
-    case "ollama":
-      const { OllamaEmbedder } = require("../EmbeddingEngines/ollama");
-      return new OllamaEmbedder();
-    case "native":
-      return new NativeEmbedder();
-    case "lmstudio":
-      const { LMStudioEmbedder } = require("../EmbeddingEngines/lmstudio");
-      return new LMStudioEmbedder();
-    case "cohere":
-      const { CohereEmbedder } = require("../EmbeddingEngines/cohere");
-      return new CohereEmbedder();
-    case "voyageai":
-      const { VoyageAiEmbedder } = require("../EmbeddingEngines/voyageAi");
-      return new VoyageAiEmbedder();
-    case "litellm":
-      const { LiteLLMEmbedder } = require("../EmbeddingEngines/liteLLM");
-      return new LiteLLMEmbedder();
-    case "mistral":
-      const { MistralEmbedder } = require("../EmbeddingEngines/mistral");
-      return new MistralEmbedder();
-    case "generic-openai":
-      const {
-        GenericOpenAiEmbedder,
-      } = require("../EmbeddingEngines/genericOpenAi");
-      return new GenericOpenAiEmbedder();
-    case "gemini":
-      const { GeminiEmbedder } = require("../EmbeddingEngines/gemini");
-      return new GeminiEmbedder();
-    case "openrouter":
-      const { OpenRouterEmbedder } = require("../EmbeddingEngines/openRouter");
-      return new OpenRouterEmbedder();
-    case "lemonade":
-      const { LemonadeEmbedder } = require("../EmbeddingEngines/lemonade");
-      return new LemonadeEmbedder();
-    default:
-      return new NativeEmbedder();
-  }
+  const engineSelection = process.env.EMBEDDING_ENGINE ?? "gemini";
+  if (engineSelection !== "gemini")
+    throw new Error(
+      `SCHAT document search requires Gemini embeddings. Got: ${engineSelection}`
+    );
+  const { GeminiEmbedder } = require("../EmbeddingEngines/gemini");
+  return new GeminiEmbedder();
 }
 
 /**

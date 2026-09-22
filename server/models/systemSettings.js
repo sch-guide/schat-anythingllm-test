@@ -7,7 +7,6 @@ const { isValidUrl, safeJsonParse } = require("../utils/http");
 const prisma = require("../utils/prisma");
 const { MetaGenerator } = require("../utils/boot/MetaGenerator");
 const { PGVector } = require("../utils/vectorDbProviders/pgvector");
-const { NativeEmbedder } = require("../utils/EmbeddingEngines/native");
 const { getBaseLLMProviderModel } = require("../utils/helpers");
 const {
   ConnectionStringParser,
@@ -458,8 +457,8 @@ const SystemSettings = {
     const AIbitat = require("../utils/agents/aibitat");
 
     const llmProvider = process.env.LLM_PROVIDER;
-    const vectorDB = process.env.VECTOR_DB;
-    const embeddingEngine = process.env.EMBEDDING_ENGINE ?? "native";
+    const vectorDB = process.env.VECTOR_DB ?? "chroma";
+    const embeddingEngine = process.env.EMBEDDING_ENGINE ?? "gemini";
     return {
       // --------------------------------------------------------
       // General Settings
@@ -481,9 +480,7 @@ const SystemSettings = {
       HasCachedEmbeddings: hasVectorCachedFiles(), // check if they any currently cached embedded docs.
       EmbeddingBasePath: process.env.EMBEDDING_BASE_PATH,
       EmbeddingModelPref:
-        embeddingEngine === "native"
-          ? NativeEmbedder._getEmbeddingModel()
-          : process.env.EMBEDDING_MODEL_PREF,
+        process.env.EMBEDDING_MODEL_PREF || "gemini-embedding-2",
       EmbeddingOutputDimensions:
         process.env.EMBEDDING_OUTPUT_DIMENSIONS || null,
       EmbeddingModelMaxChunkLength:

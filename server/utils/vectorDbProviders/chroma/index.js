@@ -7,6 +7,15 @@ const { toChunks, getEmbeddingEngineSelection } = require("../../helpers");
 const { parseAuthHeader } = require("../../http");
 const { sourceIdentifier } = require("../../chats");
 const { VectorDatabase } = require("../base");
+const { rankByBm25, fuseGeminiAndBm25 } = require("./schatBm25");
+const { attachVectorIdentity } = require("./sourceIdentity");
+const {
+  SCHAT_CHUNK_SIZE,
+  SCHAT_CHUNK_OVERLAP,
+  SCHAT_CHUNK_POLICY_VERSION,
+  isEmployeeSearchDocument,
+  searchableChunkMetadata,
+} = require("./schatPolicy");
 const COLLECTION_REGEX = new RegExp(
   /^(?!\d+\.\d+\.\d+\.\d+$)(?!.*\.\.)(?=^[a-zA-Z0-9][a-zA-Z0-9_-]{1,61}[a-zA-Z0-9]$).{3,63}$/
 );
@@ -133,6 +142,7 @@ class Chroma extends VectorDatabase {
     client,
     namespace,
     queryVector,
+    queryText = "",
     similarityThreshold = 0.25,
     topN = 4,
     filterIdentifiers = [],
@@ -140,21 +150,17 @@ class Chroma extends VectorDatabase {
     const collection = await client.getCollection({
       name: this.normalize(namespace),
     });
-    const result = {
-      contextTexts: [],
-      sourceDocuments: [],
-      scores: [],
-    };
-
+    const candidateLimit = Math.max(topN * 4, 20);
     const response = await collection.query({
       queryEmbeddings: queryVector,
-      nResults: topN,
+      nResults: candidateLimit,
     });
 
-    response.ids[0].forEach((_, i) => {
+    const vectorRanked = [];
+    response.ids[0].forEach((id, i) => {
+      if (!isEmployeeSearchDocument(response.metadatas[0][i])) return;
       const similarity = this.distanceToSimilarity(response.distances[0][i]);
       if (similarity < similarityThreshold) return;
-
       if (
         filterIdentifiers.includes(sourceIdentifier(response.metadatas[0][i]))
       ) {
@@ -163,13 +169,76 @@ class Chroma extends VectorDatabase {
         );
         return;
       }
-
-      result.contextTexts.push(response.documents[0][i]);
-      result.sourceDocuments.push(response.metadatas[0][i]);
-      result.scores.push(similarity);
+      vectorRanked.push({
+        id,
+        text: response.documents[0][i],
+        metadata: response.metadatas[0][i],
+        vectorScore: similarity,
+        corpusPosition: i,
+      });
     });
 
-    return result;
+    let fused = vectorRanked.slice(0, topN);
+    try {
+      const stored = await collection.get({
+        include: ["documents", "metadatas"],
+      });
+      const corpusDocuments = stored.ids
+        .map((id, corpusPosition) => ({
+          id,
+          text: stored.documents[corpusPosition],
+          metadata: stored.metadatas[corpusPosition],
+          corpusPosition,
+        }))
+        .filter(
+          (document) =>
+            document.text &&
+            isEmployeeSearchDocument(document.metadata) &&
+            !filterIdentifiers.includes(sourceIdentifier(document.metadata))
+        );
+      const bm25Ranked = rankByBm25(queryText, corpusDocuments).slice(
+        0,
+        candidateLimit
+      );
+      fused = fuseGeminiAndBm25(vectorRanked, bm25Ranked, {
+        topN,
+        vectorWeight: 0.75,
+        bm25Weight: 0.25,
+      });
+      this.logger(
+        "SCHAT hybrid retrieval summary",
+        JSON.stringify({
+          vectorCandidateCount: vectorRanked.length,
+          bm25CandidateCount: bm25Ranked.length,
+          selectedCount: fused.length,
+          selectedScores: fused.map((candidate) => ({
+            vectorRank: candidate.retrieval?.vectorRank ?? null,
+            vectorScore: candidate.retrieval?.vectorScore ?? null,
+            bm25Rank: candidate.retrieval?.bm25Rank ?? null,
+            bm25Score: candidate.retrieval?.bm25Score ?? null,
+            bm25Coverage: candidate.retrieval?.bm25Coverage ?? 0,
+            fusionScore: candidate.retrieval?.fusionScore ?? 0,
+          })),
+        })
+      );
+    } catch (error) {
+      this.logger(
+        "BM25 supplement unavailable; returning Gemini/Chroma results only.",
+        error.message
+      );
+    }
+
+    return {
+      contextTexts: fused.map((candidate) => candidate.text),
+      sourceDocuments: fused.map((candidate) => ({
+        ...candidate.metadata,
+        id: candidate.id,
+      })),
+      scores: fused.map(
+        (candidate) =>
+          candidate.retrieval?.fusionScore ?? candidate.vectorScore ?? 0
+      ),
+    };
   }
 
   async namespace(client, namespace = null) {
@@ -219,8 +288,13 @@ class Chroma extends VectorDatabase {
       if (!pageContent || pageContent.length == 0) return false;
 
       this.logger("Adding new vectorized document into namespace", namespace);
+      // Include the clinical chunking policy in the cache key. This keeps the
+      // cache useful without silently restoring legacy 8,192-character chunks.
+      const cacheKey = fullFilePath
+        ? `${fullFilePath}::${SCHAT_CHUNK_POLICY_VERSION}`
+        : null;
       if (!skipCache) {
-        const cacheResult = await cachedVectorInformation(fullFilePath);
+        const cacheResult = await cachedVectorInformation(cacheKey);
         if (cacheResult.exists) {
           const { client } = await this.connect();
           const collection = await client.getOrCreateCollection({
@@ -264,18 +338,27 @@ class Chroma extends VectorDatabase {
       // because we then cannot atomically control our namespace to granularly find/remove documents
       // from vectordb.
       const EmbedderEngine = getEmbeddingEngineSelection();
+      const chunkPolicy = searchableChunkMetadata(metadata);
+      const chunkSize = Math.min(
+        Number(
+          await SystemSettings.getValueOrFallback(
+            { label: "text_splitter_chunk_size" },
+            SCHAT_CHUNK_SIZE
+          )
+        ) || SCHAT_CHUNK_SIZE,
+        SCHAT_CHUNK_SIZE
+      );
+      const requestedOverlap =
+        Number(
+          await SystemSettings.getValueOrFallback(
+            { label: "text_splitter_chunk_overlap" },
+            SCHAT_CHUNK_OVERLAP
+          )
+        ) || SCHAT_CHUNK_OVERLAP;
       const textSplitter = new TextSplitter({
-        chunkSize: TextSplitter.determineMaxChunkSize(
-          await SystemSettings.getValueOrFallback({
-            label: "text_splitter_chunk_size",
-          }),
-          EmbedderEngine?.embeddingMaxChunkLength
-        ),
-        chunkOverlap: await SystemSettings.getValueOrFallback(
-          { label: "text_splitter_chunk_overlap" },
-          20
-        ),
-        chunkHeaderMeta: TextSplitter.buildHeaderMeta(metadata),
+        chunkSize,
+        chunkOverlap: Math.min(requestedOverlap, Math.max(0, chunkSize - 1)),
+        chunkHeaderMeta: chunkPolicy.chunkHeaderMeta,
         chunkPrefix: EmbedderEngine?.embeddingPrefix,
       });
       const textChunks = await textSplitter.splitText(pageContent);
@@ -337,7 +420,7 @@ class Chroma extends VectorDatabase {
           throw new Error(`Error embedding into ChromaDB: ${error.message}`);
         }
 
-        await storeVectorResult(chunks, fullFilePath);
+        await storeVectorResult(chunks, cacheKey);
       }
 
       await DocumentVectors.bulkInsert(documentVectors);
@@ -393,12 +476,24 @@ class Chroma extends VectorDatabase {
         client,
         namespace,
         queryVector,
+        queryText: input,
         similarityThreshold,
         topN,
         filterIdentifiers,
       });
 
-    const sources = sourceDocuments.map((metadata, i) => ({
+    const { DocumentVectors } = require("../../../models/vectors");
+    const vectorIds = sourceDocuments
+      .map((metadata) => metadata.id)
+      .filter(Boolean);
+    const vectorMappings = vectorIds.length
+      ? await DocumentVectors.where({ vectorId: { in: vectorIds } })
+      : [];
+    const identifiedSources = attachVectorIdentity(
+      sourceDocuments,
+      vectorMappings
+    );
+    const sources = identifiedSources.map((metadata, i) => ({
       metadata: {
         ...metadata,
         text: contextTexts[i],

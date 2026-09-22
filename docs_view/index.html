@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCHAT 기능 비교 테스트</title><style>
+:root{--navy:#102a43;--teal:#087f8c;--bg:#f3f7fa;--line:#d8e2ea;--muted:#627d98}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--navy);font-family:Pretendard,"Noto Sans KR","Segoe UI",sans-serif}
+.layout{display:grid;grid-template-columns:290px 1fr;min-height:100vh}aside{padding:26px 18px;background:#fff;border-right:1px solid var(--line)}
+aside h1{font-size:20px;margin:0 0 6px}aside p{color:var(--muted);font-size:13px}nav{display:grid;gap:7px;margin-top:24px}button{font:inherit}
+nav button,.change{border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--navy);text-align:left;cursor:pointer}
+nav button{padding:10px}nav button:hover,.change:hover{border-color:var(--teal)}main{width:min(100% - 40px,980px);margin:0 auto;padding:42px 0 70px}
+.hero{padding:30px;border-radius:20px;background:linear-gradient(135deg,#0d7180,#102a43);color:#fff}.hero small{opacity:.78}.hero h2{font-size:34px;margin:8px 0}
+.section-title{margin:34px 0 14px}.changes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.change{padding:18px;display:grid;gap:7px}
+.change span{color:var(--teal);font-size:12px;font-weight:800}.change small{color:var(--muted);line-height:1.5}article{margin-top:28px;padding:30px;background:#fff;border:1px solid var(--line);border-radius:18px}
+article h2{font-size:28px}article h3{margin-top:28px}article p,article li{line-height:1.75}.source{color:var(--muted);font-size:12px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:11px;border:1px solid var(--line);text-align:left}th{background:#eef6f7}
+@media(max-width:760px){.layout{display:block}aside{border-right:0;border-bottom:1px solid var(--line)}.changes{grid-template-columns:1fr}main{width:min(100% - 24px,980px);padding-top:22px}}
+</style></head><body><div class="layout"><aside><h1>SCHAT 기능 비교 테스트</h1><p>기존 SCHAT과 분리된 문서 화면</p><nav><button data-target="doc-0">SCHAT 기능 비교 테스트 현재 상태</button><button data-target="doc-1">2026-09-22 · 기존 SCHAT 문서와 분리</button><button data-target="doc-2">2026-09-22 · 자주 보는 문서를 위로 정리</button><button data-target="doc-3">2026-09-22 · 필요 없는 원본 폴더 정리</button><button data-target="doc-4">2026-09-23 · 문서 현황 업데이트</button><button data-target="doc-5">2026-09-23 · 직원 계정과 실제 질문 1건 검수</button><button data-target="doc-6">직원 답변 가독성 개선 진행 상황</button><button data-target="doc-7">2026-09-23 · 직원 채팅에 Python 안전검사 연결</button><button data-target="doc-8">작업일지</button><button data-target="doc-9">SCHAT 기능 비교 테스트 공식 문서</button><button data-target="doc-10">SCHAT 테스트 브랜딩 구현 계획</button></nav></aside>
+<main><section id="home"><div class="hero"><small>현재 상태</small><h2>SCHAT 기능 비교 테스트 현재 상태</h2><p>기존 SCHAT을 교체하기 전에 문서 등록, 검색, AI 답변, 출처, 직원 로그인과 도구 기능을 별도 환경에서 확인하는 저장소입니다.</p><button data-target="doc-0">현재 상태 자세히 보기</button></div><h2 class="section-title">날짜별 변경</h2><div class="changes"><button class="change" data-target="doc-1"><span>2026-09-22</span><strong>2026-09-22 · 기존 SCHAT 문서와 분리</strong><small>기능 비교용 테스트 저장소의 쉬운 화면과 웹 문서를 기존 SCHAT 문서에서 완전히 분리했습니다.</small></button><button class="change" data-target="doc-2"><span>2026-09-22</span><strong>2026-09-22 · 자주 보는 문서를 위로 정리</strong><small>VS Code Explorer에서 개발자가 아닌 사용자가 자주 확인하는 항목을 위로 올렸습니다.</small></button><button class="change" data-target="doc-3"><span>2026-09-22</span><strong>2026-09-22 · 필요 없는 원본 폴더 정리</strong><small>로컬 SCHAT 기능 비교에 직접 필요하지 않은 원본 프로젝트의 부가 폴더를 정리했습니다. 이후 웹 삽입 기능을 검토할 수 있도록 삽입 도구 원본과 자동검사에 필요한 일부 개발 도구는 복구해 보존했습니다.</small></button><button class="change" data-target="doc-4"><span>2026-09-23</span><strong>2026-09-23 · 문서 현황 업데이트</strong><small>Gemini Embedding 2를 문서와 질문의 의미 벡터 생성에 사용합니다.</small></button><button class="change" data-target="doc-5"><span>2026-09-23</span><strong>2026-09-23 · 직원 계정과 실제 질문 1건 검수</strong><small>다중 사용자 모드를 활성화했습니다.</small></button><button class="change" data-target="doc-6"><span>2026-09-23</span><strong>직원 답변 가독성 개선 진행 상황</strong><small>실제 문서 청크 크기가 최대 8,192자로 설정되어 있었습니다.</small></button><button class="change" data-target="doc-7"><span>2026-09-23</span><strong>2026-09-23 · 직원 채팅에 Python 안전검사 연결</strong><small>직원이 질문하면 AI 답변을 바로 보여주지 않고, 기존 SCHAT의 Python 안전검사를 먼저 거치도록 연결했습니다.</small></button></div></section><article id="doc-0" hidden><p class="source">공식 문서 · docs/00_현재상태/현재_프로젝트_상태.md</p><h2>SCHAT 기능 비교 테스트 현재 상태</h2>
+<h3>이 저장소의 목적</h3>
+<p>기존 SCHAT을 교체하기 전에 문서 등록, 검색, AI 답변, 출처, 직원 로그인과 도구 기능을 별도 환경에서 확인하는 저장소입니다.</p>
+<h3>현재 확인된 상태</h3>
+<table><thead><tr>
+<th>구분</th>
+<th>현재 상태</th>
+</tr></thead><tbody>
+<tr>
+<td>저장소</td>
+<td>기존 SCHAT과 분리된 별도 Git 저장소</td>
+</tr>
+<tr>
+<td>화면</td>
+<td>SCHAT 병원용 이름과 기본 디자인 적용</td>
+</tr>
+<tr>
+<td>문서 화면</td>
+<td>이 저장소 전용 `docs_view`로 분리 완료</td>
+</tr>
+<tr>
+<td>폴더 정리</td>
+<td>불필요한 배포·홍보 자료는 제거하고 웹 삽입 원본과 필수 자동검사 도구는 보존</td>
+</tr>
+<tr>
+<td>Explorer 순서</td>
+<td>웹 문서, 현재 상태와 작업일지를 위로, 개발자용 파일을 맨 아래로 배치</td>
+</tr>
+<tr>
+<td>검색</td>
+<td>Gemini Embedding 2 + ChromaDB 주 검색 + BM25 용어 보완 구현</td>
+</tr>
+<tr>
+<td>MiniLM</td>
+<td>새 SCHAT 검색 경로에서는 사용하지 않음</td>
+</tr>
+<tr>
+<td>답변 생성</td>
+<td>Docker 실행 환경에서 Gemini 답변 모델 사용</td>
+</tr>
+<tr>
+<td>Docker</td>
+<td>SCHAT 웹, ChromaDB, 내부 Python 안전검사 서비스 동시 실행 및 영구 저장 구성 완료</td>
+</tr>
+<tr>
+<td>최소 기능 확인</td>
+<td>테스트 문서 1개 등록, 임베딩, 색인, 질문, 답변과 출처 확인 성공 이력 있음</td>
+</tr>
+<tr>
+<td>직원 로그인</td>
+<td>다중 사용자 모드 전환, 관리자·일반 직원 계정 분리, 일반 직원 로그인 및 관리자 API 차단 확인</td>
+</tr>
+<tr>
+<td>임상 안전검사</td>
+<td>일반 직원 채팅에서 Gemini 후보를 화면에 보내기 전에 기존 Python 검사 실행. 실패·오류·시간초과 시 원문 기반 답변으로 대체</td>
+</tr>
+<tr>
+<td>답변 표시 방식</td>
+<td>안전검사가 끝나기 전 실시간 출력 중단. 통과한 답변 또는 원문 기반 안전 답변만 한 번에 표시</td>
+</tr>
+<tr>
+<td>출처 표시</td>
+<td>직원에게 문서명·페이지·항목명만 표시하고 내부 식별자는 숨김</td>
+</tr>
+<tr>
+<td>실제 질문 검수</td>
+<td>합성 비민감 질문 1건 실행. 구조화 형식은 정상 처리됐으나 필수 근거 누락으로 AI 후보를 차단하고 원문 기반 답변으로 대체</td>
+</tr>
+<tr>
+<td>검색 정밀도</td>
+<td>같은 질문에서 약한 두 번째 결과를 제거하고 직접 관련된 근거 1개만 반환</td>
+</tr>
+<tr>
+<td>실제 병원 사용</td>
+<td>안전검사 PASS 사례와 실제 승인 문서의 출처 메타데이터를 추가 확인하기 전까지 금지</td>
+</tr>
+</tbody></table>
+<h3>다음 확인 순서</h3>
+<p>1. 실제 승인 문서를 등록할 때 문서명·페이지·항목명이 정상 보존되는지 확인합니다.</p>
+<p>2. 안전검사를 통과하는 대표 질문 1건을 별도 승인 후 확인합니다.</p>
+<p>3. 같은 질문으로 기존 SCHAT과 검색·답변을 비교합니다.</p>
+<p>4. 검증 결과를 바탕으로 제한된 직원 시범운영 여부를 승인합니다.</p>
+<h3>현재 주의사항</h3>
+<ul>
+<li>이 문서의 성공 기록은 최소 테스트 문서 1개로 확인한 결과입니다.</li>
+<li>전체 병원 지침서와 다양한 질문에 대한 성능 검증은 아직 완료되지 않았습니다.</li>
+<li>API 키, 환자정보와 병원 원문은 문서 화면에 저장하지 않습니다.</li>
+<li>실제 Gemini 질문 1건에서 검사 전 후보는 노출되지 않았고 원문 기반 대체는 동작했지만, 안전검사 PASS 사례는 아직 확인하지 못했습니다.</li>
+<li>기존 합성 문서는 등록 당시 한글 문서명이 이미 손실되어 원래 이름을 복구할 수 없습니다. 화면에서는 깨진 문자를 제거한 `SCHAT_.txt`를 표시하고, 없는 페이지·항목은 생략합니다.</li>
+<li>구조화 JSON 형식 오류는 해결됐지만, 이번 후보는 검색 근거의 필수 문장을 모두 포함하지 않아 `evidence_coverage`로 차단됐습니다.</li>
+<li>이번 연결은 시범운영 후보이며 정식 Production 승인으로 간주하지 않습니다.</li>
+</ul></article><article id="doc-1" hidden><p class="source">공식 문서 · docs/01_작업일지/2026-09-22_기존_SCHAT_문서와_분리.md</p><h2>2026-09-22 · 기존 SCHAT 문서와 분리</h2>
+<p>기능 비교용 테스트 저장소의 쉬운 화면과 웹 문서를 기존 SCHAT 문서에서 완전히 분리했습니다.</p>
+<h3>바뀐 내용</h3>
+<ul>
+<li>이 저장소 안에 별도의 현재 상태와 작업일지를 만들었습니다.</li>
+<li>웹 문서는 이 저장소의 `docs`만 읽도록 만들었습니다.</li>
+<li>부모 폴더의 기존 SCHAT 문서가 섞이면 자동검사가 실패하도록 했습니다.</li>
+<li>프로그램 소스는 삭제하지 않고 쉬운 VS Code 화면에서만 감췄습니다.</li>
+</ul>
+<h3>변경하지 않은 내용</h3>
+<ul>
+<li>기존 SCHAT Production 코드와 공식 문서</li>
+<li>이 저장소의 검색·답변·로그인 내부 기능</li>
+<li>라이선스 파일</li>
+<li>Git 이력과 원격 저장소 설정</li>
+</ul></article><article id="doc-2" hidden><p class="source">공식 문서 · docs/01_작업일지/2026-09-22_자주보는_문서를_위로_정리.md</p><h2>2026-09-22 · 자주 보는 문서를 위로 정리</h2>
+<p>VS Code Explorer에서 개발자가 아닌 사용자가 자주 확인하는 항목을 위로 올렸습니다.</p>
+<h3>새 순서</h3>
+<p>1. 웹으로 보는 문서</p>
+<p>2. 현재 상태</p>
+<p>3. 작업일지</p>
+<p>4. 전체 공식문서</p>
+<p>5. 개발자용 프로그램파일</p>
+<p>평소에는 위의 세 항목만 확인하면 됩니다. 소스코드, Docker 설정, 자동검사 등은 맨 아래 `90_개발자용_프로그램파일`을 펼쳤을 때만 확인하면 됩니다.</p>
+<h3>중복되어 보이던 폴더 정리</h3>
+<p>`현재상태`와 `작업일지`는 실제로 두 벌 저장된 파일이 아니라, `전체 공식문서` 안의 같은 폴더가 다시 보이던 것이었습니다.</p>
+<p>원본 문서는 삭제하지 않고 `전체 공식문서` 화면에서만 두 폴더를 숨겼습니다. 이제 자주 보는 문서는 위쪽 전용 폴더에서 한 번만 보이며, 나머지 공식문서는 `전체 공식문서`에서 확인할 수 있습니다.</p></article><article id="doc-3" hidden><p class="source">공식 문서 · docs/01_작업일지/2026-09-22_필요없는_원본폴더_정리.md</p><h2>2026-09-22 · 필요 없는 원본 폴더 정리</h2>
+<p>로컬 SCHAT 기능 비교에 직접 필요하지 않은 원본 프로젝트의 부가 폴더를 정리했습니다. 이후 웹 삽입 기능을 검토할 수 있도록 삽입 도구 원본과 자동검사에 필요한 일부 개발 도구는 복구해 보존했습니다.</p>
+<h3>삭제한 폴더</h3>
+<ul>
+<li>개발 컨테이너 설정</li>
+<li>브라우저 확장 프로그램 소스</li>
+<li>유료 클라우드 배포 설정</li>
+<li>원본 설명용 이미지</li>
+<li>원본 README 번역 자료</li>
+</ul>
+<h3>다시 보존한 폴더</h3>
+<ul>
+<li>향후 웹 삽입 기능을 검토하기 위한 삽입 도구 원본</li>
+<li>GitHub 자동검사와 패키지 확인에 필요한 개발 도구</li>
+</ul>
+<h3>남겨 둔 핵심 기능</h3>
+<ul>
+<li>웹 화면</li>
+<li>로그인·검색·답변 서버</li>
+<li>문서 읽기와 처리</li>
+<li>Docker 실행</li>
+<li>AI 도구 기능</li>
+<li>자동검사</li>
+<li>라이선스와 법적 고지</li>
+</ul>
+<p>프로그램에 필요한 핵심 폴더는 삭제하지 않고 일반 사용자용 Explorer 화면에서만 감췄습니다.</p></article><article id="doc-4" hidden><p class="source">공식 문서 · docs/01_작업일지/2026-09-23_문서현황_업데이트.md</p><h2>2026-09-23 · 문서 현황 업데이트</h2>
+<h3>누락된 현황 반영</h3>
+<ul>
+<li>Gemini Embedding 2를 문서와 질문의 의미 벡터 생성에 사용합니다.</li>
+<li>ChromaDB를 주 검색 저장소로 사용합니다.</li>
+<li>BM25가 정확한 용어 검색을 보완합니다.</li>
+<li>MiniLM은 새 SCHAT 검색 경로에서 사용하지 않습니다.</li>
+<li>Docker에서 SCHAT 웹과 ChromaDB를 함께 실행하는 구성이 마련됐습니다.</li>
+<li>테스트 문서 1개를 이용한 문서 등록, 임베딩, 색인, 검색, 답변과 출처 확인까지 성공한 이력이 있습니다.</li>
+</ul>
+<h3>문서 화면 정리</h3>
+<ul>
+<li>문서 보기 화면을 다시 생성해 최신 현재 상태와 작업일지를 표시했습니다.</li>
+<li>개발자용 구현 계획은 일반 사용자용 문서 보기 화면에서 제외했습니다.</li>
+<li>앞으로 코드, 설정, 실행 상태나 검증 결과가 바뀌면 별도 요청 없이 현재 상태와 작업일지, 문서 보기 화면을 함께 갱신하도록 규칙을 명확히 했습니다.</li>
+<li>손으로 일부 수정해 구조가 어긋났던 `docs_view`는 공식 문서를 기준으로 전체 재생성했습니다.</li>
+<li>작업일지 목록이 현재 파일명을 가리키도록 고치고, 존재하지 않는 문서 링크를 자동으로 검사하도록 보강했습니다.</li>
+</ul>
+<h3>남은 제한</h3>
+<ul>
+<li>이후 같은 날 후속 작업에서 기존 SCHAT의 Python 안전검사를 일반 직원 채팅에 연결했습니다. 자세한 내용은 `2026-09-23_직원채팅_안전검사_연결.md`를 확인합니다.</li>
+<li>실제 병원 업무용 운영 서비스로 사용해서는 안 됩니다.</li>
+<li>직원 계정의 실제 운영 정책과 권한 체계는 추가 검증이 필요합니다.</li>
+</ul></article><article id="doc-5" hidden><p class="source">공식 문서 · docs/01_작업일지/2026-09-23_직원계정과_실제질문_검수.md</p><h2>2026-09-23 · 직원 계정과 실제 질문 1건 검수</h2>
+<h3>계정 준비</h3>
+<ul>
+<li>다중 사용자 모드를 활성화했습니다.</li>
+<li>관리자와 일반 직원 계정을 분리했습니다.</li>
+<li>일반 직원에게 기존 SCHAT 테스트 작업공간 1개만 배정했습니다.</li>
+<li>일반 직원의 사용자 관리 API 접근이 차단되는 것을 확인했습니다.</li>
+</ul>
+<h3>실제 질문 1건 결과</h3>
+<p>승인된 합성 비민감 문서의 검증 코드를 묻는 질문 1건만 실행했습니다.</p>
+<ul>
+<li>직원 로그인: 성공</li>
+<li>Gemini 답변 생성: 1회</li>
+<li>Gemini 질문 임베딩: 1회</li>
+<li>자동 재시도: 0회</li>
+<li>새 검색 경로: 사용</li>
+<li>Python 안전검사: 실행</li>
+<li>구조화 JSON 형식: 정상</li>
+<li>검사 결과: FAIL (`evidence_coverage` · 필수 근거 누락)</li>
+<li>AI 후보: 화면에 표시하지 않음</li>
+<li>최종 표시: 원문 기반 안전 답변</li>
+<li>합성 정답: 최종 답변에 포함</li>
+<li>브라우저로 보낸 답변 조각: 최종 답변 1개</li>
+<li>내부 청크·문서 ID 노출: 없음</li>
+<li>검색 출처: 직접 관련된 근거 1개</li>
+</ul>
+<h3>발견한 문제</h3>
+<p>1. 기존 실패 원인은 Python 서비스가 만든 JSON 구조를 Gemini 요청에 전달하지 않았던 것입니다. 현재는 엄격한 JSON 구조를 전달하고 Node.js에서도 필수 필드를 확인합니다.</p>
+<p>2. 테스트 문서명은 최초 등록 시 이미 한글이 손실된 상태였습니다. 추측해 복원하지 않고 깨진 문자만 제거해 `SCHAT_.txt`로 표시합니다.</p>
+<p>3. 저장된 항목명이 없을 때 `description`을 항목명으로 대신 쓰던 문제를 제거했습니다. `Unknown`은 화면에서 생략합니다.</p>
+<p>4. 의미 점수도 낮고 BM25 질문 단어 일치도도 낮은 꼬리 결과만 제거하는 일반 필터를 적용했습니다. 병원 약어의 강한 정확 일치는 계속 보존합니다.</p>
+<p>5. 원문 대체 여부 값이 참/거짓 대신 원문 문자열이 될 수 있는 결함을 수정해 원본 문자열이 진단 정보에 들어가지 않도록 했습니다.</p>
+<p>수정 사항은 Docker에 다시 반영했습니다. 웹·ChromaDB·Python 안전검사 서비스가 모두 정상 상태이고, 재시작 전후 계정 2개·작업공간 1개·검색 데이터 2개가 유지됐습니다.</p>
+<h3>재검수에서 확인한 점</h3>
+<ul>
+<li>검색 전: 의미 검색 후보 2개 중 약한 두 번째 결과가 화면 출처에 포함됨</li>
+<li>검색 후: 의미 점수 0.5955, BM25 질문 단어 일치도 75%인 직접 관련 근거 1개만 선택됨</li>
+<li>구조화 형식: 정상 처리되어 Python 안전검사까지 도달</li>
+<li>최종 안전 판정: 필수 근거 전체를 답변에 포함하지 않아 차단</li>
+<li>직원 화면: Gemini 후보 대신 원문 기반 안전 답변 1개만 표시</li>
+<li>출처: `SCHAT_.txt`만 표시, 없는 페이지·항목과 내부 ID는 표시하지 않음</li>
+</ul>
+<h3>현재 판단</h3>
+<p>형식 오류, 불필요한 두 번째 출처, `Unknown` 표시와 진단값 문제는 해결됐습니다. 안전 차단과 원문 기반 대체도 정상입니다. 다만 Gemini 답변이 실제로 안전검사를 통과한 사례는 아직 없으므로, 현재는 제한된 내부 검수는 가능하지만 일반 직원 대상 시범운영 시작 승인은 보류합니다.</p></article><article id="doc-6" hidden><p class="source">공식 문서 · docs/01_작업일지/2026-09-23_직원답변_가독성_개선_진행.md</p><h2>직원 답변 가독성 개선 진행 상황</h2>
+<h3>왜 답변이 길고 이상하게 보였나</h3>
+<ul>
+<li>실제 문서 청크 크기가 최대 8,192자로 설정되어 있었습니다.</li>
+<li>진정간호 문서 약 4,005자가 하나의 큰 청크로 저장되어 서로 다른 질문에도 같은 원문이 검색됐습니다.</li>
+<li>문서 관리용 정보가 원문 앞에 붙어 안전 대체 답변에 함께 노출됐습니다.</li>
+<li>검색 결과 1위는 관련성이 낮아도 무조건 남기는 규칙이 있었습니다.</li>
+<li>합성 검증 문서와 직원용 문서를 구분하는 표시가 없었습니다.</li>
+</ul>
+<h3>이번에 바꾼 내용</h3>
+<ul>
+<li>새로 등록하는 문서는 최대 약 900자, 겹침 약 120자 기준으로 나누도록 변경했습니다.</li>
+<li>문서 관리용 정보와 실제 임상 원문을 분리했습니다.</li>
+<li>PDF는 새로 등록할 때 페이지별로 나누어 페이지 정보를 잃지 않게 했습니다.</li>
+<li>직원용·평가용·테스트용·합성용 문서를 구분하는 공통 분류를 추가했습니다.</li>
+<li>현재 합성 검증 문서 1건을 합성용으로 표시해 직원 검색에서 제외되게 했습니다.</li>
+<li>의미 점수와 정확 단어 일치가 모두 약한 검색 결과는 1위라도 제외하도록 변경했습니다.</li>
+<li>안전검사 실패 시 질문과 직접 관련된 원문 문장만 안전 대체 답변에 사용하도록 변경했습니다.</li>
+<li>문서 관리 태그, 그림 코드, 내부 식별자는 직원 답변에 나오지 않게 했습니다.</li>
+<li>Gemini에는 질문에 필요한 근거만 사용하고 숫자·시간·조건·행위 의미를 보존하도록 안내를 강화했습니다.</li>
+</ul>
+<h3>확인된 결과</h3>
+<ul>
+<li>검색·청킹 정책 자동검사 11건 통과</li>
+<li>웹과 안전검사 연결 자동검사 5건 통과</li>
+<li>Python 안전검사 16건 통과</li>
+<li>Docker의 웹·ChromaDB·안전검사 서비스 모두 정상 상태</li>
+<li>ChromaDB 기존 데이터 2건 유지</li>
+</ul>
+<h3>아직 적용되지 않은 부분</h3>
+<p>기존 진정간호 문서는 이미 큰 청크로 색인되어 있습니다. 새 청킹 규칙을 실제 기존 문서에 적용하려면 해당 문서 1건을 다시 등록하고 Gemini 임베딩을 다시 만들어야 합니다.</p>
+<p>현재 저장된 문서로 외부 전송 없이 미리 계산한 결과는 3,907자, 새 청크 6개입니다. Gemini 임베딩 요청은 약 2회이며, 현재 토큰 추정치와 공개 단가를 기준으로 비용은 약 2원 미만으로 예상됩니다.</p>
+<p>이 작업은 병원 문서를 외부 Gemini에 다시 보내는 작업이므로 자동으로 실행하지 않았습니다. 현재 원본 PDF도 테스트 저장소에 남아 있지 않아 사용자가 승인된 원본 파일을 다시 제공해야 합니다.</p>
+<p>따라서 직원 웹의 실제 질문 3건 검수도 아직 실행하지 않았습니다.</p></article><article id="doc-7" hidden><p class="source">공식 문서 · docs/01_작업일지/2026-09-23_직원채팅_안전검사_연결.md</p><h2>2026-09-23 · 직원 채팅에 Python 안전검사 연결</h2>
+<h3>무엇이 바뀌었나요?</h3>
+<p>직원이 질문하면 AI 답변을 바로 보여주지 않고, 기존 SCHAT의 Python 안전검사를 먼저 거치도록 연결했습니다.</p>
+<p>처리 순서는 다음과 같습니다.</p>
+<p>1. Gemini Embedding 2, ChromaDB와 BM25 보완 검색으로 근거를 찾습니다.</p>
+<p>2. Gemini가 답변 후보를 만듭니다.</p>
+<p>3. 내부 Python 서비스가 숫자, 단위, 시간, 조건, 예외, 금기, 부정, 행위 종류와 강도, 필수 근거 포함 여부를 검사합니다.</p>
+<p>4. 통과한 경우에만 AI 답변을 직원 화면에 표시합니다.</p>
+<p>5. 실패·오류·시간초과 시 AI 후보는 숨기고 검색된 원문 기반 안전 답변을 표시합니다.</p>
+<p>6. 안전한 원문 답변도 만들 수 없으면 답변하지 않는다는 안내를 표시합니다.</p>
+<h3>직원 화면에는 무엇이 보이나요?</h3>
+<ul>
+<li>답변</li>
+<li>출처 문서명</li>
+<li>페이지 정보가 있을 경우 페이지</li>
+<li>항목명 정보가 있을 경우 항목명</li>
+</ul>
+<p>청크 번호, 문서 내부 번호, SourceUnit 번호는 직원 화면에 표시하지 않습니다.</p>
+<h3>Docker 구성</h3>
+<ul>
+<li>`schat-web`: 직원 화면, 로그인, 검색, Gemini 답변 생성</li>
+<li>`schat-chromadb`: 검색 데이터 보관</li>
+<li>`schat-safety-evaluator`: 외부에 공개되지 않는 Python 안전검사</li>
+</ul>
+<p>세 서비스는 재시작 후 모두 정상 상태가 되었고, ChromaDB의 기존 컬렉션 1개와 벡터 2개도 그대로 유지됐습니다.</p>
+<h3>자동검사 결과</h3>
+<ul>
+<li>Python 안전검사 집중 테스트: 14건 통과</li>
+<li>Node.js 안전 게이트 독립 테스트: 통과</li>
+<li>Node.js 웹 → Python 검사기 왕복 테스트: 통과</li>
+<li>BM25 보완 테스트: 4건 통과</li>
+<li>Docker Compose 구성 검사: 통과</li>
+<li>`git diff --check`: 통과</li>
+<li>기존 SCHAT 전체 테스트: 1,045건 통과, 2건 제외, 기존 기준선 1건 별도 실패</li>
+</ul>
+<p>기존 기준선 실패는 이번 변경과 무관합니다. 현재 임베딩 라이브러리의 동작 변화로 진정간호 UAT가 기대값 36/36 대신 31/36이 된 상태입니다.</p>
+<h3>아직 직접 확인할 것</h3>
+<ul>
+<li>실제 직원 계정으로 로그인</li>
+<li>실제 Gemini 답변이 안전검사 통과 후 표시되는지</li>
+<li>실패할 때 원문 기반 답변이 자연스럽게 보이는지</li>
+<li>실제 병원 문서의 페이지·항목 메타데이터가 충분히 들어 있는지</li>
+</ul>
+<p>따라서 자동검사 기준의 구현은 완료됐지만, 정식 운영 승인이 아니라 제한된 직원 시범 검수 전 단계입니다.</p></article><article id="doc-8" hidden><p class="source">공식 문서 · docs/01_작업일지/README.md</p><h2>작업일지</h2>
+<p>이 폴더에는 기능 비교용 테스트 저장소에서 바뀐 내용을 날짜별로 기록합니다.</p>
+<p>1. [2026-09-22 · 기존 SCHAT 문서와 분리](2026-09-22_기존_SCHAT_문서와_분리.md)</p>
+<p>2. [2026-09-22 · 필요 없는 원본 폴더 정리](2026-09-22_필요없는_원본폴더_정리.md)</p>
+<p>3. [2026-09-22 · 자주 보는 문서를 위로 정리](2026-09-22_자주보는_문서를_위로_정리.md)</p>
+<p>4. [2026-09-23 · 문서 현황 업데이트](2026-09-23_문서현황_업데이트.md)</p>
+<p>5. [2026-09-23 · 직원 채팅에 Python 안전검사 연결](2026-09-23_직원채팅_안전검사_연결.md)</p>
+<p>6. [2026-09-23 · 직원 계정과 실제 질문 1건 검수](2026-09-23_직원계정과_실제질문_검수.md)</p>
+<p>7. [2026-09-23 · 직원 답변 가독성 개선 진행](2026-09-23_직원답변_가독성_개선_진행.md)</p>
+<p>변경이 없는 날에는 빈 기록을 만들지 않습니다.</p></article><article id="doc-9" hidden><p class="source">공식 문서 · docs/README.md</p><h2>SCHAT 기능 비교 테스트 공식 문서</h2>
+<p>이 `docs` 폴더는 기능 비교용 테스트 저장소의 공식 문서 정본입니다.</p>
+<ul>
+<li>[현재 프로젝트 상태](00_현재상태/현재_프로젝트_상태.md)</li>
+<li>[작업일지](01_작업일지/README.md)</li>
+<li>[화면 변경 계획](schat-branding-plan.md)</li>
+</ul>
+<p>부모 폴더의 기존 SCHAT 문서는 이 문서 화면에 포함하지 않습니다.</p></article><article id="doc-10" hidden><p class="source">공식 문서 · docs/schat-branding-plan.md</p><h2>SCHAT 테스트 브랜딩 구현 계획</h2>
+<h3>목표</h3>
+<p>공식 검색·답변·로그인·도구 기능은 유지하고, 사용자가 보는 기본 화면을 SCHAT 병원 지침 서비스 디자인으로 변경한다.</p>
+<h3>변경 범위</h3>
+<p>1. 기본 앱 이름과 브라우저 제목을 `병원 실무지침 AI`로 변경한다.</p>
+<p>2. 기본 로고를 SCHAT 전용 로고로 변경한다.</p>
+<p>3. 기존 SCHAT의 청록색·남색·밝은 회색 디자인 토큰을 적용한다.</p>
+<p>4. 로그인 화면을 직원용 안내 문구와 병원 디자인으로 변경한다.</p>
+<p>5. 실제 웹 화면에 원래 제품명이 노출되지 않는지 자동검사한다.</p>
+<h3>변경하지 않는 범위</h3>
+<ul>
+<li>문서 수집과 청킹</li>
+<li>벡터 검색 및 답변 생성</li>
+<li>출처 표시</li>
+<li>로그인 및 사용자 권한 로직</li>
+<li>Agent와 도구 실행 로직</li>
+<li>내부 저장 구조</li>
+<li>라이선스 파일</li>
+</ul>
+<h3>검증</h3>
+<ul>
+<li>브랜딩 계약 자동검사</li>
+<li>저장소 비밀정보 검사</li>
+<li>변경 파일 diff 검사</li>
+<li>Docker/Node.js 설치 후 빌드 및 실제 화면 검증</li>
+</ul></article></main></div>
+<script>const home=document.getElementById('home');const articles=[...document.querySelectorAll('article')];document.querySelectorAll('[data-target]').forEach(button=>button.addEventListener('click',()=>{home.hidden=true;articles.forEach(article=>article.hidden=article.id!==button.dataset.target);window.scrollTo(0,0)}));</script>
+</body></html>

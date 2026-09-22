@@ -133,6 +133,7 @@ async function streamChatWithWorkspace(
   // 2. Chatting in "query" mode and has at least 1 embedding
   let completeText;
   let metrics = {};
+  let safety = null;
   let contextTexts = [];
   let sources = [];
   let pinnedDocIdentifiers = [];
@@ -261,40 +262,21 @@ async function streamChatWithWorkspace(
     return;
   }
 
-  // Compress & Assemble message to ensure prompt passes token limit with room for response
-  // and build system messages based on inputs and history.
-  // Reuse the system prompt from routing pre-fetch when available.
-  const systemPrompt =
-    prefetchedContext?.systemPrompt ??
-    (await chatPrompt(workspace, user, {
-      prompt: updatedMessage,
-      rawHistory,
-    }));
-  const messages = await LLMConnector.compressMessages(
-    {
-      systemPrompt,
-      userPrompt: updatedMessage,
-      contextTexts,
-      chatHistory,
-      attachments,
-    },
-    rawHistory
-  );
-
-  // If streaming is not explicitly enabled for connector
-  // we do regular waiting of a response and send a single chunk.
-  if (LLMConnector.streamingEnabled() !== true) {
-    console.log(
-      `\x1b[31m[STREAMING DISABLED]\x1b[0m Streaming is not available for ${LLMConnector.constructor.name}. Will use regular chat method.`
-    );
-    const { textResponse, metrics: performanceMetrics } =
-      await LLMConnector.getChatCompletion(messages, {
-        temperature: workspace?.openAiTemp ?? LLMConnector.defaultTemp,
-        user: user,
-      });
-
-    completeText = textResponse;
-    metrics = addChatCostToMetrics(performanceMetrics, {
+  if (process.env.SCHAT_SAFETY_ENABLED === "true") {
+    // Safety-gated employee chat is intentionally non-streaming. The provider
+    // candidate stays server-side until the Python evaluator returns PASS.
+    const { runSafetyGatedCompletion } = require("../schatSafety/chat");
+    const safeResult = await runSafetyGatedCompletion({
+      question: updatedMessage,
+      sources,
+      LLMConnector,
+      user,
+      temperature: workspace?.openAiTemp ?? LLMConnector.defaultTemp,
+    });
+    completeText = safeResult.text;
+    sources = safeResult.sources;
+    safety = safeResult.safety;
+    metrics = addChatCostToMetrics(safeResult.metrics, {
       routingMetadata,
       workspace,
       connector: LLMConnector,
@@ -307,21 +289,71 @@ async function streamChatWithWorkspace(
       close: true,
       error: false,
       metrics,
+      safety,
     });
   } else {
-    const stream = await LLMConnector.streamGetChatCompletion(messages, {
-      temperature: workspace?.openAiTemp ?? LLMConnector.defaultTemp,
-      user: user,
-    });
-    completeText = await LLMConnector.handleStream(response, stream, {
-      uuid,
-      sources,
-    });
-    metrics = addChatCostToMetrics(stream.metrics, {
-      routingMetadata,
-      workspace,
-      connector: LLMConnector,
-    });
+    // Compress & Assemble message to ensure prompt passes token limit with room for response
+    // and build system messages based on inputs and history.
+    // Reuse the system prompt from routing pre-fetch when available.
+    const systemPrompt =
+      prefetchedContext?.systemPrompt ??
+      (await chatPrompt(workspace, user, {
+        prompt: updatedMessage,
+        rawHistory,
+      }));
+    const messages = await LLMConnector.compressMessages(
+      {
+        systemPrompt,
+        userPrompt: updatedMessage,
+        contextTexts,
+        chatHistory,
+        attachments,
+      },
+      rawHistory
+    );
+
+    // If streaming is not explicitly enabled for connector
+    // we do regular waiting of a response and send a single chunk.
+    if (LLMConnector.streamingEnabled() !== true) {
+      console.log(
+        `\x1b[31m[STREAMING DISABLED]\x1b[0m Streaming is not available for ${LLMConnector.constructor.name}. Will use regular chat method.`
+      );
+      const { textResponse, metrics: performanceMetrics } =
+        await LLMConnector.getChatCompletion(messages, {
+          temperature: workspace?.openAiTemp ?? LLMConnector.defaultTemp,
+          user: user,
+        });
+
+      completeText = textResponse;
+      metrics = addChatCostToMetrics(performanceMetrics, {
+        routingMetadata,
+        workspace,
+        connector: LLMConnector,
+      });
+      writeResponseChunk(response, {
+        uuid,
+        sources,
+        type: "textResponseChunk",
+        textResponse: completeText,
+        close: true,
+        error: false,
+        metrics,
+      });
+    } else {
+      const stream = await LLMConnector.streamGetChatCompletion(messages, {
+        temperature: workspace?.openAiTemp ?? LLMConnector.defaultTemp,
+        user: user,
+      });
+      completeText = await LLMConnector.handleStream(response, stream, {
+        uuid,
+        sources,
+      });
+      metrics = addChatCostToMetrics(stream.metrics, {
+        routingMetadata,
+        workspace,
+        connector: LLMConnector,
+      });
+    }
   }
 
   if (completeText?.length > 0) {
@@ -334,6 +366,7 @@ async function streamChatWithWorkspace(
         type: chatMode,
         attachments,
         metrics,
+        ...(safety ? { safety } : {}),
       },
       threadId: thread?.id || null,
       user,
