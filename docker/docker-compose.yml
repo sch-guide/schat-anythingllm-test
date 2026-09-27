@@ -1,12 +1,67 @@
-name: anythingllm
+name: schat-local
 
 networks:
-  anything-llm:
+  schat:
     driver: bridge
+  safety_internal:
+    driver: bridge
+    internal: true
+
+volumes:
+  chroma_data:
 
 services:
-  anything-llm:
-    container_name: anythingllm
+  schat-safety-evaluator:
+    container_name: schat-safety-evaluator
+    build:
+      context: ../.
+      dockerfile: ./docker/safety-evaluator.Dockerfile
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      SCHAT_SAFETY_HOST: 0.0.0.0
+      SCHAT_SAFETY_PORT: 8001
+    volumes:
+      - "../schat-core/src:/schat-core/src:ro"
+      - "../schat-core/tools/evaluation_action_strength.py:/schat-core/tools/evaluation_action_strength.py:ro"
+    expose:
+      - "8001"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=2).read()"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - safety_internal
+
+  chroma:
+    container_name: schat-chromadb
+    image: chromadb/chroma:1.0.21
+    restart: unless-stopped
+    volumes:
+      - chroma_data:/data
+    healthcheck:
+      test: ["CMD", "timeout", "3", "bash", "-c", "</dev/tcp/127.0.0.1/8000"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - schat
+
+  schat-web:
+    container_name: schat-web
     build:
       context: ../.
       dockerfile: ./docker/Dockerfile
@@ -25,7 +80,33 @@ services:
       - "3001:3001"
     env_file:
       - .env
+    environment:
+      VECTOR_DB: chroma
+      CHROMA_ENDPOINT: http://chroma:8000
+      EMBEDDING_ENGINE: gemini
+      EMBEDDING_MODEL_PREF: gemini-embedding-2
+      LLM_PROVIDER: gemini
+      # Web admin (SCHAT 관리자 설정) changes are saved to .env and kept on recreate.
+      GEMINI_LLM_MODEL_PREF: "${GEMINI_LLM_MODEL_PREF:-gemini-3.8-flash}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-${GEMINI_EMBEDDING_API_KEY}}"
+      SCHAT_SAFETY_ENABLED: "true"
+      SCHAT_SAFETY_GATE_ENABLED: "${SCHAT_SAFETY_GATE_ENABLED:-false}"
+      SCHAT_SAFETY_EVALUATOR_URL: http://schat-safety-evaluator:8001
+      SCHAT_SAFETY_TIMEOUT_MS: "3000"
+      SCHAT_PDF_IMAGE_ENABLED: "${SCHAT_PDF_IMAGE_ENABLED:-true}"
+      SCHAT_PDF_IMAGE_DESCRIPTION_ENABLED: "${SCHAT_PDF_IMAGE_DESCRIPTION_ENABLED:-true}"
+      SCHAT_PDF_IMAGE_DESCRIPTION_MODEL: "${SCHAT_PDF_IMAGE_DESCRIPTION_MODEL:-gemini-3.8-flash}"
+      SCHAT_PDF_IMAGE_MAX_DESCRIPTIONS: "${SCHAT_PDF_IMAGE_MAX_DESCRIPTIONS:-50}"
+      SCHAT_PDF_IMAGE_DESCRIPTION_BATCH_SIZE: "${SCHAT_PDF_IMAGE_DESCRIPTION_BATCH_SIZE:-50}"
+      SCHAT_PDF_IMAGE_DESCRIPTION_MAX_PER_RUN: "${SCHAT_PDF_IMAGE_DESCRIPTION_MAX_PER_RUN:-1150}"
+    depends_on:
+      chroma:
+        condition: service_healthy
+      schat-safety-evaluator:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
-      - anything-llm
+      - schat
+      - safety_internal
     extra_hosts:
       - "host.docker.internal:host-gateway"

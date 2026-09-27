@@ -7,6 +7,9 @@
 }
 
 :root {
+  --schat-font-sans: Pretendard, Inter, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+
   /* Default theme */
   --theme-loader: #ffffff;
   --theme-bg-primary: #0e0f0f;
@@ -239,19 +242,7 @@ html,
 body {
   padding: 0;
   margin: 0;
-  font-family:
-    "plus-jakarta-sans",
-    -apple-system,
-    BlinkMacSystemFont,
-    Segoe UI,
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    Fira Sans,
-    Droid Sans,
-    Helvetica Neue,
-    sans-serif;
+  font-family: var(--schat-font-sans);
   background-color: white;
 }
 
@@ -1173,21 +1164,5 @@ button,
 input,
 select,
 textarea {
-  font-family:
-    "plus-jakarta-sans",
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    "Helvetica Neue",
-    Arial,
-    "Noto Sans",
-    sans-serif,
-    "Apple Color Emoji",
-    "Segoe UI Emoji",
-    "Segoe UI Symbol",
-    "Noto Color Emoji" !important;
+  font-family: var(--schat-font-sans) !important;
 }

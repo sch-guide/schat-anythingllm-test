@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import ThreadItem from "./ThreadItem";
 import { useNavigate, useParams } from "react-router-dom";
 import useHoverMetaKey from "./hooks";
+import { listedThreads } from "@/utils/threadList";
 export const THREAD_RENAME_EVENT = "renameThread";
 export const THREAD_FORK_EVENT = "forkToThread";
 
@@ -15,7 +16,8 @@ export default function ThreadContainer({
 }) {
   const navigate = useNavigate();
   const { threadSlug = null } = useParams();
-  const [threads, setThreads] = useState([]);
+  const [allThreads, setThreads] = useState([]);
+  const threads = listedThreads(allThreads);
   const [defaultThreadHasChats, setDefaultThreadHasChats] = useState(false);
   const [loading, setLoading] = useState(true);
   const { containerRef, ctrlPressed } = useHoverMetaKey(setThreads, !loading);
@@ -108,11 +110,9 @@ export default function ThreadContainer({
   }
 
   function getActiveThreadIdx() {
-    if (isVirtualThread)
-      return threads.length + (defaultThreadHasChats ? 1 : 0);
-    // On a bare workspace route with no default chats, show virtual thread as active
-    if (!threadSlug && !defaultThreadHasChats)
-      return threads.length + (defaultThreadHasChats ? 1 : 0);
+    // A new, still empty conversation is not listed, so nothing is highlighted.
+    if (isVirtualThread) return -1;
+    if (!threadSlug && !defaultThreadHasChats) return -1;
     const idx = threads.findIndex((t) => t?.slug === threadSlug);
     if (idx >= 0) return idx + (defaultThreadHasChats ? 1 : 0);
     if (!threadSlug && defaultThreadHasChats) return 0;
@@ -122,17 +122,18 @@ export default function ThreadContainer({
   if (loading) {
     return (
       <div className="flex flex-col bg-pulse w-full h-10 items-center justify-center">
-        <p className="text-xs text-white animate-pulse">loading threads....</p>
+        <p className="text-xs text-white animate-pulse">
+          대화 목록을 불러오는 중...
+        </p>
       </div>
     );
   }
 
   const activeThreadIdx = getActiveThreadIdx();
 
-  // Show a virtual thread when on a bare workspace route (no threadSlug) and
-  // the default thread has no chats — mimics the Home page virtual thread behavior.
-  const showVirtualThread =
-    isVirtualThread || (!threadSlug && !defaultThreadHasChats);
+  // SCHAT shows only the "+ 새 대화" button for a new conversation; the
+  // unnamed placeholder row is not rendered.
+  const showVirtualThread = false;
 
   return (
     <div
@@ -147,7 +148,7 @@ export default function ThreadContainer({
           activeIdx={activeThreadIdx}
           isActive={activeThreadIdx === 0}
           workspace={workspace}
-          thread={{ slug: null, name: "default" }}
+          thread={{ slug: null, name: "기본 대화" }}
           hasNext={threads.length > 0 || showVirtualThread}
         />
       )}
@@ -171,7 +172,7 @@ export default function ThreadContainer({
           activeIdx={activeThreadIdx}
           isActive={true}
           workspace={workspace}
-          thread={{ slug: null, name: "*New Thread", virtual: true }}
+          thread={{ slug: null, name: "새 대화", virtual: true }}
           hasNext={false}
         />
       )}
@@ -195,7 +196,9 @@ function NewThreadButton({ workspace, onNewThread }) {
     setLoading(true);
     const { thread, error } = await Workspace.threads.new(workspace.slug);
     if (!!error) {
-      showToast(`Could not create thread - ${error}`, "error", { clear: true });
+      showToast(`새 대화를 만들 수 없습니다. ${error}`, "error", {
+        clear: true,
+      });
       setLoading(false);
       return;
     }
@@ -213,10 +216,11 @@ function NewThreadButton({ workspace, onNewThread }) {
   return (
     <button
       onClick={onClick}
-      className="w-full relative flex h-[40px] items-center border-none hover:bg-[var(--theme-sidebar-thread-selected)] light:hover:bg-slate-300 hover:light:bg-theme-sidebar-subitem-hover rounded-lg"
+      aria-label="새 대화"
+      className="schat-new-chat w-full relative flex h-[40px] items-center border-none hover:bg-[var(--theme-sidebar-thread-selected)] light:hover:bg-slate-300 hover:light:bg-theme-sidebar-subitem-hover rounded-lg"
     >
       <div className="flex w-full gap-x-2 items-center pl-4">
-        <div className="bg-zinc-800 light:bg-slate-50 p-2 rounded-lg h-[24px] w-[24px] flex items-center justify-center">
+        <div className="schat-new-chat__icon bg-zinc-800 light:bg-slate-50 p-2 rounded-lg h-[24px] w-[24px] flex items-center justify-center">
           {loading ? (
             <CircleNotch
               weight="bold"
@@ -234,11 +238,11 @@ function NewThreadButton({ workspace, onNewThread }) {
 
         {loading ? (
           <p className="text-left text-white light:text-theme-text-primary text-sm">
-            Starting Thread...
+            새 대화 준비 중...
           </p>
         ) : (
           <p className="text-left text-white light:text-theme-text-primary text-sm font-semibold">
-            New Thread
+            새 대화
           </p>
         )}
       </div>
@@ -264,7 +268,7 @@ function DeleteAllThreadButton({ ctrlPressed, threads, onDelete }) {
           />
         </div>
         <p className="text-white light:text-theme-text-secondary text-left text-sm group-hover:text-red-400">
-          Delete Selected
+          선택한 대화 삭제
         </p>
       </div>
     </button>

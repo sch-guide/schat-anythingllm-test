@@ -4,6 +4,66 @@ const {
   resolveProviderConnector,
 } = require("../../../helpers");
 const { Deduplicator } = require("../utils/dedupe");
+const {
+  buildPublicRagSource,
+  buildRagContext,
+} = require("../utils/ragSources");
+
+function sourceDocumentIdentity(source = {}) {
+  return String(
+    source.document_id ||
+      source.documentId ||
+      source.document_name ||
+      source.documentName ||
+      source.title ||
+      ""
+  );
+}
+
+function sourcePage(source = {}) {
+  return String(source.page ?? "").trim();
+}
+
+function attachRelatedImageSources(
+  sources = [],
+  relatedImageSources = [],
+  question = ""
+) {
+  const linkedSources = sources.map((source) => ({ ...source }));
+  const seenImageKeys = new Set(
+    linkedSources.flatMap((source) =>
+      buildPublicRagSource(source, { question }).relatedImages.map(
+        (image) => image.imageKey
+      )
+    )
+  );
+
+  for (const candidate of relatedImageSources) {
+    const [image] = buildPublicRagSource(candidate, {
+      question,
+    }).relatedImages;
+    if (!image || seenImageKeys.has(image.imageKey)) continue;
+
+    const documentIdentity = sourceDocumentIdentity(candidate);
+    const page = sourcePage(candidate);
+    const sourceIndex = linkedSources.findIndex(
+      (source) =>
+        !source.image_key &&
+        sourceDocumentIdentity(source) === documentIdentity &&
+        sourcePage(source) === page
+    );
+    if (sourceIndex < 0) continue;
+
+    linkedSources[sourceIndex] = {
+      ...linkedSources[sourceIndex],
+      image_key: candidate.image_key,
+      image_description: candidate.text,
+    };
+    seenImageKeys.add(image.imageKey);
+  }
+
+  return linkedSources;
+}
 
 const memory = {
   name: "rag-memory",
@@ -90,7 +150,11 @@ const memory = {
                   prompt: query,
                 });
               const vectorDB = getVectorDbClass();
-              const { contextTexts = [], sources = [] } =
+              const {
+                contextTexts = [],
+                sources = [],
+                relatedImageSources = [],
+              } =
                 await vectorDB.performSimilaritySearch({
                   namespace: workspace.slug,
                   input: query,
@@ -99,22 +163,23 @@ const memory = {
                   rerank: workspace?.vectorSearchMode === "rerank",
                 });
 
-              if (contextTexts.length === 0) {
+              const ragContext = buildRagContext(sources);
+              if (sources.length === 0) {
                 this.super.introspect(
                   `${this.caller}: I didn't find anything locally that would help answer this question.`
                 );
-                return "There was no additional context found for that query. We should search the web for this information.";
+                return ragContext;
               }
 
               this.super.introspect(
                 `${this.caller}: Found ${contextTexts.length} additional piece of context to help answer this question.`
               );
 
-              this.super.addCitation?.(sources);
-
-              let combinedText = "Additional context for query:\n";
-              for (const text of contextTexts) combinedText += text + "\n\n";
-              return combinedText;
+              this.super.addRagMemorySources?.(
+                attachRelatedImageSources(sources, relatedImageSources, query),
+                { question: query }
+              );
+              return ragContext;
             } catch (error) {
               this.super.handlerProps.log(
                 `memory.search raised an error. ${error.message}`
@@ -165,5 +230,6 @@ const memory = {
 };
 
 module.exports = {
+  attachRelatedImageSources,
   memory,
 };

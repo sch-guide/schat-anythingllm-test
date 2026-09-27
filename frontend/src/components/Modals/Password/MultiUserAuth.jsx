@@ -9,6 +9,7 @@ import RecoveryCodeModal from "@/components/Modals/DisplayRecoveryCodeModal";
 import { useTranslation } from "react-i18next";
 import { t } from "i18next";
 import PasswordInput from "@/components/lib/PasswordInput";
+import EmployeeLoginForm from "./EmployeeLoginForm";
 
 const RecoveryForm = ({ onSubmit, setShowRecoveryForm }) => {
   const [username, setUsername] = useState("");
@@ -182,6 +183,9 @@ export default function MultiUserAuth() {
   const [showRecoveryForm, setShowRecoveryForm] = useState(false);
   const [showResetPasswordForm, setShowResetPasswordForm] = useState(false);
   const [customAppName, setCustomAppName] = useState(null);
+  // SCHAT: staff log in by department/number/name; the username form is kept
+  // only for accounts that have no employee number yet.
+  const [legacyMode, setLegacyMode] = useState(false);
 
   const {
     isOpen: isRecoveryCodeModalOpen,
@@ -284,19 +288,21 @@ export default function MultiUserAuth() {
 
   if (showResetPasswordForm)
     return <ResetPasswordForm onSubmit={handleResetSubmit} />;
+  if (!legacyMode)
+    return (
+      <EmployeeLoginForm
+        appName={customAppName || "SCHAT"}
+        onLegacy={() => setLegacyMode(true)}
+      />
+    );
   return (
     <>
       <form
         onSubmit={handleLogin}
         className="flex flex-col justify-center items-center"
       >
-        <div className="flex items-start justify-between pt-7 pb-9">
+        <div className="flex items-start justify-between pt-2 pb-7">
           <div className="flex items-center flex-col gap-y-[18px] max-w-[300px]">
-            <div className="flex gap-x-1">
-              <h3 className="text-white light:text-slate-950 text-[38px] leading-[28px] font-medium text-center white-space-nowrap block">
-                {t("login.multi-user.welcome")}
-              </h3>
-            </div>
             <p className="text-zinc-400 light:text-zinc-600 text-sm text-center">
               {t("login.sign-in", { appName: customAppName || "SCHAT" })}
             </p>
@@ -350,6 +356,13 @@ export default function MultiUserAuth() {
             <b className="font-semibold text-sky-300 light:text-sky-600">
               {t("login.multi-user.reset")}
             </b>
+          </button>
+          <button
+            type="button"
+            className="text-xs text-zinc-400 light:text-slate-500 underline"
+            onClick={() => setLegacyMode(false)}
+          >
+            직원 로그인(부서·사번·이름)으로 돌아가기
           </button>
         </div>
       </form>

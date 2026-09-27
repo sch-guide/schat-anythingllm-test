@@ -23,7 +23,7 @@ export default function DeleteWorkspace({ workspace, visible = true }) {
     setDeleting(true);
     const success = await Workspace.delete(workspace.slug);
     if (!success) {
-      showToast("Workspace could not be deleted!", "error", { clear: true });
+      showToast("작업 공간을 삭제하지 못했습니다.", "error", { clear: true });
       setDeleting(false);
       return;
     }

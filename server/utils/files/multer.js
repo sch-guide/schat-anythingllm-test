@@ -3,6 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const { v4 } = require("uuid");
 const { normalizePath, sanitizeFileName } = require(".");
+const { defaultStorageRoot } = require("../originalDocuments");
 
 /**
  * Handle File uploads for auto-uploading.
@@ -41,6 +42,17 @@ const fileAPIUploadStorage = multer.diskStorage({
       normalizePath(Buffer.from(file.originalname, "latin1").toString("utf8"))
     );
     cb(null, file.originalname);
+  },
+});
+
+const originalPdfUploadStorage = multer.diskStorage({
+  destination: function (_, __, cb) {
+    const uploadOutput = path.join(defaultStorageRoot(), ".incoming");
+    fs.mkdirSync(uploadOutput, { recursive: true });
+    cb(null, uploadOutput);
+  },
+  filename: function (_, __, cb) {
+    cb(null, `${v4()}.pdf`);
   },
 });
 
@@ -123,6 +135,31 @@ function handleAPIFileUpload(request, response, next) {
           success: false,
           error: `Invalid file upload. ${err.message}`,
         })
+        .end();
+      return;
+    }
+    next();
+  });
+}
+
+function handleOriginalPdfUpload(request, response, next) {
+  const upload = multer({
+    storage: originalPdfUploadStorage,
+    limits: { files: 1, fileSize: 512 * 1024 * 1024 },
+    fileFilter: (_, file, cb) => {
+      const isPdf =
+        /\.pdf$/i.test(String(file.originalname || "")) &&
+        ["application/pdf", "application/octet-stream"].includes(
+          String(file.mimetype || "").toLowerCase()
+        );
+      cb(isPdf ? null : new Error("Only PDF files can be linked."), isPdf);
+    },
+  }).single("file");
+  upload(request, response, function (err) {
+    if (err) {
+      response
+        .status(400)
+        .json({ success: false, error: err.message })
         .end();
       return;
     }
@@ -223,6 +260,7 @@ function handleImageGenUpload(request, response, next) {
 module.exports = {
   handleFileUpload,
   handleAPIFileUpload,
+  handleOriginalPdfUpload,
   handleAssetUpload,
   handlePfpUpload,
   handleAudioUpload,

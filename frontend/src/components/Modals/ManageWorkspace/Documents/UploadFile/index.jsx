@@ -1,5 +1,5 @@
 import { CloudArrowUp } from "@phosphor-icons/react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import showToast from "../../../../../utils/toast";
 import { useDropzone } from "react-dropzone";
@@ -7,6 +7,14 @@ import FileUploadProgress from "./FileUploadProgress";
 import Workspace from "../../../../../models/workspace";
 import debounce from "lodash.debounce";
 import { getFilesFromUploadEvent } from "../../../../../utils/folderUpload";
+import {
+  mergeUploadCompletion,
+  runUploadCompletionSync,
+} from "../hooks/uploadBatch";
+
+// SCHAT registers hospital PDF/document files only. The website import form is
+// hidden from the UI; the collector's link endpoint is left untouched.
+export const SHOW_LINK_UPLOAD = false;
 
 /**
  * Fills in a missing protocol so the user can type "example.com/docs" instead
@@ -33,8 +41,9 @@ function withProtocol(value = "") {
  * @param {ReturnType<import("../hooks/useUploadQueue").default>} props.queue
  * the upload queue shared with the picker's per-folder drop targets, so both
  * report progress in this one list.
- * @param {() => Promise<void>} props.onUploadComplete called (coalesced) once a
- * burst of file uploads settles, so the picker can hydrate in place.
+ * @param {(docpaths: string[]) => Promise<void>} props.onUploadComplete called
+ * (coalesced) once a burst of file uploads settles, so the picker can hydrate
+ * the exact documents produced by that upload batch.
  * @param {() => Promise<void>} props.onLinkScraped called after a link scrape.
  */
 export default function UploadFile({
@@ -46,6 +55,7 @@ export default function UploadFile({
   const { t } = useTranslation();
   const { ready, files, setFiles, enqueueDrop } = queue;
   const [fetchingUrl, setFetchingUrl] = useState(false);
+  const pendingUploadDocpaths = useRef([]);
 
   const handleSendLink = async (e) => {
     e.preventDefault();
@@ -69,8 +79,31 @@ export default function UploadFile({
   // Uploads finish one at a time; coalesce their completions into a single
   // picker sync so a 50-file folder drop does not fire 50 refreshes.
   const syncPicker = useMemo(
-    () => debounce(() => onUploadComplete?.(), 750),
+    () =>
+      debounce(async () => {
+        const docpaths = pendingUploadDocpaths.current;
+        pendingUploadDocpaths.current = [];
+        const result = await runUploadCompletionSync({
+          docpaths,
+          onUploadComplete,
+        });
+        if (!result.ok)
+          showToast(
+            "The upload finished, but the new documents could not be selected. Refresh the document list and try again.",
+            "error"
+          );
+      }, 750),
     [onUploadComplete]
+  );
+  const handleUploadSettled = useCallback(
+    (completion) => {
+      pendingUploadDocpaths.current = mergeUploadCompletion(
+        pendingUploadDocpaths.current,
+        completion
+      );
+      syncPicker();
+    },
+    [syncPicker]
   );
   useEffect(() => () => syncPicker.cancel(), [syncPicker]);
 
@@ -107,9 +140,6 @@ export default function UploadFile({
             <div className="text-white text-opacity-80 text-sm font-semibold py-1">
               {t("connectors.upload.click-upload")}
             </div>
-            <div className="text-white text-opacity-60 text-xs font-medium py-1">
-              {t("connectors.upload.file-types")}
-            </div>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2 overflow-auto max-h-[180px] p-1 overflow-y-scroll no-scroll">
@@ -124,36 +154,40 @@ export default function UploadFile({
                 reason={file?.reason}
                 folderName={file?.folderName}
                 relativePath={file?.relativePath}
-                onSettled={syncPicker}
+                onSettled={handleUploadSettled}
               />
             ))}
           </div>
         )}
       </div>
-      <div className="text-center text-white text-opacity-50 text-xs font-medium w-[560px] py-2">
-        {t("connectors.upload.or-submit-link")}
-      </div>
-      <form onSubmit={handleSendLink} className="flex gap-x-2">
-        <input
-          disabled={fetchingUrl}
-          name="link"
-          // Not type="url" - that would force the user to type the protocol.
-          type="text"
-          inputMode="url"
-          className="border-none disabled:bg-theme-settings-input-bg disabled:text-theme-settings-input-placeholder bg-theme-settings-input-bg text-white placeholder:text-theme-settings-input-placeholder text-sm rounded-lg focus:outline-primary-button active:outline-primary-button outline-none block w-3/4 p-2.5"
-          placeholder={t("connectors.upload.placeholder-link")}
-          autoComplete="off"
-        />
-        <button
-          disabled={fetchingUrl}
-          type="submit"
-          className="disabled:bg-white/20 disabled:text-slate-300 disabled:border-slate-400 disabled:cursor-wait bg bg-transparent hover:bg-slate-200 hover:text-slate-800 w-auto border border-white light:border-theme-modal-border text-sm text-white p-2.5 rounded-lg"
-        >
-          {fetchingUrl
-            ? t("connectors.upload.fetching")
-            : t("connectors.upload.fetch-website")}
-        </button>
-      </form>
+      {SHOW_LINK_UPLOAD && (
+        <>
+          <div className="text-center text-white text-opacity-50 text-xs font-medium w-[560px] py-2">
+            {t("connectors.upload.or-submit-link")}
+          </div>
+          <form onSubmit={handleSendLink} className="flex gap-x-2">
+            <input
+              disabled={fetchingUrl}
+              name="link"
+              // Not type="url" - that would force the user to type the protocol.
+              type="text"
+              inputMode="url"
+              className="border-none disabled:bg-theme-settings-input-bg disabled:text-theme-settings-input-placeholder bg-theme-settings-input-bg text-white placeholder:text-theme-settings-input-placeholder text-sm rounded-lg focus:outline-primary-button active:outline-primary-button outline-none block w-3/4 p-2.5"
+              placeholder={t("connectors.upload.placeholder-link")}
+              autoComplete="off"
+            />
+            <button
+              disabled={fetchingUrl}
+              type="submit"
+              className="disabled:bg-white/20 disabled:text-slate-300 disabled:border-slate-400 disabled:cursor-wait bg bg-transparent hover:bg-slate-200 hover:text-slate-800 w-auto border border-white light:border-theme-modal-border text-sm text-white p-2.5 rounded-lg"
+            >
+              {fetchingUrl
+                ? t("connectors.upload.fetching")
+                : t("connectors.upload.fetch-website")}
+            </button>
+          </form>
+        </>
+      )}
       <div className="mt-6 text-center text-white text-opacity-80 text-xs font-medium w-[560px]">
         {t("connectors.upload.privacy-notice")}
       </div>

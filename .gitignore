@@ -1,6 +1,8 @@
 v-env
 .env
 !.env.example
+schat-core/**/.env*
+!schat-core/**/.env.example
 
 node_modules
 __pycache__

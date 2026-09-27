@@ -1,6 +1,6 @@
 {
-  "name": "AnythingLLM",
-  "short_name": "AnythingLLM",
+  "name": "병원 실무지침 AI",
+  "short_name": "SCHAT",
   "display": "standalone",
   "orientation": "portrait",
   "start_url": "/",

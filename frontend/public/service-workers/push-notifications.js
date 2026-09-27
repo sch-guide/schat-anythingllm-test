@@ -12,7 +12,7 @@ function parseEventData(event) {
     if (!payload) return;
   
     // options: https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerRegistration/showNotification#options
-    self.registration.showNotification(payload.title || 'AnythingLLM', {
+    self.registration.showNotification(payload.title || '병원 실무지침 AI', {
       ...payload,
       icon: '/favicon.png',
     });

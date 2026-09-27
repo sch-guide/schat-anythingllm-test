@@ -7,7 +7,6 @@ const { isValidUrl, safeJsonParse } = require("../utils/http");
 const prisma = require("../utils/prisma");
 const { MetaGenerator } = require("../utils/boot/MetaGenerator");
 const { PGVector } = require("../utils/vectorDbProviders/pgvector");
-const { NativeEmbedder } = require("../utils/EmbeddingEngines/native");
 const { getBaseLLMProviderModel } = require("../utils/helpers");
 const {
   ConnectionStringParser,
@@ -37,6 +36,15 @@ const SystemSettings = {
   /** A default system prompt that is used when no other system prompt is set or available to the function caller. */
   saneDefaultSystemPrompt:
     "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. The current date and time is {datetime}. Return only your response to the question given the above information following the users instructions as needed.",
+  /**
+   * The prompt a workspace inherits when it has no prompt of its own: the
+   * admin-managed Default System Prompt, or the built-in default if unset.
+   * @returns {Promise<string>}
+   */
+  effectiveDefaultSystemPrompt: async function () {
+    const setting = await this.get({ label: "default_system_prompt" });
+    return setting?.value || this.saneDefaultSystemPrompt;
+  },
   protectedFields: ["multi_user_mode", "hub_api_key", "onboarding_complete"],
   publicFields: [
     "footer_data",
@@ -458,8 +466,8 @@ const SystemSettings = {
     const AIbitat = require("../utils/agents/aibitat");
 
     const llmProvider = process.env.LLM_PROVIDER;
-    const vectorDB = process.env.VECTOR_DB;
-    const embeddingEngine = process.env.EMBEDDING_ENGINE ?? "native";
+    const vectorDB = process.env.VECTOR_DB ?? "chroma";
+    const embeddingEngine = process.env.EMBEDDING_ENGINE ?? "gemini";
     return {
       // --------------------------------------------------------
       // General Settings
@@ -481,9 +489,7 @@ const SystemSettings = {
       HasCachedEmbeddings: hasVectorCachedFiles(), // check if they any currently cached embedded docs.
       EmbeddingBasePath: process.env.EMBEDDING_BASE_PATH,
       EmbeddingModelPref:
-        embeddingEngine === "native"
-          ? NativeEmbedder._getEmbeddingModel()
-          : process.env.EMBEDDING_MODEL_PREF,
+        process.env.EMBEDDING_MODEL_PREF || "gemini-embedding-2",
       EmbeddingOutputDimensions:
         process.env.EMBEDDING_OUTPUT_DIMENSIONS || null,
       EmbeddingModelMaxChunkLength:

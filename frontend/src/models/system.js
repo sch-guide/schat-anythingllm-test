@@ -1,6 +1,5 @@
 import { API_BASE, AUTH_TIMESTAMP, fullApiUrl } from "@/utils/constants";
 import { baseHeaders, safeJsonParse } from "@/utils/request";
-import DataConnector from "./dataConnector";
 import LiveDocumentSync from "./experimental/liveSync";
 import AgentPlugins from "./experimental/agentPlugins";
 import SystemPromptVariable from "./systemPromptVariable";
@@ -116,6 +115,18 @@ const System = {
       })
       .then((res) => res.documents)
       .catch(() => []);
+  },
+  getUploadedDocumentsByDocPaths: async function (docpaths = []) {
+    return await fetch(`${API_BASE}/system/local-files/upload-batch`, {
+      method: "POST",
+      headers: baseHeaders(),
+      body: JSON.stringify({ docpaths }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch uploaded documents.");
+        return res.json();
+      })
+      .then((res) => res.documents);
   },
   needsAuthCheck: function () {
     const lastAuthCheck = window.localStorage.getItem(AUTH_TIMESTAMP);
@@ -698,8 +709,6 @@ const System = {
         return { success: false, error: e.message };
       });
   },
-  dataConnectors: DataConnector,
-
   getSlashCommandPresets: async function () {
     return await fetch(`${API_BASE}/system/slash-command-presets`, {
       method: "GET",

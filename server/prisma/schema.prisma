@@ -71,6 +71,18 @@ model users {
   dailyMessageLimit            Int?
   bio                          String?                       @default("")
   web_push_subscription_config String?
+  // SCHAT employee accounts (all optional so legacy accounts keep working)
+  employee_number              String?                       @unique
+  display_name                 String?
+  department_id                Int?
+  must_change_password         Boolean                       @default(false)
+  password_changed_at          DateTime?
+  last_login_at                DateTime?
+  disabled_at                  DateTime?
+  department                   schat_departments?            @relation(fields: [department_id], references: [id])
+  issue_reports                schat_issue_reports[]         @relation("reporter")
+  handled_reports              schat_issue_reports[]         @relation("handler")
+  notifications                schat_user_notifications[]
   workspace_chats              workspace_chats[]
   workspace_users              workspace_users[]
   embed_configs                embed_configs[]
@@ -485,4 +497,78 @@ model model_router_rules {
   @@unique([router_id, title])
   @@index([router_id])
   @@index([router_id, enabled, priority])
+}
+
+// ---- SCHAT employee accounts & issue reports -------------------------------
+
+model schat_departments {
+  id            Int      @id @default(autoincrement())
+  name          String   @unique
+  active        Boolean  @default(true)
+  sort_order    Int      @default(0)
+  createdAt     DateTime @default(now())
+  lastUpdatedAt DateTime @default(now())
+  users         users[]
+}
+
+model schat_issue_reports {
+  id                  Int       @id @default(autoincrement())
+  reporter_user_id    Int?
+  reporter_name       String?
+  employee_number     String?
+  department_name     String?
+  reporter_role       String?
+  category            String
+  title               String
+  content             String
+  related_feature     String?
+  related_faq_id      Int?
+  related_faq_title   String?
+  status              String    @default("open")
+  resolution          String?
+  handled_by_user_id  Int?
+  in_progress_at      DateTime?
+  resolved_at         DateTime?
+  createdAt           DateTime  @default(now())
+  lastUpdatedAt       DateTime  @default(now())
+  // Deleting an account keeps its reports (with the name/number/department
+  // snapshot) and only clears the link.
+  reporter            users?    @relation("reporter", fields: [reporter_user_id], references: [id], onDelete: SetNull)
+  handler             users?    @relation("handler", fields: [handled_by_user_id], references: [id], onDelete: SetNull)
+  notifications       schat_user_notifications[]
+  faq_items           schat_faq_items[]
+
+  @@index([reporter_user_id])
+  @@index([status])
+}
+
+model schat_user_notifications {
+  id         Int                  @id @default(autoincrement())
+  user_id    Int
+  report_id  Int?
+  kind       String
+  message    String
+  read_at    DateTime?
+  createdAt  DateTime             @default(now())
+  user       users                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  report     schat_issue_reports? @relation(fields: [report_id], references: [id])
+
+  @@index([user_id, read_at])
+}
+
+model schat_faq_items {
+  id               Int                  @id @default(autoincrement())
+  title            String
+  category         String?
+  keywords         String?
+  problem          String?
+  solution         String
+  active           Boolean              @default(false)
+  view_count       Int                  @default(0)
+  helpful_count    Int                  @default(0)
+  not_helpful_count Int                 @default(0)
+  source_report_id Int?
+  createdAt        DateTime             @default(now())
+  lastUpdatedAt    DateTime             @default(now())
+  source_report    schat_issue_reports? @relation(fields: [source_report_id], references: [id])
 }

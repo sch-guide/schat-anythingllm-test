@@ -8,6 +8,8 @@ import { userFromStorage } from "@/utils/request";
 import System from "@/models/system";
 import UserMenu from "../UserMenu";
 import { KeyboardShortcutWrapper } from "@/utils/keyboardShortcuts";
+import SchatAccount from "@/models/schatAccount";
+import { mergeStoredUser } from "@/components/SchatAccount/storedUser";
 
 // Used only for Multi-user mode only as we permission specific pages based on auth role.
 // When in single user mode we just bypass any authchecks.
@@ -66,6 +68,11 @@ function useIsAuthenticated() {
         return;
       }
 
+      // SCHAT: keep the stored profile (name, department, role) current.
+      // Accounts without a password never reach this point: the server
+      // rejects their sessions until 처음 로그인 is completed.
+      const me = await SchatAccount.me();
+      if (me?.user) mergeStoredUser(me.user);
       setIsAuthed(true);
     };
     validateSession();

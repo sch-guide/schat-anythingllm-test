@@ -1,4 +1,4 @@
-import { middleTruncate } from "@/utils/directories";
+import { folderDisplayName, middleTruncate } from "@/utils/directories";
 
 export default function FolderSelectionPopup({ folders, onSelect, onClose }) {
   const handleFolderSelect = (folder) => {
@@ -15,7 +15,7 @@ export default function FolderSelectionPopup({ folders, onSelect, onClose }) {
             onClick={() => handleFolderSelect(folder)}
             className="px-4 py-2 text-xs text-gray-700 hover:bg-gray-200 rounded-lg cursor-pointer whitespace-nowrap"
           >
-            {middleTruncate(folder.name, 25)}
+            {middleTruncate(folderDisplayName(folder.name), 25)}
           </li>
         ))}
       </ul>

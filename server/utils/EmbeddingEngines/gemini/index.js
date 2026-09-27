@@ -7,14 +7,16 @@ const MODEL_MAP = {
 
 class GeminiEmbedder {
   constructor() {
-    if (!process.env.GEMINI_EMBEDDING_API_KEY)
+    const apiKey =
+      process.env.GEMINI_EMBEDDING_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey)
       throw new Error("No Gemini API key was set.");
 
     this.className = "GeminiEmbedder";
     const { OpenAI: OpenAIApi } = require("openai");
-    this.model = process.env.EMBEDDING_MODEL_PREF || "gemini-embedding-001";
+    this.model = process.env.EMBEDDING_MODEL_PREF || "gemini-embedding-2";
     this.openai = new OpenAIApi({
-      apiKey: process.env.GEMINI_EMBEDDING_API_KEY,
+      apiKey,
       // Even models that are v1 in gemini API can be used with v1beta/openai/ endpoint and nobody knows why.
       baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
     });

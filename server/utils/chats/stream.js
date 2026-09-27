@@ -14,6 +14,8 @@ const {
   recentChatHistory,
   sourceIdentifier,
 } = require("./index");
+const { buildChatSearchQueries } = require("./searchQueries");
+const { runExpandedBodySearch } = require("./expandedBodySearch");
 
 const VALID_CHAT_MODE = ["automatic", "chat", "query"];
 
@@ -28,8 +30,39 @@ async function streamChatWithWorkspace(
 ) {
   const uuid = uuidv4();
   const updatedMessage = await grepCommand(message, user);
+  const { bodySearchQuery, relatedImageSearchQuery } = buildChatSearchQueries({
+    originalQuestion: message,
+    expandedBodyQuery: updatedMessage,
+  });
+  const safetyEnabled = process.env.SCHAT_SAFETY_ENABLED === "true";
+  const safetyGateEnabled =
+    process.env.SCHAT_SAFETY_GATE_ENABLED === "true";
+  const { attachmentsForChatRecord } = require("../schatSafety/imageAttachment");
 
-  if (Object.keys(VALID_COMMANDS).includes(updatedMessage)) {
+  if (safetyEnabled) {
+    const {
+      imageErrorMessage,
+      validateSafetyImageAttachments,
+    } = require("../schatSafety/imageAttachment");
+    try {
+      // Validate before routing, retrieval, or provider access. The returned
+      // objects intentionally omit the original filename and other metadata.
+      attachments = validateSafetyImageAttachments(attachments);
+    } catch (error) {
+      writeResponseChunk(response, {
+        id: uuid,
+        type: "textResponse",
+        textResponse: imageErrorMessage(error?.code),
+        sources: [],
+        close: true,
+        error: null,
+      });
+      return;
+    }
+  }
+  const hasSafetyImage = safetyEnabled && attachments.length === 1;
+
+  if (!hasSafetyImage && Object.keys(VALID_COMMANDS).includes(updatedMessage)) {
     const data = await VALID_COMMANDS[updatedMessage](
       workspace,
       message,
@@ -44,15 +77,17 @@ async function streamChatWithWorkspace(
   }
 
   // If is agent enabled chat we will exit this flow early.
-  const isAgentChat = await grepAgents({
-    uuid,
-    response,
-    message: updatedMessage,
-    user,
-    workspace,
-    thread,
-    attachments,
-  });
+  const isAgentChat = hasSafetyImage
+    ? false
+    : await grepAgents({
+        uuid,
+        response,
+        message: updatedMessage,
+        user,
+        workspace,
+        thread,
+        attachments,
+      });
   if (isAgentChat) return;
 
   const {
@@ -99,16 +134,21 @@ async function streamChatWithWorkspace(
 
   // User is trying to query-mode chat a workspace that has no data in it - so
   // we should exit early as no information can be found under these conditions.
-  if ((!hasVectorizedSpace || embeddingsCount === 0) && chatMode === "query") {
+  if (
+    (!hasVectorizedSpace || embeddingsCount === 0) &&
+    (chatMode === "query" || safetyEnabled)
+  ) {
     const textResponse =
       workspace?.queryRefusalResponse ??
-      "There is no relevant information in this workspace to answer your query.";
+      (process.env.SCHAT_SAFETY_ENABLED === "true"
+        ? "등록된 병원 지침에서 관련 근거를 확인할 수 없습니다."
+        : "There is no relevant information in this workspace to answer your query.");
     writeResponseChunk(response, {
       id: uuid,
       type: "textResponse",
       textResponse,
       sources: [],
-      attachments,
+      attachments: attachmentsForChatRecord(attachments, safetyEnabled),
       close: true,
       error: null,
     });
@@ -119,7 +159,7 @@ async function streamChatWithWorkspace(
         text: textResponse,
         sources: [],
         type: chatMode,
-        attachments,
+        attachments: attachmentsForChatRecord(attachments, safetyEnabled),
       },
       threadId: thread?.id || null,
       include: false,
@@ -133,6 +173,9 @@ async function streamChatWithWorkspace(
   // 2. Chatting in "query" mode and has at least 1 embedding
   let completeText;
   let metrics = {};
+  let safety = null;
+  let presentation = null;
+  let relatedImages = [];
   let contextTexts = [];
   let sources = [];
   let pinnedDocIdentifiers = [];
@@ -184,14 +227,26 @@ async function streamChatWithWorkspace(
 
   const vectorSearchResults =
     embeddingsCount !== 0
-      ? await VectorDb.performSimilaritySearch({
-          namespace: workspace.slug,
-          input: updatedMessage,
-          LLMConnector,
-          similarityThreshold: workspace?.similarityThreshold,
+      ? await runExpandedBodySearch({
+          originalQuestion: relatedImageSearchQuery,
+          expandedBodyQuery: bodySearchQuery,
           topN: workspace?.topN,
-          filterIdentifiers: pinnedDocIdentifiers,
-          rerank: workspace?.vectorSearchMode === "rerank",
+          search: ({
+            input,
+            includeRelatedImages,
+            relatedImageQueryText,
+          }) =>
+            VectorDb.performSimilaritySearch({
+              namespace: workspace.slug,
+              input,
+              relatedImageQueryText,
+              includeRelatedImages,
+              LLMConnector,
+              similarityThreshold: workspace?.similarityThreshold,
+              topN: workspace?.topN,
+              filterIdentifiers: pinnedDocIdentifiers,
+              rerank: workspace?.vectorSearchMode === "rerank",
+            }),
         })
       : {
           contextTexts: [],
@@ -230,12 +285,14 @@ async function streamChatWithWorkspace(
   contextTexts = [...contextTexts, ...filledSources.contextTexts];
   sources = [...sources, ...vectorSearchResults.sources];
 
-  // If in query mode and no context chunks are found from search, backfill, or pins -  do not
-  // let the LLM try to hallucinate a response or use general knowledge and exit early
-  if (chatMode === "query" && contextTexts.length === 0) {
+  // Query mode and SCHAT employee chat both fail closed when retrieval found no
+  // evidence, so Gemini cannot answer from general knowledge.
+  if ((chatMode === "query" || safetyEnabled) && contextTexts.length === 0) {
     const textResponse =
       workspace?.queryRefusalResponse ??
-      "There is no relevant information in this workspace to answer your query.";
+      (process.env.SCHAT_SAFETY_ENABLED === "true"
+        ? "등록된 병원 지침에서 관련 근거를 확인할 수 없습니다."
+        : "There is no relevant information in this workspace to answer your query.");
     writeResponseChunk(response, {
       id: uuid,
       type: "textResponse",
@@ -252,7 +309,7 @@ async function streamChatWithWorkspace(
         text: textResponse,
         sources: [],
         type: chatMode,
-        attachments,
+        attachments: attachmentsForChatRecord(attachments, safetyEnabled),
       },
       threadId: thread?.id || null,
       include: false,
@@ -261,40 +318,26 @@ async function streamChatWithWorkspace(
     return;
   }
 
-  // Compress & Assemble message to ensure prompt passes token limit with room for response
-  // and build system messages based on inputs and history.
-  // Reuse the system prompt from routing pre-fetch when available.
-  const systemPrompt =
-    prefetchedContext?.systemPrompt ??
-    (await chatPrompt(workspace, user, {
-      prompt: updatedMessage,
-      rawHistory,
-    }));
-  const messages = await LLMConnector.compressMessages(
-    {
-      systemPrompt,
-      userPrompt: updatedMessage,
-      contextTexts,
-      chatHistory,
+  if (safetyEnabled) {
+    // SCHAT employee chat stays closed-book and structured. The optional
+    // Python evaluator is selected separately by SCHAT_SAFETY_GATE_ENABLED.
+    const { runSchatCompletion } = require("../schatSafety/chat");
+    const safeResult = await runSchatCompletion({
+      safetyGateEnabled,
+      question: updatedMessage,
+      sources,
+      relatedImageSources: vectorSearchResults.relatedImageSources || [],
       attachments,
-    },
-    rawHistory
-  );
-
-  // If streaming is not explicitly enabled for connector
-  // we do regular waiting of a response and send a single chunk.
-  if (LLMConnector.streamingEnabled() !== true) {
-    console.log(
-      `\x1b[31m[STREAMING DISABLED]\x1b[0m Streaming is not available for ${LLMConnector.constructor.name}. Will use regular chat method.`
-    );
-    const { textResponse, metrics: performanceMetrics } =
-      await LLMConnector.getChatCompletion(messages, {
-        temperature: workspace?.openAiTemp ?? LLMConnector.defaultTemp,
-        user: user,
-      });
-
-    completeText = textResponse;
-    metrics = addChatCostToMetrics(performanceMetrics, {
+      LLMConnector,
+      user,
+      temperature: workspace?.openAiTemp ?? LLMConnector.defaultTemp,
+    });
+    completeText = safeResult.text;
+    sources = safeResult.sources;
+    safety = safeResult.safety;
+    presentation = safeResult.presentation;
+    relatedImages = safeResult.relatedImages || [];
+    metrics = addChatCostToMetrics(safeResult.metrics, {
       routingMetadata,
       workspace,
       connector: LLMConnector,
@@ -307,24 +350,82 @@ async function streamChatWithWorkspace(
       close: true,
       error: false,
       metrics,
+      safety,
+      ...(presentation ? { presentation } : {}),
+      ...(relatedImages.length ? { relatedImages } : {}),
     });
   } else {
-    const stream = await LLMConnector.streamGetChatCompletion(messages, {
-      temperature: workspace?.openAiTemp ?? LLMConnector.defaultTemp,
-      user: user,
-    });
-    completeText = await LLMConnector.handleStream(response, stream, {
-      uuid,
-      sources,
-    });
-    metrics = addChatCostToMetrics(stream.metrics, {
-      routingMetadata,
-      workspace,
-      connector: LLMConnector,
-    });
+    // Compress & Assemble message to ensure prompt passes token limit with room for response
+    // and build system messages based on inputs and history.
+    // Reuse the system prompt from routing pre-fetch when available.
+    const systemPrompt =
+      prefetchedContext?.systemPrompt ??
+      (await chatPrompt(workspace, user, {
+        prompt: updatedMessage,
+        rawHistory,
+      }));
+    const messages = await LLMConnector.compressMessages(
+      {
+        systemPrompt,
+        userPrompt: updatedMessage,
+        contextTexts,
+        chatHistory,
+        attachments,
+      },
+      rawHistory
+    );
+
+    // If streaming is not explicitly enabled for connector
+    // we do regular waiting of a response and send a single chunk.
+    if (LLMConnector.streamingEnabled() !== true) {
+      console.log(
+        `\x1b[31m[STREAMING DISABLED]\x1b[0m Streaming is not available for ${LLMConnector.constructor.name}. Will use regular chat method.`
+      );
+      const { textResponse, metrics: performanceMetrics } =
+        await LLMConnector.getChatCompletion(messages, {
+          temperature: workspace?.openAiTemp ?? LLMConnector.defaultTemp,
+          user: user,
+        });
+
+      completeText = textResponse;
+      metrics = addChatCostToMetrics(performanceMetrics, {
+        routingMetadata,
+        workspace,
+        connector: LLMConnector,
+      });
+      writeResponseChunk(response, {
+        uuid,
+        sources,
+        type: "textResponseChunk",
+        textResponse: completeText,
+        close: true,
+        error: false,
+        metrics,
+      });
+    } else {
+      const stream = await LLMConnector.streamGetChatCompletion(messages, {
+        temperature: workspace?.openAiTemp ?? LLMConnector.defaultTemp,
+        user: user,
+      });
+      completeText = await LLMConnector.handleStream(response, stream, {
+        uuid,
+        sources,
+      });
+      metrics = addChatCostToMetrics(stream.metrics, {
+        routingMetadata,
+        workspace,
+        connector: LLMConnector,
+      });
+    }
   }
 
   if (completeText?.length > 0) {
+    // SCHAT 직원 채팅에서는 원본 이미지가 채팅 기록이나 일반 로그에
+    // 남지 않도록 서버 메모리에서 처리한 뒤 저장 payload에서 제외한다.
+    const persistedAttachments = attachmentsForChatRecord(
+      attachments,
+      safetyEnabled
+    );
     const { chat } = await WorkspaceChats.new({
       workspaceId: workspace.id,
       prompt: message,
@@ -332,8 +433,11 @@ async function streamChatWithWorkspace(
         text: completeText,
         sources,
         type: chatMode,
-        attachments,
+        attachments: persistedAttachments,
         metrics,
+        ...(presentation ? { presentation } : {}),
+        ...(relatedImages.length ? { relatedImages } : {}),
+        ...(safety ? { safety } : {}),
       },
       threadId: thread?.id || null,
       user,

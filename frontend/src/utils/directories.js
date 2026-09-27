@@ -36,3 +36,11 @@ export function middleTruncate(str, n) {
     return str.length > n ? str.substr(0, n - 8) + "..." + str.slice(-4) : str;
   }
 }
+
+// Display-only names for storage folders. The folder key/path stays unchanged
+// everywhere else (API calls, docpaths, storage).
+const FOLDER_DISPLAY_NAMES = { "custom-documents": "등록된 문서" };
+
+export function folderDisplayName(name = "") {
+  return FOLDER_DISPLAY_NAMES[name] || name;
+}

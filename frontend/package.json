@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "vite --open",
+    "predev": "node scripts/update_schat_overview.mjs",
     "dev": "cross-env NODE_ENV=development vite --debug --host=0.0.0.0",
+    "prebuild": "node scripts/update_schat_overview.mjs",
     "build": "vite build && node scripts/postbuild.js",
     "lint:check": "eslint src",
     "lint": "eslint --fix src",

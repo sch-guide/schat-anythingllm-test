@@ -18,8 +18,10 @@ import usePromptInputStorage from "@/hooks/usePromptInputStorage";
 import ToolsMenu, { TOOLS_MENU_KEYBOARD_EVENT } from "./ToolsMenu";
 import { useSearchParams } from "react-router-dom";
 import { useIsAgentSessionActive } from "@/utils/chat/agent";
+import { SCHAT_TEXT_ONLY_INPUT } from "@/utils/schatUi";
 
 export const PROMPT_INPUT_ID = "primary-prompt-input";
+
 export const PROMPT_INPUT_EVENT = "set_prompt_input";
 const MAX_EDIT_STACK_SIZE = 100;
 
@@ -176,6 +178,7 @@ export default function PromptInput({
 
     // "/" toggles the Tools menu only when the input is empty
     if (
+      !SCHAT_TEXT_ONLY_INPUT &&
       event.key === "/" &&
       !event.ctrlKey &&
       !event.metaKey &&
@@ -258,7 +261,7 @@ export default function PromptInput({
     if (e.clipboardData.items.length === 0) return false;
 
     // paste any clipboard items that are images.
-    for (const item of e.clipboardData.items) {
+    for (const item of SCHAT_TEXT_ONLY_INPUT ? [] : e.clipboardData.items) {
       if (item.type.startsWith("image/")) {
         const file = item.getAsFile();
         window.dispatchEvent(
@@ -337,18 +340,29 @@ export default function PromptInput({
           className={`flex items-center rounded-lg md:w-full ${centered ? "mb-0" : "mb-4"}`}
         >
           <div className="relative w-[95vw] md:w-[750px]">
-            <ToolsMenu
-              workspace={workspace}
-              showing={showTools}
-              setShowing={setShowTools}
-              sendCommand={sendCommand}
-              promptRef={textareaRef}
-              centered={centered}
-              highlightedIndexRef={toolsHighlightRef}
-            />
-            <div className="bg-zinc-800 light:bg-white light:border light:border-slate-300 rounded-[20px] pwa:rounded-3xl flex flex-col px-5 overflow-hidden">
-              <AttachmentManager attachments={attachments} />
-              <div className="flex items-center">
+            {!SCHAT_TEXT_ONLY_INPUT && (
+              <ToolsMenu
+                workspace={workspace}
+                showing={showTools}
+                setShowing={setShowTools}
+                sendCommand={sendCommand}
+                promptRef={textareaRef}
+                centered={centered}
+                highlightedIndexRef={toolsHighlightRef}
+              />
+            )}
+            <div className="schat-prompt-box bg-zinc-800 light:bg-white light:border light:border-slate-300 rounded-[20px] pwa:rounded-3xl flex flex-col px-5 overflow-hidden">
+              {!SCHAT_TEXT_ONLY_INPUT && (
+                <>
+                  <AttachmentManager attachments={attachments} />
+                  <p className="pt-2 text-[11px] leading-4 text-zinc-400 light:text-slate-500">
+                    환자 이름, 등록번호, 생년월일 등 개인정보가 포함된 이미지는
+                    업로드하지 마세요. JPG, PNG, WebP 이미지는 1장·5MB 이하만
+                    사용할 수 있습니다.
+                  </p>
+                </>
+              )}
+              <div className="flex items-end gap-x-2">
                 <textarea
                   id={PROMPT_INPUT_ID}
                   ref={textareaRef}
@@ -369,41 +383,58 @@ export default function PromptInput({
                   className={`border-none cursor-text max-h-[50vh] md:max-h-[350px] md:min-h-[40px] pt-[20px] w-full leading-5 text-white light:text-slate-600 bg-transparent placeholder:text-white/60 light:placeholder:text-slate-400 resize-none active:outline-none focus:outline-none flex-grow pwa:!text-[16px] ${textSizeClass}`}
                   placeholder={t("chat_window.send_message")}
                 />
+                {SCHAT_TEXT_ONLY_INPUT && (
+                  <div className="flex shrink-0 items-center pb-2.5">
+                    {isStreaming ? (
+                      <StopGenerationButton />
+                    ) : (
+                      <SendPromptButton
+                        formRef={formRef}
+                        promptInput={promptInput}
+                        isDisabled={isDisabled}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="flex justify-between items-center pt-3.5 pb-3">
-                <div className="flex items-center gap-x-0.25">
-                  <div className="flex items-center gap-x-1">
-                    <AttachItem
-                      workspaceSlug={workspaceSlug}
-                      workspaceThreadSlug={threadSlug}
-                    />
-                    <AgentSessionButton
-                      sendCommand={sendCommand}
-                      promptInput={promptInput}
+              {SCHAT_TEXT_ONLY_INPUT ? (
+                <div className="pb-2.5" />
+              ) : (
+                <div className="flex justify-between items-center pt-3.5 pb-3">
+                  <div className="flex items-center gap-x-0.25">
+                    <div className="flex items-center gap-x-1">
+                      <AttachItem
+                        workspaceSlug={workspaceSlug}
+                        workspaceThreadSlug={threadSlug}
+                      />
+                      <AgentSessionButton
+                        sendCommand={sendCommand}
+                        promptInput={promptInput}
+                        textareaRef={textareaRef}
+                        visible={!agentSessionActive & showAgentCommand}
+                      />
+                    </div>
+                    <ToolsButton
+                      showTools={showTools}
+                      setShowTools={setShowTools}
                       textareaRef={textareaRef}
-                      visible={!agentSessionActive & showAgentCommand}
+                      autoOpenedToolsRef={autoOpenedToolsRef}
                     />
                   </div>
-                  <ToolsButton
-                    showTools={showTools}
-                    setShowTools={setShowTools}
-                    textareaRef={textareaRef}
-                    autoOpenedToolsRef={autoOpenedToolsRef}
-                  />
+                  <div className="flex gap-x-2 items-center">
+                    <SpeechToText sendCommand={sendCommand} />
+                    {isStreaming ? (
+                      <StopGenerationButton />
+                    ) : (
+                      <SendPromptButton
+                        formRef={formRef}
+                        promptInput={promptInput}
+                        isDisabled={isDisabled}
+                      />
+                    )}
+                  </div>
                 </div>
-                <div className="flex gap-x-2 items-center">
-                  <SpeechToText sendCommand={sendCommand} />
-                  {isStreaming ? (
-                    <StopGenerationButton />
-                  ) : (
-                    <SendPromptButton
-                      formRef={formRef}
-                      promptInput={promptInput}
-                      isDisabled={isDisabled}
-                    />
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

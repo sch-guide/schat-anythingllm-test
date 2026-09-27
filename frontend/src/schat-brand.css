@@ -56,7 +56,6 @@ html,
 body {
   color: var(--schat-navy);
   background: var(--schat-page);
-  font-family: Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
 }
 
 .schat-login {
@@ -89,23 +88,28 @@ body {
 .schat-login__hospital {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 9px;
   padding-bottom: 22px;
   border-bottom: 1px solid rgb(255 255 255 / 0.22);
   font-size: 14px;
   font-weight: 700;
 }
 
+/* The provided SCH image has a light 1px column on its left edge and a
+   light 2px strip on its right edge. Hide only those columns when drawing
+   (185 of 188 source columns, 1 left : 2 right); the file is unchanged. */
+.sch-logo {
+  aspect-ratio: 185 / 68;
+  object-fit: cover;
+  object-position: 33.333% 50%;
+}
+
 .schat-login__mark {
-  display: grid;
-  place-items: center;
-  width: 54px;
-  height: 44px;
-  border-radius: 9px;
-  color: #004f71;
-  background: #ffffff;
-  font-size: 16px;
-  font-weight: 800;
+  display: block;
+  flex: none;
+  width: auto;
+  height: 28px;
+  border-radius: 3px;
 }
 
 .schat-login__eyebrow {
@@ -155,10 +159,23 @@ body {
   background: #ffffff;
 }
 
-.schat-login__logo {
-  width: min(320px, 100%);
-  max-height: 72px;
-  margin-bottom: 20px;
+.schat-login__product {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+  color: var(--schat-navy);
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.schat-login__product-mark {
+  display: block;
+  flex: none;
+  width: auto;
+  height: 32px;
+  border-radius: 3px;
 }
 
 .schat-login input {
@@ -179,7 +196,7 @@ body {
   }
 
   .schat-login__shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     min-height: auto;
     border-radius: 16px;
   }
@@ -201,4 +218,295 @@ body {
   .schat-login__form {
     padding: 30px 22px;
   }
+
+  .schat-login__product {
+    gap: 8px;
+    max-width: 100%;
+    font-size: 19px;
+  }
+
+  /* 22px keeps even 3x phone screens at or below the 188px original. */
+  .schat-login__mark,
+  .schat-login__product-mark {
+    height: 22px;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Dark mode: black/charcoal base with deep navy and a quiet blue accent.
+   The shared block above gives every theme the light palette, so the dark
+   tokens are redefined here (this block must stay after it). */
+[data-theme="dark"] {
+  --schat-dark-page: #07090d;
+  --schat-dark-panel: #0f141b;
+  --schat-dark-sidebar: #0b0f15;
+  --schat-dark-raised: #151c25;
+  --schat-dark-line: rgb(148 178 214 / 0.12);
+  --schat-dark-text: #e6edf5;
+  --schat-dark-muted: #93a3b5;
+  --schat-dark-blue: #4b8fd1;
+  --schat-dark-blue-soft: rgb(75 143 209 / 0.16);
+  --schat-dark-active: #132840;
+  --schat-dark-hover: rgb(148 178 214 / 0.08);
+  --theme-loader: var(--schat-dark-blue);
+  --theme-bg-primary: var(--schat-dark-page);
+  --theme-bg-secondary: var(--schat-dark-panel);
+  --theme-bg-sidebar: var(--schat-dark-sidebar);
+  --theme-bg-container: var(--schat-dark-page);
+  --theme-bg-chat: var(--schat-dark-panel);
+  --theme-bg-chat-input: var(--schat-dark-raised);
+  --theme-text-primary: var(--schat-dark-text);
+  --theme-text-secondary: var(--schat-dark-muted);
+  --theme-placeholder: #7d8da0;
+  --theme-sidebar-item-default: transparent;
+  --theme-sidebar-item-selected: var(--schat-dark-active);
+  --theme-sidebar-item-hover: var(--schat-dark-hover);
+  --theme-sidebar-item-text-active: var(--schat-dark-text);
+  --theme-sidebar-item-text-inactive: #b7c3d0;
+  --theme-sidebar-item-workspace-active: var(--schat-dark-text);
+  --theme-sidebar-item-workspace-inactive: #b7c3d0;
+  --theme-sidebar-subitem-default: transparent;
+  --theme-sidebar-subitem-selected: var(--schat-dark-active);
+  --theme-sidebar-thread-selected: var(--schat-dark-active);
+  --theme-sidebar-subitem-hover: var(--schat-dark-hover);
+  --theme-sidebar-border: var(--schat-dark-line);
+  --theme-sidebar-footer-icon: var(--schat-dark-raised);
+  --theme-sidebar-footer-icon-fill: var(--schat-dark-text);
+  --theme-sidebar-footer-icon-hover: #1d2733;
+  --theme-chat-input-border: var(--schat-dark-line);
+  --theme-action-menu-bg: var(--schat-dark-raised);
+  --theme-action-menu-item-hover: rgb(148 178 214 / 0.12);
+  --theme-settings-input-bg: var(--schat-dark-sidebar);
+  --theme-settings-input-placeholder: #7d8da0;
+  --theme-settings-input-active: var(--schat-dark-blue-soft);
+  --theme-settings-input-text: var(--schat-dark-text);
+  --theme-modal-border: var(--schat-dark-line);
+  --theme-button-primary: #2f6fa8;
+  --theme-button-primary-hover: #3a80c0;
+  --theme-button-cta: #2f6fa8;
+  --theme-home-text: var(--schat-dark-text);
+  --theme-home-text-secondary: var(--schat-dark-muted);
+  --theme-home-bg-card: var(--schat-dark-raised);
+  --theme-home-bg-button: var(--schat-dark-raised);
+  --theme-home-border: var(--schat-dark-line);
+  --theme-home-button-primary: #2f6fa8;
+  --theme-home-button-primary-hover: #3a80c0;
+  color-scheme: dark;
+}
+
+[data-theme="dark"] body {
+  color: var(--schat-dark-text);
+  background: var(--schat-dark-page);
+}
+
+[data-theme="dark"] .schat-app-bg {
+  background-color: var(--schat-dark-page);
+}
+
+[data-theme="dark"] .schat-chat-panel {
+  background-color: var(--schat-dark-panel);
+}
+
+/* Sidebar panel: one step darker than the chat panel, thin navy edge. */
+[data-theme="dark"] .schat-sidebar-panel {
+  border-color: var(--schat-dark-line);
+  background-color: var(--schat-dark-sidebar);
+}
+
+[data-theme="dark"] .schat-sidebar-panel input[type="search"] {
+  border: 1px solid var(--schat-dark-line) !important;
+  color: var(--schat-dark-text);
+  background-color: var(--schat-dark-panel);
+}
+
+[data-theme="dark"] .schat-sidebar-panel input[type="search"]:hover {
+  border-color: rgb(75 143 209 / 0.45) !important;
+}
+
+[data-theme="dark"] .schat-sidebar-panel input[type="search"]:focus {
+  border-color: var(--schat-dark-blue) !important;
+}
+
+[data-theme="dark"] .schat-sidebar-panel input[type="search"]::placeholder {
+  color: #7d8da0;
+}
+
+/* Workspace row: active = deep navy with a blue edge, hover = soft lift. */
+[data-theme="dark"] .schat-sidebar-panel [role="listitem"] > div > a {
+  color: #d3dce6;
+}
+
+[data-theme="dark"] .schat-sidebar-panel [role="listitem"] > div > a:hover {
+  background-color: var(--schat-dark-hover);
+}
+
+[data-theme="dark"]
+  .schat-sidebar-panel
+  [role="listitem"]
+  > div
+  > a[aria-current="page"] {
+  box-shadow: inset 2px 0 0 var(--schat-dark-blue);
+  background-color: var(--schat-dark-active);
+}
+
+/* New conversation: charcoal-blue button that stands apart from the list. */
+[data-theme="dark"] .schat-new-chat {
+  margin-top: 6px;
+  border: 1px solid rgb(75 143 209 / 0.28) !important;
+  background-color: rgb(75 143 209 / 0.1);
+}
+
+[data-theme="dark"] .schat-new-chat:hover {
+  border-color: rgb(75 143 209 / 0.55) !important;
+  background-color: rgb(75 143 209 / 0.2);
+}
+
+[data-theme="dark"] .schat-new-chat__icon {
+  background-color: #2f6fa8;
+}
+
+[data-theme="dark"] .schat-prompt-box {
+  border: 1px solid var(--schat-dark-line);
+  background-color: var(--schat-dark-raised);
+}
+
+[data-theme="dark"] .schat-prompt-box:focus-within {
+  border-color: rgb(75 143 209 / 0.5);
+}
+
+[data-theme="dark"] .schat-popover {
+  border: 1px solid var(--schat-dark-line);
+  background-color: var(--schat-dark-raised);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 0.45);
+}
+
+/* ------------------------------------------------------------------ */
+/* SCHAT admin settings (both themes). */
+.schat-admin-card {
+  border: 1px solid var(--theme-sidebar-border);
+  background: var(--theme-bg-secondary);
+}
+
+.schat-admin-card--danger {
+  border-color: rgb(220 38 38 / 0.35);
+}
+
+.schat-admin-card summary::marker {
+  color: var(--theme-text-secondary);
+}
+
+.schat-admin-input {
+  border-color: var(--theme-sidebar-border);
+}
+
+.schat-admin-button--primary {
+  color: #ffffff;
+  background: var(--theme-button-primary);
+}
+
+.schat-admin-button--primary:hover:not(:disabled) {
+  background: var(--theme-button-primary-hover);
+}
+
+.schat-admin-button--secondary {
+  border: 1px solid var(--theme-sidebar-border);
+  color: var(--theme-text-primary);
+  background: transparent;
+}
+
+.schat-admin-button--secondary:hover:not(:disabled) {
+  background: var(--theme-sidebar-item-hover);
+}
+
+.schat-admin-button--danger {
+  color: #ffffff;
+  background: #c62828;
+}
+
+.schat-admin-button--danger:hover:not(:disabled) {
+  background: #a61f1f;
+}
+
+.schat-admin-badge--neutral {
+  color: var(--theme-text-secondary);
+  background: var(--theme-sidebar-item-hover);
+}
+
+.schat-admin-badge--ok {
+  color: #0f6b4f;
+  background: #dff3ea;
+}
+
+.schat-admin-badge--warning {
+  color: #8a4b00;
+  background: #fdf0d9;
+}
+
+.schat-admin-notice--info {
+  border: 1px solid var(--theme-sidebar-border);
+  color: var(--theme-text-secondary);
+  background: var(--theme-bg-primary);
+}
+
+.schat-admin-notice--warning {
+  border: 1px solid #f0c98a;
+  color: #6b3d00;
+  background: #fff7e8;
+}
+
+.schat-admin-brand-preview {
+  border: 1px solid var(--theme-sidebar-border);
+  background: var(--theme-bg-primary);
+}
+
+[data-theme="dark"] .schat-admin-badge--ok {
+  color: #8fd8b8;
+  background: rgb(46 160 110 / 0.16);
+}
+
+[data-theme="dark"] .schat-admin-badge--warning {
+  color: #f3c77c;
+  background: rgb(224 160 60 / 0.14);
+}
+
+[data-theme="dark"] .schat-admin-notice--warning {
+  border-color: rgb(224 160 60 / 0.35);
+  color: #f1d3a0;
+  background: rgb(224 160 60 / 0.08);
+}
+
+/* 이용 가이드 icon: white bubble, SCHAT blue outline and "?" in both themes. */
+.schat-guide-icon__bubble {
+  fill: #ffffff;
+  stroke: #2f6fa8;
+}
+
+.schat-guide-icon__mark {
+  stroke: #2f6fa8;
+}
+
+.schat-guide-icon__dot {
+  fill: #2f6fa8;
+}
+
+[data-theme="dark"] .schat-guide-icon__bubble {
+  fill: #f4f8fc;
+  stroke: #6aa6de;
+}
+
+[data-theme="dark"] .schat-guide-icon__mark {
+  stroke: #2f6fa8;
+}
+
+/* 사용자 관리: the 작업 column stays visible when the table scrolls. */
+.schat-user-table .schat-sticky-action {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--theme-bg-secondary);
+  box-shadow: -8px 0 8px -8px rgb(0 0 0 / 0.18);
+}
+
+.schat-user-table tbody tr:hover > td {
+  background: var(--theme-sidebar-item-hover);
 }

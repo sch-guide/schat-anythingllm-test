@@ -62,5 +62,16 @@
   "eslint.experimental.useFlatConfig": true,
   "docker.languageserver.formatter.ignoreMultilineInstructions": true,
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "esbenp.prettier-vscode"
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "files.encoding": "utf8",
+  "explorer.compactFolders": false,
+  "files.exclude": {
+    "**/.git": true,
+    "**/.github": true,
+    "**/.vscode": true,
+    "docs": true,
+    "docs_view": true,
+    "**/node_modules": true,
+    "**/__pycache__": true
+  }
 }

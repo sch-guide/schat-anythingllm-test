@@ -1,10 +1,9 @@
 import { Fragment } from "react";
 import { CaretLeft, Info, X } from "@phosphor-icons/react";
-import { decode as HTMLDecode } from "he";
 import truncate from "truncate";
 import { useTranslation } from "react-i18next";
-import { omitChunkHeader } from "../../../ChatHistory/Citation";
 import { toPercentString } from "@/utils/numbers";
+import SourceExcerpt from "../../SourceExcerpt";
 
 export default function SourceDetailView({ source, onBack, onClose }) {
   const { t } = useTranslation();
@@ -33,9 +32,7 @@ export default function SourceDetailView({ source, onBack, onClose }) {
         {source.chunks.map(({ text, score }, idx) => (
           <Fragment key={idx}>
             <div className="flex flex-col gap-y-1 py-4">
-              <p className="text-sm leading-[20px] text-white light:text-slate-900">
-                {HTMLDecode(omitChunkHeader(text))}
-              </p>
+              <SourceExcerpt text={text} />
               {!!score && (
                 <div className="flex items-center text-xs text-white/60 light:text-slate-500 gap-x-1">
                   <Info size={14} />

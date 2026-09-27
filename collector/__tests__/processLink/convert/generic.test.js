@@ -12,18 +12,11 @@ jest.mock("../../../processLink/helpers", () => ({
   ...jest.requireActual("../../../processLink/helpers"),
   processAsFile: jest.fn(),
 }));
-jest.mock("../../../utils/extensions/YoutubeTranscript", () => ({
-  loadYouTubeTranscript: jest.fn(),
-}));
-
 const {
   PuppeteerWebBaseLoader,
 } = require("langchain/document_loaders/web/puppeteer");
 const { writeToServerDocuments } = require("../../../utils/files");
 const { processAsFile } = require("../../../processLink/helpers");
-const {
-  loadYouTubeTranscript,
-} = require("../../../utils/extensions/YoutubeTranscript");
 const { scrapeGenericUrl } = require("../../../processLink/convert/generic");
 const {
   htmlToMarkdown,
@@ -77,7 +70,6 @@ afterEach(() => {
   PuppeteerWebBaseLoader.mockReset();
   writeToServerDocuments.mockReset();
   processAsFile.mockReset();
-  loadYouTubeTranscript.mockReset();
 });
 
 describe("getPageContent captureAs", () => {
@@ -294,11 +286,10 @@ describe("scrapeGenericUrl", () => {
       expect(processAsFile).not.toHaveBeenCalled();
     });
 
-    it("hands YouTube links to the transcript loader with parseOnly mirrored from saveAsDocument", async () => {
-      const fetchMock = mockFetch();
+    it("treats YouTube links as ordinary web pages without loading transcripts", async () => {
+      mockBrowser();
+      mockFetch();
       const youtube = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-      const expected = { success: true, content: "transcript" };
-      loadYouTubeTranscript.mockResolvedValue(expected);
 
       const result = await scrapeGenericUrl({
         link: youtube,
@@ -306,20 +297,10 @@ describe("scrapeGenericUrl", () => {
         saveAsDocument: false,
       });
 
-      expect(result).toBe(expected);
-      expect(loadYouTubeTranscript).toHaveBeenCalledWith(
-        { url: youtube },
-        { parseOnly: true }
+      expect(result.content).toBe(
+        await htmlToMarkdown(PAGE, youtube)
       );
-      expect(fetchMock).not.toHaveBeenCalled();
-      expect(PuppeteerWebBaseLoader).not.toHaveBeenCalled();
-
-      loadYouTubeTranscript.mockClear();
-      await scrapeGenericUrl({ link: youtube, saveAsDocument: true });
-      expect(loadYouTubeTranscript).toHaveBeenCalledWith(
-        { url: youtube },
-        { parseOnly: false }
-      );
+      expect(PuppeteerWebBaseLoader).toHaveBeenCalled();
     });
   });
 });

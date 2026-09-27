@@ -24,6 +24,10 @@ import { safeJsonParse } from "@/utils/request";
 import useUploadQueue from "../hooks/useUploadQueue";
 import { getFilesFromUploadEvent } from "@/utils/folderUpload";
 
+// The library total counts on-disk page records (old uploads included), so
+// SCHAT does not show it; the workspace panel shows documents and pages.
+const SHOW_LIBRARY_TOTAL = false;
+
 const NO_FILES = [];
 
 export default function Directory({
@@ -115,12 +119,9 @@ export default function Directory({
         loading: entry?.status === "loading",
         hasMore,
         totalCount,
-        // Once a folder is fully fetched we know exactly how many rows it can
-        // show - embedded files are filtered out of the page, so a folder with
-        // everything embedded must read as empty rather than still claiming
-        // its on-disk count.
-        displayCount:
-          entry?.status === "loaded" && !hasMore ? files.length : totalCount,
+        // SCHAT: the on-disk page-record count (it includes old uploads) is
+        // not meaningful to administrators, so folders show no count badge.
+        displayCount: 0,
       };
     });
   }, [folders, contents, expanded, searchResults, hiddenPaths]);
@@ -314,6 +315,7 @@ export default function Directory({
                   })}
                 </p>
               ) : (
+                SHOW_LIBRARY_TOTAL &&
                 totalDocCount > 0 && (
                   <p className="col-span-6 text-right text-theme-text-secondary">
                     {t(`connectors.directory.total-documents`, {

@@ -8,7 +8,8 @@ export default function SettingsButton() {
   const isInSettings = !!useMatch("/settings/*");
   const { user } = useUser();
 
-  if (user && user?.role === "default") return null;
+  // Only admins manage SCHAT; staff (default) and managers never see this.
+  if (user && user?.role !== "admin") return null;
 
   if (isInSettings)
     return (
@@ -16,9 +17,9 @@ export default function SettingsButton() {
         <Link
           to={paths.home()}
           className="transition-all duration-300 p-2 rounded-full bg-theme-sidebar-footer-icon hover:bg-theme-sidebar-footer-icon-hover"
-          aria-label="Home"
+          aria-label="대화 화면으로 돌아가기"
           data-tooltip-id="footer-item"
-          data-tooltip-content="Back to workspaces"
+          data-tooltip-content="대화 화면으로 돌아가기"
         >
           <ArrowUUpLeft
             className="h-5 w-5 text-white light:text-slate-800"
@@ -31,11 +32,11 @@ export default function SettingsButton() {
   return (
     <div className="flex w-fit">
       <Link
-        to={paths.settings.interface()}
+        to={paths.settings.schatAdmin()}
         className="transition-all duration-300 p-2 rounded-full bg-theme-sidebar-footer-icon hover:bg-theme-sidebar-footer-icon-hover"
-        aria-label="Settings"
+        aria-label="SCHAT 관리자 설정"
         data-tooltip-id="footer-item"
-        data-tooltip-content="Open settings"
+        data-tooltip-content="SCHAT 관리자 설정"
       >
         <Wrench
           className="h-5 w-5 text-white light:text-slate-800"

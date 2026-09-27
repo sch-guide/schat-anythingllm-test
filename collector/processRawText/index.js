@@ -97,6 +97,15 @@ async function processRawText(textContent, metadata) {
     description: METADATA_KEYS.possible.description(metadata),
     docSource: METADATA_KEYS.possible.docSource(metadata),
     chunkSource: METADATA_KEYS.possible.chunkSource(metadata),
+    usage_scope: metadata.usage_scope || "employee",
+    document_id:
+      typeof metadata.document_id === "string" ? metadata.document_id : "",
+    document_version:
+      typeof metadata.document_version === "string"
+        ? metadata.document_version
+        : "",
+    ...(Number.isInteger(metadata.page) ? { page: metadata.page } : {}),
+    section: typeof metadata.section === "string" ? metadata.section : "",
     published: METADATA_KEYS.possible.published(metadata),
     wordCount: textContent.split(" ").length,
     pageContent: textContent,

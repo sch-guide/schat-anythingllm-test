@@ -42,6 +42,36 @@ const StorageFiles = {
         return null;
       });
   },
+
+  documentImage: async function (workspaceSlug, imageKey) {
+    return await fetch(
+      `${API_BASE}/workspace/${encodeURIComponent(workspaceSlug)}/document-image/${encodeURIComponent(imageKey)}`,
+      { headers: baseHeaders() }
+    )
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch document image");
+        return res.blob();
+      })
+      .catch((error) => {
+        console.error("Document image fetch failed:", error);
+        return null;
+      });
+  },
+
+  originalPdf: async function (workspaceSlug, pdfRef) {
+    return await fetch(
+      `${API_BASE}/workspace/${encodeURIComponent(workspaceSlug)}/original-pdf/${encodeURIComponent(pdfRef)}`,
+      { headers: baseHeaders() }
+    )
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch original PDF");
+        return res.blob();
+      })
+      .catch((error) => {
+        console.error("Original PDF fetch failed:", error);
+        return null;
+      });
+  },
 };
 
 export default StorageFiles;

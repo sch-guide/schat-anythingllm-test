@@ -79,7 +79,7 @@ export default function ThreadItem({
               <p
                 className={`text-left text-sm text-slate-400/50 light:text-slate-500 italic`}
               >
-                deleted thread
+                삭제된 대화
               </p>
             </div>
             {ctrlPressed && (
@@ -207,9 +207,7 @@ function OptionsMenu({
   }, [menuRef.current, containerRef.current]);
 
   const renameThread = async () => {
-    const name = window
-      .prompt("What would you like to rename this thread to?")
-      ?.trim();
+    const name = window.prompt("대화 이름을 무엇으로 바꿀까요?")?.trim();
     if (!name || name.length === 0) {
       close();
       return;
@@ -221,7 +219,7 @@ function OptionsMenu({
       { name }
     );
     if (!!message) {
-      showToast(`Thread could not be updated! ${message}`, "error", {
+      showToast(`대화 이름을 바꾸지 못했습니다. ${message}`, "error", {
         clear: true,
       });
       close();
@@ -235,17 +233,17 @@ function OptionsMenu({
   const handleDelete = async () => {
     if (
       !window.confirm(
-        "Are you sure you want to delete this thread? All of its chats will be deleted. You cannot undo this."
+        "이 대화를 삭제할까요? 대화 내용이 모두 삭제되며 되돌릴 수 없습니다."
       )
     )
       return;
     const success = await Workspace.threads.delete(workspace.slug, thread.slug);
     if (!success) {
-      showToast("Thread could not be deleted!", "error", { clear: true });
+      showToast("대화를 삭제하지 못했습니다.", "error", { clear: true });
       return;
     }
     if (success) {
-      showToast("Thread deleted successfully!", "success", { clear: true });
+      showToast("대화를 삭제했습니다.", "success", { clear: true });
       onRemove(thread.id);
       // Redirect if deleting the active thread. Use router navigation so
       // ActiveGenerationGuard can intercept if a response is generating.
@@ -267,7 +265,7 @@ function OptionsMenu({
         className="w-full rounded-md flex items-center p-2 gap-x-2 hover:bg-slate-500/20 text-slate-300 light:text-theme-text-primary"
       >
         <PencilSimple size={18} />
-        <p className="text-sm">Rename</p>
+        <p className="text-sm">이름 바꾸기</p>
       </button>
       <button
         onClick={handleDelete}
@@ -275,7 +273,7 @@ function OptionsMenu({
         className="w-full rounded-md flex items-center p-2 gap-x-2 hover:bg-red-500/20 text-slate-300 light:text-theme-text-primary hover:text-red-100"
       >
         <Trash size={18} />
-        <p className="text-sm">Delete Thread</p>
+        <p className="text-sm">대화 삭제</p>
       </button>
     </div>
   );
