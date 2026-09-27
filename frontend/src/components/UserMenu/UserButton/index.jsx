@@ -66,9 +66,10 @@ export default function UserButton() {
         aria-label="사용자 메뉴"
         aria-haspopup="menu"
         aria-expanded={showMenu}
-        className="transition-all duration-300 w-[35px] h-[35px] rounded-full flex items-center bg-theme-action-menu-bg hover:bg-theme-action-menu-item-hover justify-center text-white p-2 hover:border-slate-100 hover:border-opacity-50 border-transparent border"
+        className="transition-all duration-300 w-[35px] h-[35px] rounded-full flex items-center bg-theme-action-menu-bg hover:bg-theme-action-menu-item-hover justify-center text-white p-1 hover:border-slate-100 hover:border-opacity-50 border-transparent border"
       >
-        <UserCircle size={22} weight="regular" aria-hidden="true" />
+        {/* 26px (was 22px): the outlined circle reads smaller than the bell. */}
+        <UserCircle size={26} weight="regular" aria-hidden="true" />
       </button>
 
       {showMenu && (

@@ -17,6 +17,7 @@ export default function PdfPageViewer({
   page,
   documentName,
   onUnavailable,
+  onShowText,
 }) {
   const [objectUrl, setObjectUrl] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -85,7 +86,8 @@ export default function PdfPageViewer({
         <span className="mx-2 text-zinc-600 light:text-slate-400">|</span>
         <button
           type="button"
-          onClick={() => onUnavailable?.()}
+          // Only switches the view; the PDF can be shown again afterwards.
+          onClick={() => (onShowText ? onShowText() : onUnavailable?.())}
           className="text-xs font-medium text-zinc-300 hover:text-white light:text-slate-600 light:hover:text-slate-900"
         >
           텍스트 원문으로 보기

@@ -9,6 +9,7 @@ import Footer from "../Footer";
 import SettingsButton from "../SettingsButton";
 import SchatBrand from "./SchatBrand";
 import GuideLink from "@/components/SchatGuide/GuideLink";
+import QuizLink from "@/components/SchatQuiz/QuizLink";
 import { Link } from "react-router-dom";
 import paths from "@/utils/paths";
 import { useTranslation } from "react-i18next";
@@ -64,6 +65,7 @@ export default function Sidebar() {
                   <div className="flex flex-col gap-y-[14px]">
                     <SearchBox user={user} showNewWsModal={showNewWsModal} />
                     <ActiveWorkspaces />
+                    <QuizLink />
                     <GuideLink />
                   </div>
                 </div>
@@ -164,6 +166,7 @@ export function SidebarMobileHeader() {
                     showNewWsModal={showNewWsModal}
                   />
                   <ActiveWorkspaces />
+                  <QuizLink />
                   <GuideLink />
                 </div>
               </div>

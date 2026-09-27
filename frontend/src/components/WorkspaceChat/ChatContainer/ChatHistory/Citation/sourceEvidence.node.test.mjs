@@ -54,6 +54,8 @@ async function renderCitations(sources) {
     inject: [reactInjectFile],
     nodePaths: [path.join(frontendRoot, "node_modules")],
     loader: { ".png": "dataurl", ".svg": "text" },
+    // The mobile PDF canvas (pdf.js) is lazy-loaded in the browser only.
+    external: ["pdfjs-dist", "pdfjs-dist/*"],
     plugins: [
       {
         name: "schat-alias",
@@ -113,6 +115,8 @@ async function renderEvidenceRow(source, options = {}) {
     inject: [reactInjectFile],
     nodePaths: [path.join(frontendRoot, "node_modules")],
     loader: { ".png": "dataurl", ".svg": "text" },
+    // The mobile PDF canvas (pdf.js) is lazy-loaded in the browser only.
+    external: ["pdfjs-dist", "pdfjs-dist/*"],
     plugins: [
       {
         name: "schat-alias",

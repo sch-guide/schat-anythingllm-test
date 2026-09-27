@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
+import Modal, { ModalBody, ModalHeader } from "@/components/lib/Modal";
 import SchatAdmin from "@/models/schatAdmin";
+import showToast from "@/utils/toast";
 import { Badge, Button, Card, InfoRow, Notice } from "../ui";
 
-// Read-only "저장공간 정리". This screen only reports and previews; there is no
-// delete request anywhere in it. Deletion needs a separate approval.
-export const DELETE_ENABLED = false;
+// "저장공간 정리": 선택 → 삭제 전 미리보기(서버 재검사) → 최종 확인 → 실제 삭제.
+// The server re-scans and re-validates before deleting and checks that the
+// current documents, pages, vectors, checklists and originals are unchanged
+// afterwards. Only items the server marks 삭제 가능 can be selected.
 
 export const STATUS_LABELS = {
   in_use: { text: "사용 중", tone: "ok" },
@@ -46,12 +49,29 @@ export default function StorageSection() {
   const [selected, setSelected] = useState([]);
   const [preview, setPreview] = useState(null);
   const [previewing, setPreviewing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [result, setResult] = useState(null);
 
   async function load(refresh = false) {
     setReport(null);
     setSelected([]);
     setPreview(null);
     setReport((await SchatAdmin.storageReport({ refresh })) || { error: true });
+  }
+
+  async function runDelete() {
+    setDeleting(true);
+    const outcome = await SchatAdmin.storageDelete(
+      selected,
+      preview?.previewToken
+    );
+    setDeleting(false);
+    setConfirming(false);
+    setResult(outcome);
+    if (outcome?.ok) showToast("예전 데이터가 삭제되었습니다.", "success");
+    else showToast(outcome?.message || "삭제하지 못했습니다.", "error");
+    await load(false);
   }
   useEffect(() => {
     load();
@@ -118,6 +138,7 @@ export default function StorageSection() {
           </div>
         </Card>
       </div>
+      {result && <DeleteResult result={result} />}
       <Notice>
         이 화면은 자동으로 지우지 않습니다. 현재 사용 중인 문서·검색
         데이터·체크리스트·원본 PDF는 선택할 수 없고, 이미지 설명 저장본(
@@ -157,6 +178,7 @@ export default function StorageSection() {
                     checked={selected.includes(group.key)}
                     onToggle={(checked) => {
                       setPreview(null);
+                      setResult(null);
                       setSelected((prev) =>
                         checked
                           ? [...prev, group.key]
@@ -183,8 +205,106 @@ export default function StorageSection() {
           </div>
         </Card>
       )}
-      {preview && <Preview preview={preview} rows={rows} />}
+      {preview && (
+        <Preview
+          preview={preview}
+          rows={rows}
+          onDelete={() => setConfirming(true)}
+        />
+      )}
+      {confirming && preview?.ok && (
+        <ConfirmDelete
+          preview={preview}
+          rows={rows}
+          deleting={deleting}
+          onCancel={() => !deleting && setConfirming(false)}
+          onConfirm={runDelete}
+        />
+      )}
     </div>
+  );
+}
+
+function ConfirmDelete({ preview, rows, deleting, onCancel, onConfirm }) {
+  const { remove } = preview;
+  const labelOf = (key) => rows.find((r) => r.key === key)?.label || "항목";
+  return (
+    <Modal isOpen onClose={onCancel} size="md">
+      <ModalHeader title="예전 데이터를 삭제하시겠습니까?" onClose={onCancel} />
+      <ModalBody>
+        <div
+          className="flex flex-col gap-y-3 text-sm"
+          data-testid="storage-delete-confirm"
+        >
+          <ul className="text-theme-text-primary font-medium">
+            {remove.items.map((item) => (
+              <li key={item.key}>{labelOf(item.key)}</li>
+            ))}
+          </ul>
+          <div className="text-theme-text-primary">
+            <p className="font-semibold">삭제 예정</p>
+            <p>- 페이지 기록 {n(remove.pageRecords)}개</p>
+            <p>- 이미지 파일 {n(remove.imageFiles)}개</p>
+            {remove.originals > 0 && (
+              <p>- 예전 원본 PDF {n(remove.originals)}개</p>
+            )}
+            {remove.auxiliaryFiles > 0 && (
+              <p>- 예전 검색 준비 파일 {n(remove.auxiliaryFiles)}개</p>
+            )}
+            <p>- 예상 확보 용량 {formatBytes(remove.bytes)}</p>
+          </div>
+          <p className="text-theme-text-secondary">
+            현재 사용 중인 SCHAT 문서와 검색 데이터에는 영향이 없는 것으로
+            확인되었습니다. 삭제 직전과 직후에 서버가 한 번 더 확인합니다.
+          </p>
+          <Notice tone="warning">이 작업은 되돌릴 수 없습니다.</Notice>
+          {deleting && (
+            <p className="text-theme-text-secondary animate-pulse">
+              삭제하고 현재 자료를 다시 확인하는 중입니다. 1~2분 정도 걸릴 수
+              있습니다.
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onCancel} disabled={deleting}>
+              취소
+            </Button>
+            <Button variant="danger" onClick={onConfirm} disabled={deleting}>
+              {deleting ? "삭제 중..." : "삭제"}
+            </Button>
+          </div>
+        </div>
+      </ModalBody>
+    </Modal>
+  );
+}
+
+function DeleteResult({ result }) {
+  if (!result.ok)
+    return (
+      <Notice tone="warning">
+        <p className="font-medium">
+          {result.message || "삭제하지 못했습니다."}
+        </p>
+        {result.changed?.length > 0 && (
+          <p>달라진 항목: {result.changed.map((c) => c.field).join(", ")}</p>
+        )}
+      </Notice>
+    );
+  return (
+    <Notice>
+      <p className="font-medium" data-testid="storage-delete-done">
+        예전 데이터가 삭제되었습니다.
+      </p>
+      <p>
+        삭제한 파일 {n(result.removedFiles)}개 · 확보 용량{" "}
+        {formatBytes(result.freedBytes)}
+      </p>
+      <p>
+        현재 문서 {n(result.after?.documents)}개 · {n(result.after?.pages)}쪽 ·
+        본문 검색 데이터 {n(result.after?.bodyVectors)}개 · 이미지 설명 검색
+        데이터 {n(result.after?.imageVectors)}개가 그대로인 것을 확인했습니다.
+      </p>
+    </Notice>
   );
 }
 
@@ -195,7 +315,9 @@ function StorageRow({ group, checked, onToggle }) {
     group.usage.workspacePages > 0
       ? `작업 공간 ${n(group.usage.workspacePages)}쪽 사용`
       : "작업 공간 미사용",
-    group.usage.vectorPages > 0 || group.usage.chromaReferenced
+    group.usage.vectorPages > 0 ||
+    group.usage.chromaReferenced ||
+    group.usage.imageDescriptionVectors > 0
       ? "검색 데이터 연결됨"
       : "검색 데이터 없음",
     group.usage.checklists > 0
@@ -266,7 +388,7 @@ function StorageRow({ group, checked, onToggle }) {
   );
 }
 
-function Preview({ preview, rows }) {
+function Preview({ preview, rows, onDelete }) {
   if (preview.error)
     return <Notice tone="warning">미리보기를 만들지 못했습니다.</Notice>;
   const labelOf = (key) => rows.find((r) => r.key === key)?.label || "항목";
@@ -274,7 +396,7 @@ function Preview({ preview, rows }) {
   return (
     <Card
       title="삭제 전 미리보기"
-      description="선택한 항목을 방금 다시 확인한 결과입니다. 실제로 지우지는 않았습니다."
+      description="선택한 항목을 방금 현재 자료와 다시 대조한 결과입니다. 아직 지우지 않았습니다."
       tone={preview.ok ? "default" : "danger"}
     >
       {preview.blocked?.length > 0 && (
@@ -299,6 +421,9 @@ function Preview({ preview, rows }) {
           <InfoRow label="이미지 폴더">{n(remove?.imageFolders)}개</InfoRow>
           <InfoRow label="이미지 파일">{n(remove?.imageFiles)}개</InfoRow>
           <InfoRow label="예전 원본 PDF">{n(remove?.originals)}개</InfoRow>
+          <InfoRow label="예전 검색 준비 파일">
+            {n(remove?.auxiliaryFiles)}개
+          </InfoRow>
           <InfoRow label="예상 확보 용량">{formatBytes(remove?.bytes)}</InfoRow>
         </div>
         <div>
@@ -332,13 +457,10 @@ function Preview({ preview, rows }) {
             확인되었습니다. 이 작업은 되돌릴 수 없습니다.
           </p>
           <div className="flex gap-2 mt-2">
-            <Button variant="danger" disabled={!DELETE_ENABLED}>
+            <Button variant="danger" onClick={onDelete}>
               삭제 진행
             </Button>
           </div>
-          <p className="mt-2">
-            실제 삭제 기능은 아직 승인 전이라 실행되지 않습니다.
-          </p>
         </Notice>
       )}
     </Card>

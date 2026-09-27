@@ -510,3 +510,14 @@ body {
 .schat-user-table tbody tr:hover > td {
   background: var(--theme-sidebar-item-hover);
 }
+
+/* 퀴즈 통계: low accuracy badge. */
+.schat-admin-badge--danger {
+  color: #9b1c1c;
+  background: #fde4e4;
+}
+
+[data-theme="dark"] .schat-admin-badge--danger {
+  color: #f5a3a3;
+  background: rgb(220 70 70 / 0.16);
+}

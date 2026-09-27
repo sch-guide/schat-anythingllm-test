@@ -587,6 +587,20 @@ function schatAccountEndpoints(app) {
     })
   );
 
+  // Admin only (adminOnly checks the session role on the server); staff get
+  // 401/403 even when they call the URL directly with any report id.
+  app.delete(
+    "/schat-admin/reports/:id",
+    adminOnly,
+    handle(async (request, response) => {
+      const result = await service.deleteReport(
+        response.locals.user.id,
+        request.params.id
+      );
+      response.status(200).json({ success: true, ...result });
+    })
+  );
+
   app.get(
     "/schat-admin/reports/stats",
     adminOnly,
@@ -621,6 +635,19 @@ function schatAccountEndpoints(app) {
         id: request.params.id,
       });
       response.status(200).json({ success: true, faq });
+    })
+  );
+
+  // Admin only; staff get 401 even when calling the URL directly.
+  app.delete(
+    "/schat-admin/faq/:id",
+    adminOnly,
+    handle(async (request, response) => {
+      const result = await service.deleteFaq(
+        response.locals.user.id,
+        request.params.id
+      );
+      response.status(200).json({ success: true, ...result });
     })
   );
 }

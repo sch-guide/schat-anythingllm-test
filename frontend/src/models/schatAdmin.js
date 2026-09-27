@@ -28,7 +28,8 @@ const SchatAdmin = {
       })
       .catch(() => null);
   },
-  // 삭제 전 미리보기 only - there is no delete call.
+  // 삭제 전 미리보기. A successful preview returns the previewToken that the
+  // delete call below needs.
   storagePreview: async (keys = []) => {
     return await fetch(`${API_BASE}/schat-admin/storage-cleanup/preview`, {
       method: "POST",
@@ -37,6 +38,16 @@ const SchatAdmin = {
     })
       .then((res) => res.json())
       .catch(() => null);
+  },
+  // 실제 삭제: the server re-validates everything before and after deleting.
+  storageDelete: async (keys = [], previewToken) => {
+    return await fetch(`${API_BASE}/schat-admin/storage-cleanup/delete`, {
+      method: "POST",
+      headers: baseHeaders(),
+      body: JSON.stringify({ keys, previewToken, confirm: true }),
+    })
+      .then((res) => res.json())
+      .catch(() => ({ ok: false, message: "서버에 연결하지 못했습니다." }));
   },
   connectionTest: async (target) => {
     return await fetch(`${API_BASE}/schat-admin/connection-test`, {

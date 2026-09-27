@@ -83,6 +83,10 @@ model users {
   issue_reports                schat_issue_reports[]         @relation("reporter")
   handled_reports              schat_issue_reports[]         @relation("handler")
   notifications                schat_user_notifications[]
+  // SCHAT guideline quiz: the user's own attempts, answers and wrong-answer notes
+  quiz_attempts                schat_quiz_attempts[]
+  quiz_answers                 schat_quiz_answers[]
+  quiz_wrong_notes             schat_quiz_wrong_notes[]
   workspace_chats              workspace_chats[]
   workspace_users              workspace_users[]
   embed_configs                embed_configs[]
@@ -571,4 +575,129 @@ model schat_faq_items {
   createdAt        DateTime             @default(now())
   lastUpdatedAt    DateTime             @default(now())
   source_report    schat_issue_reports? @relation(fields: [source_report_id], references: [id])
+}
+
+// ---- SCHAT 지침서 퀴즈 (new tables only) -----------------------------------
+// Questions are written by the admin-only generation service and reviewed
+// before staff can see them. Staff attempts only read these rows.
+
+model schat_quiz_sets {
+  id                   Int                    @id @default(autoincrement())
+  title                String
+  document_id          String
+  source_document_name String
+  document_version     String?
+  topic                String
+  difficulty           String
+  question_type        String
+  status               String                 @default("draft") // draft | approved | inactive
+  created_by           Int?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @default(now())
+  questions            schat_quiz_questions[]
+
+  @@index([status])
+}
+
+model schat_quiz_questions {
+  id                   Int                      @id @default(autoincrement())
+  quiz_set_id          Int?
+  document_id          String
+  source_document_name String
+  document_version     String?
+  workspace_slug       String?
+  source_page          Int
+  source_section       String?
+  source_excerpt       String?
+  topic                String
+  difficulty           String // beginner | intermediate | advanced
+  question_type        String // multiple_choice | ox
+  question             String
+  // multiple_choice: JSON [{"id":"c1","text":"..."}, ...] (4 items)
+  choices              String?
+  correct_choice_id    String? // multiple_choice only, e.g. "c3"
+  correct_ox           String? // ox only: "O" | "X"
+  explanation          String
+  review_note          String? // automatic check warnings shown to the admin
+  status               String                   @default("draft") // draft | approved | inactive
+  created_by           Int?
+  updated_by           Int?
+  generation_id        Int?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @default(now())
+  quiz_set             schat_quiz_sets?         @relation(fields: [quiz_set_id], references: [id], onDelete: SetNull)
+  answers              schat_quiz_answers[]
+  wrong_notes          schat_quiz_wrong_notes[]
+
+  @@index([status, document_id, topic])
+  @@index([quiz_set_id])
+}
+
+model schat_quiz_attempts {
+  id              Int                  @id @default(autoincrement())
+  user_id         Int
+  department_name String? // snapshot for aggregate statistics
+  mode            String               @default("normal") // normal | wrong_review
+  filters         String? // JSON of the staff filter selection
+  question_ids    String // JSON array, in the order shown
+  choice_orders   String? // JSON {questionId: [choiceId,...]} shuffled per attempt
+  total           Int
+  correct_count   Int                  @default(0)
+  answered_count  Int                  @default(0)
+  score           Int?
+  status          String               @default("in_progress") // in_progress | completed
+  startedAt       DateTime             @default(now())
+  completedAt     DateTime?
+  user            users                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  answers         schat_quiz_answers[]
+
+  @@index([user_id, startedAt])
+}
+
+model schat_quiz_answers {
+  id                 Int                  @id @default(autoincrement())
+  attempt_id         Int
+  question_id        Int
+  user_id            Int
+  selected_choice_id String?
+  selected_ox        String?
+  is_correct         Boolean
+  answeredAt         DateTime             @default(now())
+  attempt            schat_quiz_attempts  @relation(fields: [attempt_id], references: [id], onDelete: Cascade)
+  question           schat_quiz_questions @relation(fields: [question_id], references: [id], onDelete: Cascade)
+  user               users                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([attempt_id, question_id])
+  @@index([question_id])
+  @@index([user_id, answeredAt])
+}
+
+model schat_quiz_wrong_notes {
+  id                 Int                  @id @default(autoincrement())
+  user_id            Int
+  question_id        Int
+  selected_choice_id String?
+  selected_ox        String?
+  wrong_count        Int                  @default(1)
+  lastWrongAt        DateTime             @default(now())
+  user               users                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  question           schat_quiz_questions @relation(fields: [question_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, question_id])
+}
+
+// One row per admin "AI로 문제 만들기 / 다시 생성" request. No prompt, source
+// text or provider response is stored.
+model schat_quiz_generation_logs {
+  id             Int      @id @default(autoincrement())
+  admin_id       Int?
+  document_id    String?
+  topic          String?
+  requested      Int
+  created_count  Int      @default(0)
+  status         String // ok | failed | no_evidence
+  error_code     String?
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
 }

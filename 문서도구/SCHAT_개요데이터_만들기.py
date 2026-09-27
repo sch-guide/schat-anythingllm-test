@@ -59,17 +59,85 @@ def _first_summary(markdown: str) -> str:
     return "자세한 내용은 변경 이력에서 확인할 수 있습니다."
 
 
+INLINE_CODE = re.compile(r"`([^`]+)`")
+INLINE_BOLD = re.compile(r"\*\*([^*]+)\*\*")
+INLINE_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+TABLE_DIVIDER = re.compile(r"^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$")
+
+
+def _inline(text: str) -> str:
+    """Escapes first, then adds only code, bold and http(s) links."""
+    placeholders: list[str] = []
+
+    def keep(fragment: str) -> str:
+        placeholders.append(fragment)
+        return f"\u0000{len(placeholders) - 1}\u0000"
+
+    def code(match: re.Match) -> str:
+        return keep(f"<code>{html.escape(match.group(1))}</code>")
+
+    def link(match: re.Match) -> str:
+        label, target = match.group(1), match.group(2)
+        if target.startswith(("http://", "https://")):
+            return keep(
+                f'<a href="{html.escape(target, quote=True)}" rel="noreferrer">{html.escape(label)}</a>'
+            )
+        # Links to other files in the repository are shown as their label.
+        return keep(html.escape(label))
+
+    value = INLINE_CODE.sub(code, text)
+    value = INLINE_LINK.sub(link, value)
+    value = html.escape(value)
+    value = INLINE_BOLD.sub(r"<strong>\1</strong>", value)
+    return re.sub("\u0000(\\d+)\u0000", lambda m: placeholders[int(m.group(1))], value)
+
+
+def _table_cells(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
 def markdown_to_safe_html(markdown: str) -> str:
     result: list[str] = []
     list_kind: str | None = None
     in_code = False
     code_lines: list[str] = []
+    table: list[list[str]] = []
+    quote: list[str] = []
+    fence_indent = 0
 
     def close_list() -> None:
         nonlocal list_kind
         if list_kind:
             result.append(f"</{list_kind}>")
             list_kind = None
+
+    def close_table() -> None:
+        if not table:
+            return
+        head, rows = table[0], table[1:]
+        result.append(
+            '<div class="table-wrap"><table><thead><tr>'
+            + "".join(f"<th>{_inline(c)}</th>" for c in head)
+            + "</tr></thead><tbody>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_inline(c)}</td>" for c in row) + "</tr>"
+                for row in rows
+            )
+            + "</tbody></table></div>"
+        )
+        table.clear()
+
+    def close_quote() -> None:
+        if quote:
+            result.append(
+                "<blockquote>" + "".join(f"<p>{_inline(q)}</p>" for q in quote) + "</blockquote>"
+            )
+            quote.clear()
+
+    def close_blocks() -> None:
+        close_list()
+        close_table()
+        close_quote()
 
     for raw in _without_frontmatter(markdown).splitlines():
         line = raw.strip()
@@ -79,20 +147,40 @@ def markdown_to_safe_html(markdown: str) -> str:
                 code_lines = []
                 in_code = False
             else:
-                close_list()
+                close_blocks()
                 in_code = True
+                # A fence inside a list is indented; drop only that indent.
+                fence_indent = len(raw) - len(raw.lstrip(" "))
             continue
         if in_code:
-            code_lines.append(raw)
+            lead = len(raw) - len(raw.lstrip(" "))
+            code_lines.append(raw[min(lead, fence_indent):])
             continue
         if not line:
+            close_blocks()
+            continue
+        if line.startswith("|"):
             close_list()
+            close_quote()
+            if TABLE_DIVIDER.match(line):
+                continue
+            table.append(_table_cells(line))
+            continue
+        close_table()
+        if line.startswith(">"):
+            close_list()
+            quote.append(line.lstrip(">").strip())
+            continue
+        close_quote()
+        if re.match(r"^-{3,}$", line):
+            close_list()
+            result.append("<hr>")
             continue
         heading = re.match(r"^(#{1,4})\s+(.+)$", line)
         if heading:
             close_list()
             level = min(len(heading.group(1)) + 1, 5)
-            result.append(f"<h{level}>{html.escape(heading.group(2))}</h{level}>")
+            result.append(f"<h{level}>{_inline(heading.group(2))}</h{level}>")
             continue
         bullet = re.match(r"^[-*]\s+(.+)$", line)
         number = re.match(r"^\d+[.)]\s+(.+)$", line)
@@ -103,14 +191,35 @@ def markdown_to_safe_html(markdown: str) -> str:
                 list_kind = desired
                 result.append(f"<{desired}>")
             value = (bullet or number).group(1)
-            result.append(f"<li>{html.escape(value)}</li>")
+            result.append(f"<li>{_inline(value)}</li>")
             continue
         close_list()
-        result.append(f"<p>{html.escape(line)}</p>")
-    close_list()
+        result.append(f"<p>{_inline(line)}</p>")
+    close_blocks()
     if in_code:
         result.append(f"<pre><code>{html.escape(chr(10).join(code_lines))}</code></pre>")
     return "\n".join(result)
+
+
+def _guides(repository_root: Path) -> list[dict[str, str]]:
+    """Other guides in 05_인수인계 (e.g. 서버 배포 및 업데이트 안내)."""
+    folder = repository_root / "05_인수인계"
+    guides = []
+    for path in sorted(folder.glob("*.md")) if folder.is_dir() else []:
+        if path.name == "SCHAT_인수인계.md":
+            continue
+        markdown = _read(path)
+        if not markdown:
+            continue
+        guides.append(
+            {
+                "title": _markdown_title(markdown, path.stem.replace("_", " ")),
+                "summary": _first_summary(markdown),
+                "html": markdown_to_safe_html(markdown),
+                "document": f"05_인수인계/{path.name}",
+            }
+        )
+    return guides
 
 
 def _compose_services(compose: str) -> list[str]:
@@ -320,6 +429,7 @@ def collect_overview(repository_root: Path) -> dict:
             "html": markdown_to_safe_html(handover_markdown) if handover_markdown else "<p>인수인계 문서를 확인해야 합니다.</p>",
             "document": "05_인수인계/SCHAT_인수인계.md",
         },
+        "guides": _guides(root),
     }
     serialized = json.dumps(data, ensure_ascii=False)
     if SECRET_WORDS.search(serialized):
@@ -333,8 +443,20 @@ def collect_overview(repository_root: Path) -> dict:
 def write_overview_data(repository_root: Path, output_path: Path) -> dict:
     data = collect_overview(repository_root)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    output_path.write_text(json.dumps(public_data(data), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return data
+
+
+def public_data(data: dict) -> dict:
+    """Saved/embedded data keeps guide titles and locations only; the guide
+    text (with server commands and paths) is shown on the page itself."""
+    return {
+        **data,
+        "guides": [
+            {key: guide[key] for key in ("title", "summary", "document")}
+            for guide in data.get("guides", [])
+        ],
+    }
 
 
 def main() -> None:

@@ -16,6 +16,7 @@ test("the wrench opens exactly the SCHAT admin sections in order", () => {
       "답변 설정",
       "사용자 관리",
       "문제 신고",
+      "퀴즈 관리",
       "시스템 연결",
       "시스템 상태",
       "저장공간 정리",
@@ -163,8 +164,9 @@ test("document folder shows a Korean name without changing its key", async () =>
 });
 
 test("document screen hides raw file counts and shows documents and pages", async () => {
-  const { workspaceDocumentSummary } =
-    await import("../../components/Modals/ManageWorkspace/Documents/WorkspaceDirectory/workspaceDocumentPresentation.js");
+  const { workspaceDocumentSummary } = await import(
+    "../../components/Modals/ManageWorkspace/Documents/WorkspaceDirectory/workspaceDocumentPresentation.js"
+  );
   assert.deepEqual(
     workspaceDocumentSummary([
       { kind: "pdf", entries: new Array(461).fill({}) },
@@ -183,14 +185,24 @@ test("document screen hides raw file counts and shows documents and pages", asyn
   assert.match(workspaceDir, /등록 문서 \{documentSummary\.documents\}개 · 총/);
 });
 
-test("storage cleanup screen only previews and never deletes", async () => {
+test("storage cleanup deletes only after preview and a final confirmation", async () => {
   const storage = src("./sections/Storage.jsx");
-  assert.match(storage, /export const DELETE_ENABLED = false/);
-  assert.match(storage, /disabled=\{!DELETE_ENABLED\}/);
+  assert.doesNotMatch(storage, /DELETE_ENABLED/);
+  assert.doesNotMatch(storage, /아직 승인 전이라/);
   assert.match(storage, /disabled=\{!selectable\}/);
+  // 삭제 진행 only opens the final confirmation; the dialog sends the delete
+  assert.match(storage, /onClick=\{onDelete\}/);
+  assert.match(storage, /confirming && preview\?\.ok &&/);
+  assert.match(storage, /예전 데이터를 삭제하시겠습니까\?/);
+  assert.match(storage, /이 작업은 되돌릴 수 없습니다\./);
+  assert.match(
+    storage,
+    /SchatAdmin\.storageDelete\(\s*selected,\s*preview\?\.previewToken\s*\)/
+  );
+  assert.match(storage, /예전 데이터가 삭제되었습니다\./);
   const model = src("../../models/schatAdmin.js");
-  assert.doesNotMatch(model, /method: "DELETE"/);
-  assert.doesNotMatch(model, /storage-cleanup\/(delete|run|execute)/);
+  assert.match(model, /storage-cleanup\/delete/);
+  assert.match(model, /previewToken, confirm: true/);
 });
 
 test("staff log in with department, employee number, name and password", () => {
@@ -252,7 +264,11 @@ test("이용 가이드 is a staff page under 새 대화 using the same FAQ data"
   assert.match(page, /<ReportModal[\s\S]*relatedFaq=\{reportFaq\}/);
   const sidebar = src("../../components/Sidebar/index.jsx");
   assert.equal(
-    (sidebar.match(/<ActiveWorkspaces \/>\s*<GuideLink \/>/g) || []).length,
+    (
+      sidebar.match(
+        /<ActiveWorkspaces \/>\s*<QuizLink \/>\s*<GuideLink \/>/g
+      ) || []
+    ).length,
     2
   );
   const main = src("../../main.jsx");

@@ -104,6 +104,7 @@ export default {
     return `${API_BASE}/docs`;
   },
   guide: () => "/guide",
+  quiz: () => "/quiz",
   settings: {
     schatAdmin: (section = "brand") => `/settings/schat/${section}`,
     users: () => {

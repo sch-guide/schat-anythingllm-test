@@ -64,6 +64,13 @@ const router = createBrowserRouter([
         },
       },
       {
+        path: "/quiz",
+        lazy: async () => {
+          const { default: QuizPage } = await import("@/pages/Quiz");
+          return { element: <PrivateRoute Component={QuizPage} /> };
+        },
+      },
+      {
         path: "/workspace/:slug/checklist/:checklistId",
         lazy: async () => {
           const { default: ChecklistPopup } = await import(
