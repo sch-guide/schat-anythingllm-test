@@ -105,6 +105,16 @@ async function validateMultiUserRequest(request, response, next) {
     return;
   }
 
+  // SCHAT: an account without a password (new, or reset by an admin) has no
+  // usable session; the employee must go through 처음 로그인 again.
+  if (user.must_change_password) {
+    response.status(401).json({
+      error: "password_setup_required",
+      message: "처음 로그인에서 비밀번호를 먼저 정해 주세요.",
+    });
+    return;
+  }
+
   response.locals.user = user;
   UserMetaCache.setFromRequest(request, user.id);
   next();

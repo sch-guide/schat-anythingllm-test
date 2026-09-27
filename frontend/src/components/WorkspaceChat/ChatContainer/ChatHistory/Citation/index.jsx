@@ -1,5 +1,4 @@
-import { Fragment, useState, useEffect } from "react";
-import { decode as HTMLDecode } from "he";
+import { Fragment, useState, useEffect, useId, useCallback } from "react";
 import truncate from "truncate";
 import Modal, { ModalHeader, ModalBody } from "@/components/lib/Modal";
 import {
@@ -17,7 +16,149 @@ import GoogleCalendarLogo from "@/pages/Admin/Agents/GoogleCalendarSkillPanel/go
 import OutlookLogo from "@/pages/Admin/Agents/OutlookSkillPanel/outlook.png";
 import { toPercentString } from "@/utils/numbers";
 import { useTranslation } from "react-i18next";
-import { useSourcesSidebar } from "../../ChatSidebar";
+import SourceExcerpt from "../../SourcesSidebar/SourceExcerpt";
+import RelatedImages from "../RelatedImages";
+import PdfPageViewer from "./PdfPageViewer";
+import { filterDirectCitationSources } from "@/utils/citationFilter";
+
+const LONG_EXCERPT_LENGTH = 420;
+
+function sourceDocumentName(source = {}) {
+  const publicName = source.documentName || source.document_name;
+  if (typeof publicName !== "string" || !publicName.trim()) return "";
+  return publicName
+    .replace(/^file:\/\//i, "")
+    .split(/[\\/]/)
+    .filter(Boolean)
+    .at(-1);
+}
+
+function sourceSummary(source = {}) {
+  const documentName = sourceDocumentName(source);
+  const normalizedPage =
+    Number.isInteger(source.page) && source.page > 0
+      ? source.page
+      : typeof source.page === "string" && /^\d+$/.test(source.page.trim())
+        ? Number(source.page)
+        : null;
+  const page = normalizedPage > 0 ? `p.${normalizedPage}` : null;
+  const parts = [documentName, page].filter(Boolean);
+
+  if (parts.length > 0) return parts.join(" · ");
+  if (typeof source.title !== "string") return "";
+  return source.title
+    .trim()
+    .replace(/^file:\/\//i, "")
+    .split(/[\\/]/)
+    .filter(Boolean)
+    .at(-1);
+}
+
+export function SourceEvidenceRow({
+  source,
+  index,
+  workspaceSlug,
+  initiallyOpen = false,
+  initiallyExpanded = false,
+}) {
+  const [isOpen, setIsOpen] = useState(initiallyOpen);
+  const [isExpanded, setIsExpanded] = useState(initiallyExpanded);
+  const [pdfUnavailable, setPdfUnavailable] = useState(!source?.pdfRef);
+  const contentId = useId();
+  const excerpt =
+    typeof source?.excerpt === "string" ? source.excerpt.trim() : "";
+  const isLong = excerpt.length > LONG_EXCERPT_LENGTH;
+  const summary = sourceSummary(source);
+  const paragraphs = excerpt
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  const showPdf = Boolean(source?.pdfRef && workspaceSlug && !pdfUnavailable);
+  const markPdfUnavailable = useCallback(() => setPdfUnavailable(true), []);
+
+  useEffect(() => {
+    setPdfUnavailable(!source?.pdfRef);
+  }, [source?.pdfRef]);
+
+  return (
+    <article className="border-t border-zinc-800 py-3 first:border-t-0 light:border-slate-200">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="min-w-0 break-words text-sm font-medium leading-[1.6] text-zinc-200 light:text-slate-800">
+          <span className="text-zinc-400 light:text-slate-500">
+            출처 {index + 1}
+          </span>
+          {summary && ` · ${summary}`}
+        </p>
+        {(excerpt || source?.pdfRef) && (
+          <button
+            type="button"
+            aria-expanded={isOpen}
+            aria-controls={contentId}
+            onClick={() => setIsOpen((open) => !open)}
+            className="w-fit shrink-0 text-left text-xs font-medium text-blue-300 hover:text-blue-200 light:text-blue-700 light:hover:text-blue-800"
+          >
+            {isOpen ? "근거 원문 접기 ▲" : "근거 원문 보기 ▼"}
+          </button>
+        )}
+      </div>
+
+      {isOpen && (excerpt || source?.pdfRef) && (
+        <section
+          id={contentId}
+          className="mt-3 min-w-0 rounded-lg bg-zinc-900/60 px-4 py-4 light:bg-slate-100 sm:px-7"
+        >
+          {showPdf ? (
+            <PdfPageViewer
+              workspaceSlug={workspaceSlug}
+              pdfRef={source.pdfRef}
+              page={source.page}
+              documentName={sourceDocumentName(source)}
+              onUnavailable={markPdfUnavailable}
+            />
+          ) : (
+            <div className="mx-auto w-full max-w-[720px]">
+              <p className="mb-3 text-xs font-medium text-zinc-400 light:text-slate-500">
+                근거 원문
+              </p>
+              <div className="relative">
+                <div
+                  className={`space-y-3 break-words text-sm leading-[1.7] text-zinc-100 light:text-slate-900 ${
+                    isLong && !isExpanded
+                      ? "max-h-[9.5rem] overflow-hidden"
+                      : "max-h-[50vh] overflow-y-auto pr-1"
+                  }`}
+                >
+                  {paragraphs.map((paragraph, paragraphIndex) => (
+                    <p key={paragraphIndex} className="whitespace-pre-line">
+                      {paragraph}
+                    </p>
+                  ))}
+                </div>
+                {isLong && !isExpanded && (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-zinc-900 to-transparent light:from-slate-100" />
+                )}
+              </div>
+              {isLong && (
+                <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  onClick={() => setIsExpanded((expanded) => !expanded)}
+                  className="mt-2 text-xs font-medium text-blue-300 hover:text-blue-200 light:text-blue-700 light:hover:text-blue-800"
+                >
+                  {isExpanded ? "접기" : "더보기"}
+                </button>
+              )}
+              <RelatedImages
+                images={source.relatedImages || []}
+                workspaceSlug={workspaceSlug}
+              />
+            </div>
+          )}
+        </section>
+      )}
+    </article>
+  );
+}
 
 const CIRCLE_ICONS = {
   file: FileText,
@@ -111,7 +252,8 @@ export function SourceTypeCircle({
 export function combineLikeSources(sources) {
   const combined = {};
   sources.forEach((source) => {
-    const { id, title, text, chunkSource = "", score = null } = source;
+    const { id, title, chunkSource = "", score = null } = source;
+    const text = source.excerpt || source.text || "";
     if (combined.hasOwnProperty(title)) {
       combined[title].chunks.push({ id, text, chunkSource, score });
       combined[title].references += 1;
@@ -126,67 +268,113 @@ export function combineLikeSources(sources) {
   return Object.values(combined);
 }
 
-export default function Citations({ sources = [] }) {
-  const {
-    sidebarOpen,
-    openSidebar,
-    closeSidebar,
-    sources: currentSources,
-  } = useSourcesSidebar();
-  const { t } = useTranslation();
-  if (sources.length === 0) return null;
+function normalizedSourcePage(source = {}) {
+  if (Number.isInteger(source.page) && source.page > 0) return source.page;
+  if (typeof source.page === "string" && /^\d+$/.test(source.page.trim()))
+    return Number(source.page);
+  return null;
+}
 
-  const combined = combineLikeSources(sources);
-  const visibleSources = combined.slice(0, 3);
-  const remainingCount = Math.max(0, combined.length - 3);
+function sourceIdentity(source = {}) {
+  if (typeof source.pdfRef === "string" && source.pdfRef.trim())
+    return `pdf:${source.pdfRef.trim()}`;
+  const documentName = sourceDocumentName(source).trim().toLocaleLowerCase();
+  return documentName ? `name:${documentName}` : null;
+}
 
-  function handleOpenSourcesSidebar() {
-    if (sidebarOpen && sources === currentSources) {
-      closeSidebar();
-    } else {
-      openSidebar(sources);
+function sourceExcerpt(source = {}) {
+  if (typeof source.excerpt === "string") return source.excerpt.trim();
+  if (typeof source.text === "string") return source.text.trim();
+  return "";
+}
+
+function mergeDirectImages(...groups) {
+  const seen = new Set();
+  return groups
+    .flat()
+    .filter((image) => {
+      if (!image || typeof image !== "object") return false;
+      const key = image.imageKey || image.image_key || image.hash;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 3);
+}
+
+/**
+ * Collapses only the employee-facing citation list. Retrieval evidence and
+ * the sources sent to Gemini remain untouched.
+ */
+export function dedupeCitationSources(sources = []) {
+  const result = [];
+  const positions = new Map();
+
+  sources.forEach((source, index) => {
+    const page = normalizedSourcePage(source);
+    const identity = sourceIdentity(source);
+    const key = identity && page ? `${identity}|page:${page}` : `row:${index}`;
+
+    if (!positions.has(key)) {
+      positions.set(key, result.length);
+      result.push(source);
+      return;
     }
-  }
+
+    const position = positions.get(key);
+    const current = result[position];
+    const representative =
+      sourceExcerpt(source).length > sourceExcerpt(current).length
+        ? source
+        : current;
+    result[position] = {
+      ...representative,
+      pdfRef: current.pdfRef || source.pdfRef,
+      documentName: current.documentName || source.documentName,
+      document_name: current.document_name || source.document_name,
+      page: current.page ?? source.page,
+      relatedImages: mergeDirectImages(
+        current.relatedImages || [],
+        source.relatedImages || []
+      ),
+    };
+  });
+
+  return result;
+}
+
+export default function Citations({
+  sources = [],
+  workspaceSlug,
+  question = "",
+  answer = "",
+  aliases = [],
+}) {
+  const directlyRelevantSources = filterDirectCitationSources({
+    question,
+    answer,
+    sources,
+    aliases,
+  });
+  const visibleSources = dedupeCitationSources(directlyRelevantSources);
+  if (visibleSources.length === 0) return null;
 
   return (
-    <button
-      onClick={handleOpenSourcesSidebar}
-      className="w-fit flex items-center gap-[5px] px-[10px] py-[4px] rounded-full hover:bg-white/5 light:hover:bg-black/5 transition-colors"
-      type="button"
+    <section
+      className="mt-2 w-full max-w-[920px]"
+      aria-label="출처 및 근거 원문"
     >
-      <span className="text-xs text-white light:text-slate-800">
-        {t("chat_window.sources")}
-      </span>
-      <div
-        className="relative h-[22px]"
-        style={{ width: `${visibleSources.length * 17 + 5}px` }}
-      >
-        {visibleSources.map((source, idx) => {
-          const info = parseChunkSource(source);
-          const customImage = CIRCLE_IMAGES[info.icon];
-          return (
-            <div
-              key={source.title || idx}
-              className={`absolute top-0 size-[22px] rounded-full ${customImage ? "border-none" : "border-2 border-zinc-800 light:border-white"}`}
-              style={{ left: `${idx * 17}px`, zIndex: 3 - idx }}
-            >
-              <SourceTypeCircle
-                type={info.icon}
-                size={18}
-                iconSize={10}
-                url={info.href}
-                customImage={customImage}
-              />
-            </div>
-          );
-        })}
+      <div className="w-full">
+        {visibleSources.map((source, index) => (
+          <SourceEvidenceRow
+            key={`${sourceIdentity(source) || "source"}-${normalizedSourcePage(source) || index}`}
+            source={source}
+            index={index}
+            workspaceSlug={workspaceSlug}
+          />
+        ))}
       </div>
-      {remainingCount > 0 && (
-        <span className="text-xs text-white light:text-slate-800">
-          + {remainingCount}
-        </span>
-      )}
-    </button>
+    </section>
   );
 }
 
@@ -228,9 +416,7 @@ export function CitationDetailModal({ source, onClose }) {
           <Fragment key={idx}>
             <div className="text-zinc-100 light:text-slate-900">
               <div className="flex flex-col w-full justify-start gap-y-1">
-                <p className="text-zinc-100 light:text-slate-900 whitespace-pre-line">
-                  {HTMLDecode(omitChunkHeader(text))}
-                </p>
+                <SourceExcerpt text={text} />
 
                 {!!score && (
                   <div className="w-full flex items-center text-xs text-zinc-400 light:text-slate-500 gap-x-2 cursor-default">

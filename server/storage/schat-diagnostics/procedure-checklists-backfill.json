@@ -1,0 +1,739 @@
+{
+  "slug": "schat-2026-09-22",
+  "generatedAt": "2026-09-26T11:13:40.908Z",
+  "documents": 543,
+  "batchSize": 20,
+  "totals": {
+    "created": 54,
+    "skipped": 480,
+    "errors": 0,
+    "review": 9
+  },
+  "batches": [
+    {
+      "batch": 1,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 2,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 3,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 4,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 5,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 6,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 7,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 8,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 9,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 10,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 11,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 12,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 13,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 14,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 15,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 16,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 17,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 18,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 19,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 20,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 21,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 22,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 23,
+      "pages": 20,
+      "created": 0,
+      "skipped": 20,
+      "errors": 0,
+      "review": 0,
+      "checklists": []
+    },
+    {
+      "batch": 24,
+      "pages": 20,
+      "created": 12,
+      "skipped": 6,
+      "errors": 0,
+      "review": 2,
+      "checklists": [
+        {
+          "page": 10,
+          "title": "요추천자 Spinal tapping",
+          "status": "needs_review",
+          "problems": [
+            "nested-layout"
+          ],
+          "editedByAdmin": false
+        },
+        {
+          "page": 11,
+          "title": "요추천자 Spinal tapping (소아)",
+          "status": "needs_review",
+          "problems": [
+            "nested-layout",
+            "duplicate-detail"
+          ],
+          "editedByAdmin": false
+        },
+        {
+          "page": 12,
+          "title": "수면다원검사 PSG",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 13,
+          "title": "기관지내시경 BFS",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 15,
+          "title": "경피적 폐세침 조직검사 PTNB",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 16,
+          "title": "기관지색전술 BAE",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 17,
+          "title": "폐기능검사 PFT / Pulmonary function test",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 18,
+          "title": "흉수천자 Thoracentesis : 영상초음파실",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 19,
+          "title": "흉수천자 Thoracentesis : 병동",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 20,
+          "title": "흉막유착술 Pleurodesis",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 22,
+          "title": "심부정맥혈전증 DVT",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 24,
+          "title": "요관부목설치술 D-J Stent insert, change",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 25,
+          "title": "역행성 신우조영술 RGP",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 26,
+          "title": "역행성 신우조영술 RGU",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        }
+      ]
+    },
+    {
+      "batch": 25,
+      "pages": 20,
+      "created": 16,
+      "skipped": 2,
+      "errors": 0,
+      "review": 2,
+      "checklists": [
+        {
+          "page": 27,
+          "title": "배뇨성 방광요도조영술 VCUG",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 28,
+          "title": "방광경검사 Cystoscopy",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 29,
+          "title": "전립선 생검 Prostate Biopsy : Prof. 전윤수/김기홍/양희조/김두상",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 30,
+          "title": "전립선 생검 Prostate Biopsy : Prof. 이창호",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 31,
+          "title": "돌발성 감각 신경성 난청 SSNHL",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 32,
+          "title": "위내시경 GFS",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 33,
+          "title": "대장내시경 CFS",
+          "status": "needs_review",
+          "problems": [
+            "nested-layout"
+          ],
+          "editedByAdmin": false
+        },
+        {
+          "page": 34,
+          "title": "위내시경점막하박리술 G-ESD / 위내시경점막절제술 G-EMR",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 35,
+          "title": "대장내시경점막하박리술 C-ESD / 대장내시경점막절제술 C-EMR",
+          "status": "needs_review",
+          "problems": [
+            "nested-layout"
+          ],
+          "editedByAdmin": false
+        },
+        {
+          "page": 36,
+          "title": "캡슐내시경",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 37,
+          "title": "요소호기검사 UBT검사",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 38,
+          "title": "바이오피드백",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 39,
+          "title": "내시경 초음파 EUS",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 40,
+          "title": "내시경 초음파 유도하 세침 흡입술 EUS-FNA",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 41,
+          "title": "경피적 배액술 PCD",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 42,
+          "title": "내시경적 역행성 담도췌관 조영술 ERCP",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 43,
+          "title": "역행성 담도 촬영술 RGC",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 44,
+          "title": "동맥화학 색전술 TACE",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        }
+      ]
+    },
+    {
+      "batch": 26,
+      "pages": 20,
+      "created": 13,
+      "skipped": 4,
+      "errors": 0,
+      "review": 3,
+      "checklists": [
+        {
+          "page": 6,
+          "title": "케모포트 삽입술 Chemoport insertion : RA 협진",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 7,
+          "title": "말초삽입형 중심정맥카테터 PICC",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 8,
+          "title": "골수검사 BM Bx",
+          "status": "needs_review",
+          "problems": [
+            "nested-layout"
+          ],
+          "editedByAdmin": false
+        },
+        {
+          "page": 9,
+          "title": "척수강 내 약물투여 IT CTx",
+          "status": "needs_review",
+          "problems": [
+            "nested-layout"
+          ],
+          "editedByAdmin": false
+        },
+        {
+          "page": 45,
+          "title": "목정맥 경유 간속문맥 전신순환지름술 TIPS / Transjugular-Intrahepatic Protocaval Shunt",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 46,
+          "title": "간조직 검사 Liver Biopsy",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 47,
+          "title": "정맥류 결찰술 EVL",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 48,
+          "title": "복수천자 Paracentesis : 병동/내과초음파실",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 49,
+          "title": "경피경간 담도배액술 PTBD",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 50,
+          "title": "자기공명췌담도조영술 MRCP",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 51,
+          "title": "위장관 조영술 UGI",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 54,
+          "title": "역행성정맥통과위정맥류폐색술 PARTO",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 55,
+          "title": "풍선폐쇄역행성경정맥폐쇄술 BRTO",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 56,
+          "title": "신장조직검사 Renal biopsy",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 57,
+          "title": "혈관조영술 Venogram",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 58,
+          "title": "투석관 삽입술 Perm Catheter Insertion",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 59,
+          "title": "HD 투석관 삽입술 (HD Catheter Insertion) : 병동",
+          "status": "needs_review",
+          "problems": [
+            "nested-layout"
+          ],
+          "editedByAdmin": false
+        }
+      ]
+    },
+    {
+      "batch": 27,
+      "pages": 20,
+      "created": 13,
+      "skipped": 6,
+      "errors": 0,
+      "review": 1,
+      "checklists": [
+        {
+          "page": 60,
+          "title": "투석관 제거술 Perm Catheter remove",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 61,
+          "title": "경피적 혈관내 성형술 PTA : 신장내과",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 62,
+          "title": "신루설치술 PCN",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 64,
+          "title": "디지털 감산 뇌혈관 조영술 : TFCA",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 65,
+          "title": "척수조영술 Myelography : 신경외과",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 66,
+          "title": "관상동맥조영술 CAG Coronary Angiography / 경피적 관상동맥 중재술 PCI Percutaneous Coronary Intervention",
+          "status": "needs_review",
+          "problems": [
+            "nested-layout",
+            "duplicate-detail"
+          ],
+          "editedByAdmin": false
+        },
+        {
+          "page": 67,
+          "title": "영구적 인공 심박동기 PPM",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 69,
+          "title": "혈전제거술 : 심장내과",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 70,
+          "title": "심장컴퓨터단층촬영",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 71,
+          "title": "심장자기공명영상",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 73,
+          "title": "24시간 홀터 심전도",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 74,
+          "title": "경식도 TEE",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 75,
+          "title": "심장천자",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        },
+        {
+          "page": 77,
+          "title": "기립경사 검사 ANS Test",
+          "status": "active",
+          "problems": [],
+          "editedByAdmin": false
+        }
+      ]
+    },
+    {
+      "batch": 28,
+      "pages": 3,
+      "created": 0,
+      "skipped": 2,
+      "errors": 0,
+      "review": 1,
+      "checklists": [
+        {
+          "page": 82,
+          "title": "부신 정맥 채혈 AVS Adrenal Vein Sampling",
+          "status": "needs_review",
+          "problems": [
+            "nested-layout"
+          ],
+          "editedByAdmin": false
+        }
+      ]
+    }
+  ]
+}

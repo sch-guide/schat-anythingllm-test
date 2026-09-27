@@ -20,6 +20,10 @@ import { chatQueryRefusalResponse } from "@/utils/chat";
 import HistoricalOutputs from "./HistoricalOutputs";
 import HistoricalClarifyingQuestions from "./HistoricalClarifyingQuestions";
 import { openImageLightbox } from "@/components/ImageLightbox";
+import ProcedurePresentation from "../ProcedurePresentation";
+import { buildProcedurePresentationModel } from "@/utils/schatPresentation";
+import RelatedImages from "../RelatedImages";
+import ChecklistLauncher from "../Checklist/ChecklistLauncher";
 
 function hasVisibleContent(message) {
   if (!message) return false;
@@ -52,6 +56,12 @@ const HistoricalMessage = ({
   metrics = {},
   outputs = [],
   clarifyingQuestions = [],
+  presentation = null,
+  relatedImages = [],
+  checklists = [],
+  onOpenChecklist,
+  citationQuestion = "",
+  citationAliases = [],
 }) => {
   // Freeze uuid on first render. User messages arrive without a uuid and this value
   // is used as the wrapper div's `key` — a default param fallback would regenerate
@@ -71,6 +81,7 @@ const HistoricalMessage = ({
 
   const isRefusalMessage =
     role === "assistant" && message === chatQueryRefusalResponse(workspace);
+  const procedureModel = buildProcedurePresentationModel(presentation, sources);
 
   if (completeDelete) return null;
 
@@ -159,9 +170,16 @@ const HistoricalMessage = ({
             saveChanges={saveEditedMessage}
           />
         ) : (
-          <div className="break-words">
+          <div className="break-words w-full max-w-[780px] leading-[1.7]">
             <HistoricalClarifyingQuestions surveys={clarifyingQuestions} />
-            <RenderChatContent role={role} message={message} />
+            {procedureModel ? (
+              <ProcedurePresentation
+                presentation={presentation}
+                sources={sources}
+              />
+            ) : (
+              <RenderChatContent role={role} message={message} />
+            )}
             {isRefusalMessage && (
               <Link
                 data-tooltip-id="query-refusal-info"
@@ -203,7 +221,27 @@ const HistoricalMessage = ({
             />
           </div>
         )}
-        {role === "assistant" && <Citations sources={sources} />}
+        {role === "assistant" && (
+          <ChecklistLauncher
+            checklists={checklists}
+            onOpenChecklist={onOpenChecklist}
+          />
+        )}
+        {role === "assistant" && (
+          <Citations
+            sources={sources}
+            workspaceSlug={workspace?.slug}
+            question={citationQuestion}
+            answer={message}
+            aliases={citationAliases}
+          />
+        )}
+        {role === "assistant" && (
+          <RelatedImages
+            images={relatedImages}
+            workspaceSlug={workspace?.slug}
+          />
+        )}
       </div>
     </div>
   );
@@ -224,6 +262,15 @@ export default memo(
       prevProps.chatId === nextProps.chatId &&
       JSON.stringify(prevProps.metrics) === JSON.stringify(nextProps.metrics) &&
       JSON.stringify(prevProps.sources) === JSON.stringify(nextProps.sources) &&
+      JSON.stringify(prevProps.presentation) ===
+        JSON.stringify(nextProps.presentation) &&
+      JSON.stringify(prevProps.relatedImages) ===
+        JSON.stringify(nextProps.relatedImages) &&
+      JSON.stringify(prevProps.checklists) ===
+        JSON.stringify(nextProps.checklists) &&
+      prevProps.citationQuestion === nextProps.citationQuestion &&
+      JSON.stringify(prevProps.citationAliases) ===
+        JSON.stringify(nextProps.citationAliases) &&
       JSON.stringify(prevProps.clarifyingQuestions) ===
         JSON.stringify(nextProps.clarifyingQuestions)
     );

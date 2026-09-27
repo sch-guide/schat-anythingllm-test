@@ -240,6 +240,7 @@ function displayFromFile(file) {
     case "png":
     case "jpg":
     case "jpeg":
+    case "webp":
       return { iconBgColor: "bg-royalblue", Icon: FileImage };
     default:
       return { iconBgColor: "bg-royalblue", Icon: FileText };

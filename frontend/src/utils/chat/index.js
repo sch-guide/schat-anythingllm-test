@@ -25,6 +25,8 @@ export default function handleChat(
     metrics = {},
     routedTo = null,
     outputs = null,
+    presentation = null,
+    relatedImages = [],
   } = chatResult;
 
   if (type === "modelRouteNotification") {
@@ -113,6 +115,8 @@ export default function handleChat(
         chatId,
         metrics,
         ...(outputs ? { outputs } : {}),
+        ...(presentation ? { presentation } : {}),
+        ...(relatedImages.length ? { relatedImages } : {}),
       },
     ]);
     _chatHistory.push({
@@ -127,6 +131,8 @@ export default function handleChat(
       chatId,
       metrics,
       ...(outputs ? { outputs } : {}),
+      ...(presentation ? { presentation } : {}),
+      ...(relatedImages.length ? { relatedImages } : {}),
     });
     emitAssistantMessageCompleteEvent(chatId);
   } else if (
@@ -159,6 +165,8 @@ export default function handleChat(
           ...existingHistory,
           content: existingHistory.content + textResponse,
           ...(sources && sources.length > 0 ? { sources } : {}),
+          ...(presentation ? { presentation } : {}),
+          ...(relatedImages.length ? { relatedImages } : {}),
           error,
           closed: close,
           animate: !close,
@@ -180,6 +188,8 @@ export default function handleChat(
         pending: false,
         chatId,
         metrics,
+        ...(presentation ? { presentation } : {}),
+        ...(relatedImages.length ? { relatedImages } : {}),
       });
     }
     setChatHistory([..._chatHistory]);

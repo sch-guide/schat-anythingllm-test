@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import System from "@/models/system";
 import Workspace from "@/models/workspace";
+import {
+  fetchUploadedBatchRecords,
+  mergeUploadCompletion,
+  resolveUploadedSelectionRecords,
+  uploadedFolderNames,
+  workspaceDocpathsForRefresh,
+} from "./uploadBatch";
 
 /** How many files we pull per page when a folder is expanded. */
 export const PAGE_SIZE = 100;
@@ -49,6 +56,8 @@ const initialState = {
   selectedFolders: EMPTY_SET,
   /** @type {Set<string>} individually selected file ids */
   selectedFiles: EMPTY_SET,
+  /** Exact uploaded rows that may sit outside the currently loaded page. */
+  selectedFileRecords: new Map(),
   /** @type {Set<string>} files opted out of an otherwise-selected folder */
   deselectedFiles: EMPTY_SET,
   /** @type {Array<{name, fileCount, items}>|null} null when not searching */
@@ -196,11 +205,14 @@ function reducer(state, action) {
       };
 
     case "toggle-file": {
-      const { id, folderName } = action;
+      const { id, folderName, file } = action;
       const inSelectedFolder = state.selectedFolders.has(folderName);
       const isOn =
         (inSelectedFolder && !state.deselectedFiles.has(id)) ||
         state.selectedFiles.has(id);
+      const selectedFileRecords = new Map(state.selectedFileRecords);
+      if (isOn) selectedFileRecords.delete(id);
+      else if (file) selectedFileRecords.set(id, { file, folderName });
       return {
         ...state,
         selectedFiles: withToggled(state.selectedFiles, id, !isOn),
@@ -211,6 +223,7 @@ function reducer(state, action) {
           id,
           isOn && inSelectedFolder
         ),
+        selectedFileRecords,
       };
     }
 
@@ -231,17 +244,25 @@ function reducer(state, action) {
       const turningOn = !fullySelected;
       const selectedFiles = new Set(state.selectedFiles);
       const deselectedFiles = new Set(state.deselectedFiles);
+      const selectedFileRecords = new Map(state.selectedFileRecords);
       // Individual entries are redundant once the folder itself carries the
       // selection, so drop them either way to keep the sets canonical.
       for (const file of items) {
         selectedFiles.delete(file.id);
         deselectedFiles.delete(file.id);
+        selectedFileRecords.delete(file.id);
+      }
+      for (const [id, record] of selectedFileRecords) {
+        if (record.folderName !== name) continue;
+        selectedFiles.delete(id);
+        selectedFileRecords.delete(id);
       }
       return {
         ...state,
         selectedFolders: withToggled(state.selectedFolders, name, turningOn),
         selectedFiles,
         deselectedFiles,
+        selectedFileRecords,
       };
     }
 
@@ -250,6 +271,7 @@ function reducer(state, action) {
         ...state,
         selectedFolders: new Set(state.folders.map((f) => f.name)),
         selectedFiles: EMPTY_SET,
+        selectedFileRecords: new Map(),
         deselectedFiles: EMPTY_SET,
       };
 
@@ -258,6 +280,7 @@ function reducer(state, action) {
         ...state,
         selectedFolders: EMPTY_SET,
         selectedFiles: EMPTY_SET,
+        selectedFileRecords: new Map(),
         deselectedFiles: EMPTY_SET,
       };
 
@@ -265,11 +288,21 @@ function reducer(state, action) {
       if (!action.ids.length) return state;
       const selectedFiles = new Set(state.selectedFiles);
       const deselectedFiles = new Set(state.deselectedFiles);
+      const selectedFileRecords = new Map(state.selectedFileRecords);
       for (const id of action.ids) {
         selectedFiles.add(id);
         deselectedFiles.delete(id);
       }
-      return { ...state, selectedFiles, deselectedFiles };
+      for (const record of action.records ?? []) {
+        if (!record?.file?.id || !record.folderName) continue;
+        selectedFileRecords.set(record.file.id, record);
+      }
+      return {
+        ...state,
+        selectedFiles,
+        deselectedFiles,
+        selectedFileRecords,
+      };
     }
 
     // Optimistically drop files from the picker (moved into the workspace or
@@ -295,15 +328,18 @@ function reducer(state, action) {
       }
       const selectedFiles = new Set(state.selectedFiles);
       const deselectedFiles = new Set(state.deselectedFiles);
+      const selectedFileRecords = new Map(state.selectedFileRecords);
       for (const id of removed) {
         selectedFiles.delete(id);
         deselectedFiles.delete(id);
+        selectedFileRecords.delete(id);
       }
       return {
         ...state,
         contents,
         selectedFiles,
         deselectedFiles,
+        selectedFileRecords,
         folders: state.folders.map((folder) =>
           removedPerFolder[folder.name]
             ? {
@@ -368,11 +404,18 @@ export default function useDocumentPicker({ slug }) {
     // A failed listing must not wipe the tree the user is looking at.
     if (!listing) {
       dispatch({ type: "hydrate-failed" });
-      return { folders: stateRef.current.folders, docpaths: [] };
+      return {
+        folders: stateRef.current.folders,
+        docpaths: workspaceDocpathsForRefresh(
+          null,
+          stateRef.current.workspaceDocpaths
+        ),
+      };
     }
 
-    const docpaths = (currentWorkspace?.documents ?? []).map(
-      (doc) => doc.docpath
+    const docpaths = workspaceDocpathsForRefresh(
+      currentWorkspace,
+      stateRef.current.workspaceDocpaths
     );
     const workspaceDocs = await buildWorkspaceDocs(docpaths);
     const folders = listing.items ?? [];
@@ -502,7 +545,7 @@ export default function useDocumentPicker({ slug }) {
 
   const toggleFile = useCallback(
     (file, folderName) =>
-      dispatch({ type: "toggle-file", id: file.id, folderName }),
+      dispatch({ type: "toggle-file", id: file.id, folderName, file }),
     []
   );
   const toggleFolder = useCallback(
@@ -531,6 +574,7 @@ export default function useDocumentPicker({ slug }) {
       contents,
       selectedFolders,
       selectedFiles,
+      selectedFileRecords,
       deselectedFiles,
       workspaceDocpaths,
     } = stateRef.current;
@@ -563,6 +607,14 @@ export default function useDocumentPicker({ slug }) {
         resolved.push({ ...file, folderName: folder.name });
       }
     }
+    resolved.push(
+      ...resolveUploadedSelectionRecords({
+        records: selectedFileRecords.values(),
+        selectedIds: selectedFiles,
+        seenIds: seen,
+        embeddedDocpaths: workspaceDocpaths,
+      })
+    );
     return resolved;
   }, []);
 
@@ -630,7 +682,11 @@ export default function useDocumentPicker({ slug }) {
    * files that are genuinely new so the user can embed them immediately.
    * Never touches `status`, so the tree stays on screen throughout.
    */
-  const syncAfterUpload = useCallback(async () => {
+  const syncAfterUpload = useCallback(async (uploadedDocpaths = []) => {
+    const exactBatch = mergeUploadCompletion([], {
+      success: true,
+      docpaths: uploadedDocpaths,
+    });
     const before = new Map(
       stateRef.current.folders.map((f) => [f.name, f.fileCount])
     );
@@ -643,6 +699,45 @@ export default function useDocumentPicker({ slug }) {
     // re-rendered and flushed effects.
     const { folders, docpaths } = await refresh();
     const embedded = new Set(docpaths);
+
+    if (exactBatch.length > 0) {
+      const uploadedRecords = await fetchUploadedBatchRecords({
+        uploadedDocpaths: exactBatch,
+        embeddedDocpaths: docpaths,
+        fetchByDocpaths: System.getUploadedDocumentsByDocPaths,
+      });
+      const touchedFolders = new Set(uploadedFolderNames(exactBatch));
+      const changed = folders.filter((folder) =>
+        touchedFolders.has(folder.name)
+      );
+      const pages = await Promise.all(
+        changed.map((folder) => System.localFiles(folder.name, 0, PAGE_SIZE))
+      );
+
+      changed.forEach((folder, index) => {
+        const result = pages[index];
+        if (!result) return;
+        const items = (result.documents ?? []).filter(
+          (file) => !embedded.has(`${folder.name}/${file.name}`)
+        );
+        dispatch({
+          type: "folder-loaded",
+          name: folder.name,
+          items,
+          append: false,
+          hasMore: result.hasMore ?? false,
+          totalCount: result.totalCount ?? items.length,
+        });
+        dispatch({ type: "set-expanded", name: folder.name, value: true });
+      });
+
+      dispatch({
+        type: "select-files",
+        ids: uploadedRecords.map(({ file }) => file.id),
+        records: uploadedRecords,
+      });
+      return;
+    }
 
     const changed = folders.filter((folder) => {
       const prev = before.get(folder.name);

@@ -3,11 +3,20 @@ const {
   createdDate,
   trashFile,
   writeToServerDocuments,
+  documentsFolder,
 } = require("../../../utils/files");
+const path = require("path");
 const { tokenizeString } = require("../../../utils/tokenizer");
 const { default: slugify } = require("slugify");
 const PDFLoader = require("./PDFLoader");
 const OCRLoader = require("../../../utils/OCRLoader");
+const {
+  extractPdfRasterImages,
+  persistPdfImages,
+  createGeminiImageDescriber,
+  buildPageImageMetadata,
+  resolveDescriptionProcessingLimits,
+} = require("./pdfImages");
 
 async function asPdf({
   fullFilePath = "",
@@ -20,7 +29,8 @@ async function asPdf({
   });
 
   console.log(`-- Working ${filename} --`);
-  const pages = [];
+  const documentId = metadata.document_id || v4();
+  const pagesByNumber = new Map();
   let docs = await pdfLoader.load();
 
   if (docs.length === 0) {
@@ -32,6 +42,42 @@ async function asPdf({
     }).ocrPDF(fullFilePath);
   }
 
+  let persistedImages = [];
+  if (
+    !options.parseOnly &&
+    process.env.SCHAT_PDF_IMAGE_ENABLED !== "false"
+  ) {
+    try {
+      const extractedImages = await extractPdfRasterImages(fullFilePath);
+      const descriptionsEnabled =
+        process.env.SCHAT_PDF_IMAGE_DESCRIPTION_ENABLED !== "false";
+      let describeImage = null;
+      if (descriptionsEnabled) {
+        try {
+          describeImage = createGeminiImageDescriber();
+        } catch (error) {
+          console.warn(
+            `[asPDF] Image descriptions disabled for ${filename}: ${error.message}`
+          );
+        }
+      }
+      const descriptionLimits = resolveDescriptionProcessingLimits();
+      persistedImages = await persistPdfImages({
+        documentId,
+        images: extractedImages,
+        storageRoot: path.resolve(documentsFolder, "../document-images"),
+        describeImage,
+        maxDescriptions: descriptionLimits.maxPerRun,
+        batchSize: descriptionLimits.batchSize,
+      });
+    } catch (error) {
+      console.warn(
+        `[asPDF] Image processing skipped for ${filename}: ${error.message}`
+      );
+      persistedImages = [];
+    }
+  }
+
   for (const doc of docs) {
     console.log(
       `-- Parsing content from pg ${
@@ -39,13 +85,23 @@ async function asPdf({
       } --`
     );
     if (!doc.pageContent || !doc.pageContent.length) continue;
-    pages.push({
+    const page = Number.isInteger(doc.metadata?.loc?.pageNumber)
+      ? doc.metadata.loc.pageNumber
+      : null;
+    pagesByNumber.set(page, {
       pageContent: doc.pageContent,
-      page: Number.isInteger(doc.metadata?.loc?.pageNumber)
-        ? doc.metadata.loc.pageNumber
-        : null,
+      page,
     });
   }
+
+  for (const image of persistedImages) {
+    if (!pagesByNumber.has(image.page)) {
+      pagesByNumber.set(image.page, { pageContent: "", page: image.page });
+    }
+  }
+  const pages = Array.from(pagesByNumber.values()).sort(
+    (left, right) => (left.page || 0) - (right.page || 0)
+  );
 
   if (!pages.length) {
     console.error(`[asPDF] Resulting text content was empty for ${filename}.`);
@@ -57,8 +113,10 @@ async function asPdf({
     };
   }
 
-  const documentId = metadata.document_id || v4();
   const documents = pages.map(({ pageContent, page }, index) => {
+    const pdfImages = buildPageImageMetadata(
+      persistedImages.filter((image) => image.page === page)
+    );
     const data = {
       id: v4(),
       document_id: documentId,
@@ -82,6 +140,7 @@ async function asPdf({
       wordCount: pageContent.split(" ").length,
       pageContent,
       token_count_estimate: tokenizeString(pageContent),
+      ...(pdfImages.length ? { pdf_images: pdfImages } : {}),
     };
     return writeToServerDocuments({
       data,

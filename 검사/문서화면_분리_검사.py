@@ -73,9 +73,16 @@ class DocsViewIsolationTest(unittest.TestCase):
                 {"name": "01_현재상태", "path": "docs/00_현재상태"},
                 {"name": "02_작업일지", "path": "docs/01_작업일지"},
                 {"name": "03_전체_공식문서", "path": "docs"},
+                {"name": "04_화면디자인", "path": "04_화면디자인"},
+                {"name": "05_인수인계", "path": "05_인수인계"},
                 {"name": "90_개발자용_프로그램파일", "path": "."},
             ],
         )
+
+        self.assertTrue((ROOT / "04_화면디자인" / "README.md").is_file())
+        self.assertFalse((ROOT / "docs" / "04_화면디자인").exists())
+        self.assertTrue((ROOT / "05_인수인계" / "SCHAT_인수인계.md").is_file())
+        self.assertFalse((ROOT / "docs" / "02_인수인계").exists())
 
     def test_official_docs_view_hides_sections_already_shown_separately(self):
         workspace = json.loads(
@@ -85,6 +92,8 @@ class DocsViewIsolationTest(unittest.TestCase):
 
         self.assertTrue(excluded.get("00_현재상태", False))
         self.assertTrue(excluded.get("01_작업일지", False))
+        self.assertTrue(excluded.get("04_화면디자인", False))
+        self.assertTrue(excluded.get("05_인수인계", False))
 
     def test_developer_section_does_not_hide_runtime_folders(self):
         folder_settings = json.loads(
@@ -101,20 +110,20 @@ class DocsViewIsolationTest(unittest.TestCase):
             output = Path(directory) / "docs_view"
             builder.build_docs_view(ROOT, output)
             html = (output / "index.html").read_text(encoding="utf-8")
+            overview_data_exists = (output / "schat-overview-data.json").is_file()
 
         self.assertIn("SCHAT 기능 비교 테스트", html)
-        self.assertIn("현재 상태", html)
-        self.assertIn("날짜별 변경", html)
-        self.assertIn("<h2>작업일지</h2>", html)
-        self.assertNotIn("<h2>쉬운 작업일지</h2>", html)
-        self.assertNotIn("docs/01_쉬운_작업일지", html)
-        self.assertNotIn("현재 Hybrid 방식 유지", html)
-        self.assertNotIn("Gemini ChromaDB", html)
+        self.assertIn("SCHAT 한눈에 보기", html)
+        self.assertIn("현재 상태와 안전장치", html)
+        self.assertIn("변경 이력 보기", html)
+        self.assertIn("인수인계 안내", html)
+        self.assertIn("schat-overview-data", html)
+        self.assertTrue(overview_data_exists)
         self.assertNotIn("docs/superpowers", html)
         self.assertNotIn("문서종류:", html)
         self.assertNotIn("주제:", html)
-        self.assertIn("<table>", html)
-        self.assertNotIn('class="table-line"', html)
+        self.assertNotIn("GEMINI_API_KEY=", html)
+        self.assertNotIn("server/storage", html)
 
     def test_saved_view_matches_fresh_generation(self):
         builder = load_builder()

@@ -100,7 +100,7 @@ const chatHistory = {
       ) {
         const invocation = aibitat.handlerProps.invocation;
         const metrics = aibitat.providerInstance?.getCumulativeUsage?.() ?? {};
-        const citations = aibitat._pendingCitations ?? [];
+        const citations = aibitat.getRagMemorySources?.() ?? [];
         const outputs = aibitat._pendingOutputs ?? [];
         const clarifyingQuestions =
           aibitat._pendingClarifyingQuestionSurveys ?? [];
@@ -135,7 +135,7 @@ const chatHistory = {
       ) {
         const invocation = aibitat.handlerProps.invocation;
         const metrics = aibitat.providerInstance?.getCumulativeUsage?.() ?? {};
-        const citations = aibitat._pendingCitations ?? [];
+        const citations = aibitat.getRagMemorySources?.() ?? [];
         const outputs = aibitat._pendingOutputs ?? [];
         const clarifyingQuestions =
           aibitat._pendingClarifyingQuestionSurveys ?? [];

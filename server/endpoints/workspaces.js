@@ -10,7 +10,10 @@ const { Document } = require("../models/documents");
 const { DocumentVectors } = require("../models/vectors");
 const { WorkspaceChats } = require("../models/workspaceChats");
 const { getVectorDbClass, stripThinkingFromText } = require("../utils/helpers");
-const { handleFileUpload } = require("../utils/files/multer");
+const {
+  handleFileUpload,
+  handleOriginalPdfUpload,
+} = require("../utils/files/multer");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { Telemetry } = require("../models/telemetry");
 const {
@@ -36,6 +39,42 @@ const { workspaceParsedFilesEndpoints } = require("./workspacesParsedFiles");
 const {
   workspaceDeletionProtection,
 } = require("../utils/middleware/workspaceDeletionProtection");
+const {
+  buildUploadSuccessResponse,
+} = require("../utils/files/uploadBatch");
+const fs = require("fs");
+const path = require("path");
+const { resolveWorkspaceImage } = require("../utils/documentImages");
+const { prepareOriginalPdfUpload } = require("../utils/originalPdfUpload");
+const {
+  persistOriginalPdf,
+  removeOriginalPdf,
+  resolveWorkspaceDocumentId,
+  resolveWorkspaceOriginalPdf,
+  parsePdfByteRange,
+} = require("../utils/originalDocuments");
+const {
+  processDocumentChecklists,
+} = require("../utils/documentChecklists/processDocuments");
+const {
+  ChecklistRepository,
+} = require("../utils/documentChecklists/repository");
+const {
+  toPublicChecklist,
+} = require("../utils/documentChecklists/presenter");
+
+function workspaceDocumentIds(documents = []) {
+  return [
+    ...new Set(
+      documents
+        .map((document) => {
+          const metadata = safeJsonParse(document.metadata, {});
+          return String(metadata?.document_id || "").trim();
+        })
+        .filter(Boolean)
+    ),
+  ];
+}
 
 function workspaceEndpoints(app) {
   if (!app) return;
@@ -115,6 +154,9 @@ function workspaceEndpoints(app) {
       handleFileUpload,
     ],
     async function (request, response) {
+      let stagedOriginal = null;
+      let stagedDocumentId = null;
+      let collectorSucceeded = false;
       try {
         const Collector = new CollectorApi();
         const { originalname } = request.file;
@@ -125,7 +167,7 @@ function workspaceEndpoints(app) {
         const { folderName = null, metadata: _metadata = "{}" } =
           reqBody(request);
 
-        const metadata =
+        let metadata =
           typeof _metadata === "string"
             ? safeJsonParse(_metadata, {})
             : _metadata;
@@ -143,14 +185,27 @@ function workspaceEndpoints(app) {
           return;
         }
 
+        const prepared = await prepareOriginalPdfUpload({
+          file: request.file,
+          metadata,
+        });
+        metadata = prepared.metadata;
+        stagedOriginal = prepared.preserved;
+        stagedDocumentId = metadata.document_id || null;
+
         const { success, reason, documents } = await Collector.processDocument(
           originalname,
           metadata
         );
         if (!success) {
+          if (stagedOriginal?.created && stagedDocumentId)
+            await removeOriginalPdf(stagedDocumentId);
           response.status(500).json({ success: false, error: reason }).end();
           return;
         }
+        collectorSucceeded = true;
+
+        await processDocumentChecklists(documents);
 
         // When the upload is part of a folder upload, move the processed
         // documents from their default location into the target folder.
@@ -168,10 +223,22 @@ function workspaceEndpoints(app) {
           },
           response.locals?.user?.id
         );
-        response.status(200).json({ success: true, error: null });
+        response.status(200).json(buildUploadSuccessResponse(documents));
       } catch (e) {
+        if (!collectorSucceeded && stagedOriginal?.created && stagedDocumentId)
+          await removeOriginalPdf(stagedDocumentId).catch(() => {});
         console.error(e.message, e);
-        response.sendStatus(500).end();
+        const status = e?.code === "INVALID_PDF" ? 400 : 500;
+        response
+          .status(status)
+          .json({
+            success: false,
+            error:
+              status === 400
+                ? e.message
+                : "The document upload could not be completed.",
+          })
+          .end();
       }
     }
   );
@@ -406,6 +473,220 @@ function workspaceEndpoints(app) {
       } catch (e) {
         console.error(e.message, e);
         response.sendStatus(500).end();
+      }
+    }
+  );
+
+  app.get(
+    "/workspace/:slug/document-image/:imageKey",
+    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    async (request, response) => {
+      try {
+        const { slug, imageKey } = request.params;
+        const user = await userFromSession(request, response);
+        const workspace = multiUserMode(response)
+          ? await Workspace.getWithUser(user, { slug })
+          : await Workspace.get({ slug });
+        if (!workspace) return response.sendStatus(404);
+
+        const documents = await Document.forWorkspace(workspace.id);
+        const documentImageStorageRoot =
+          process.env.NODE_ENV === "development"
+            ? path.resolve(__dirname, "../storage/document-images")
+            : path.resolve(process.env.STORAGE_DIR, "document-images");
+        const imagePath = resolveWorkspaceImage({
+          imageKey,
+          documents,
+          storageRoot: documentImageStorageRoot,
+        });
+        if (!imagePath || !fs.existsSync(imagePath))
+          return response.sendStatus(404);
+
+        response.setHeader("Content-Type", "image/png");
+        response.setHeader("Cache-Control", "private, max-age=3600");
+        return response.send(await fs.promises.readFile(imagePath));
+      } catch (error) {
+        console.error("Document image serve error:", error.message);
+        return response.sendStatus(500);
+      }
+    }
+  );
+
+  app.get(
+    "/workspace/:slug/checklists",
+    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    async (request, response) => {
+      try {
+        const { slug } = request.params;
+        const user = await userFromSession(request, response);
+        const workspace = multiUserMode(response)
+          ? await Workspace.getWithUser(user, { slug })
+          : await Workspace.get({ slug });
+        if (!workspace) return response.sendStatus(404);
+
+        const documents = await Document.forWorkspace(workspace.id);
+        // Checklists awaiting review are only listed for the admin document
+        // screen; employees always receive active checklists only.
+        const includeReview =
+          request.query?.scope === "admin" &&
+          (!multiUserMode(response) ||
+            [ROLES.admin, ROLES.manager].includes(user?.role));
+        const checklists = ChecklistRepository.findByDocumentIds(
+          workspaceDocumentIds(documents),
+          { includeReview }
+        ).map((checklist) => toPublicChecklist(checklist));
+        return response.status(200).json({ checklists });
+      } catch (error) {
+        console.error("Checklist list error:", error.message);
+        return response.status(500).json({ checklists: [] });
+      }
+    }
+  );
+
+  app.put(
+    "/workspace/:slug/checklists/:checklistId",
+    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    async (request, response) => {
+      try {
+        const { slug, checklistId } = request.params;
+        const user = await userFromSession(request, response);
+        const workspace = multiUserMode(response)
+          ? await Workspace.getWithUser(user, { slug })
+          : await Workspace.get({ slug });
+        if (!workspace) return response.sendStatus(404);
+
+        const checklist = ChecklistRepository.getById(checklistId);
+        if (!checklist) return response.sendStatus(404);
+        const documents = await Document.forWorkspace(workspace.id);
+        const allowedDocumentIds = new Set(workspaceDocumentIds(documents));
+        if (!allowedDocumentIds.has(checklist.documentId))
+          return response.sendStatus(404);
+
+        const updated = ChecklistRepository.updateChecklist(
+          checklistId,
+          reqBody(request)
+        );
+        return response.status(200).json({
+          success: true,
+          checklist: toPublicChecklist(updated),
+        });
+      } catch (error) {
+        console.error("Checklist update error:", error.message);
+        return response
+          .status(400)
+          .json({ success: false, error: "Invalid checklist definition." });
+      }
+    }
+  );
+
+  app.post(
+    "/workspace/:slug/original-pdf/:pdfRef",
+    [
+      validatedRequest,
+      flexUserRoleValid([ROLES.admin, ROLES.manager]),
+      handleOriginalPdfUpload,
+    ],
+    async (request, response) => {
+      try {
+        const { slug, pdfRef } = request.params;
+        const user = await userFromSession(request, response);
+        const workspace = multiUserMode(response)
+          ? await Workspace.getWithUser(user, { slug })
+          : await Workspace.get({ slug });
+        if (!workspace) return response.sendStatus(404);
+        if (!request.file?.path)
+          return response
+            .status(400)
+            .json({ success: false, error: "A PDF file is required." });
+
+        const documents = await Document.forWorkspace(workspace.id);
+        const match = resolveWorkspaceDocumentId({ pdfRef, documents });
+        if (!match) return response.sendStatus(404);
+
+        const result = await persistOriginalPdf({
+          sourcePath: request.file.path,
+          documentId: match.documentId,
+          originalName: request.file.originalname,
+        });
+        return response.status(200).json({
+          success: true,
+          pdfRef: result.pdfRef,
+          originalPdfAvailable: true,
+        });
+      } catch (error) {
+        const status =
+          error?.code === "ORIGINAL_PDF_CONFLICT"
+            ? 409
+            : error?.code === "INVALID_PDF"
+              ? 400
+              : 500;
+        console.error("Original PDF link error:", error.message);
+        return response
+          .status(status)
+          .json({
+            success: false,
+            error:
+              status === 409 || status === 400
+                ? error.message
+                : "The original PDF could not be linked.",
+          });
+      } finally {
+        if (request.file?.path)
+          await fs.promises.rm(request.file.path, { force: true }).catch(() => {});
+      }
+    }
+  );
+
+  app.get(
+    "/workspace/:slug/original-pdf/:pdfRef",
+    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    async (request, response) => {
+      try {
+        const { slug, pdfRef } = request.params;
+        const user = await userFromSession(request, response);
+        const workspace = multiUserMode(response)
+          ? await Workspace.getWithUser(user, { slug })
+          : await Workspace.get({ slug });
+        if (!workspace) return response.sendStatus(404);
+
+        const documents = await Document.forWorkspace(workspace.id);
+        const original = resolveWorkspaceOriginalPdf({ pdfRef, documents });
+        if (!original) return response.sendStatus(404);
+
+        const stat = await fs.promises.stat(original.filePath);
+        const requestedRange = request.headers.range;
+        const range = requestedRange
+          ? parsePdfByteRange(requestedRange, stat.size)
+          : null;
+        if (requestedRange && !range) {
+          response.setHeader("Content-Range", `bytes */${stat.size}`);
+          return response.sendStatus(416);
+        }
+
+        response.setHeader("Content-Type", "application/pdf");
+        response.setHeader("Accept-Ranges", "bytes");
+        response.setHeader("Cache-Control", "private, max-age=3600");
+        response.setHeader(
+          "Content-Disposition",
+          `inline; filename*=UTF-8''${encodeURIComponent(original.filename)}`
+        );
+        if (range) {
+          response.status(206);
+          response.setHeader(
+            "Content-Range",
+            `bytes ${range.start}-${range.end}/${stat.size}`
+          );
+          response.setHeader("Content-Length", range.end - range.start + 1);
+          return fs
+            .createReadStream(original.filePath, range)
+            .pipe(response);
+        }
+
+        response.setHeader("Content-Length", stat.size);
+        return fs.createReadStream(original.filePath).pipe(response);
+      } catch (error) {
+        console.error("Original PDF serve error:", error.message);
+        return response.sendStatus(500);
       }
     }
   );
@@ -788,6 +1069,9 @@ function workspaceEndpoints(app) {
       handleFileUpload,
     ],
     async function (request, response) {
+      let stagedOriginal = null;
+      let stagedDocumentId = null;
+      let collectorSucceeded = false;
       try {
         const { slug = null } = request.params;
         const user = await userFromSession(request, response);
@@ -815,12 +1099,24 @@ function workspaceEndpoints(app) {
           return;
         }
 
+        const prepared = await prepareOriginalPdfUpload({
+          file: request.file,
+          metadata: {},
+        });
+        stagedOriginal = prepared.preserved;
+        stagedDocumentId = prepared.metadata.document_id || null;
+
         const { success, reason, documents } =
-          await Collector.processDocument(originalname);
+          await Collector.processDocument(originalname, prepared.metadata);
         if (!success || documents?.length === 0) {
+          if (stagedOriginal?.created && stagedDocumentId)
+            await removeOriginalPdf(stagedDocumentId);
           response.status(500).json({ success: false, error: reason }).end();
           return;
         }
+        collectorSucceeded = true;
+
+        await processDocumentChecklists(documents);
 
         Collector.log(
           `Document ${originalname} uploaded processed and successfully. It is now available in documents.`
@@ -852,8 +1148,20 @@ function workspaceEndpoints(app) {
           document: { id: document.id, location: document.location },
         });
       } catch (e) {
+        if (!collectorSucceeded && stagedOriginal?.created && stagedDocumentId)
+          await removeOriginalPdf(stagedDocumentId).catch(() => {});
         console.error(e.message, e);
-        response.sendStatus(500).end();
+        const status = e?.code === "INVALID_PDF" ? 400 : 500;
+        response
+          .status(status)
+          .json({
+            success: false,
+            error:
+              status === 400
+                ? e.message
+                : "The document upload could not be completed.",
+          })
+          .end();
       }
     }
   );

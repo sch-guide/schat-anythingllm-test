@@ -1,6 +1,10 @@
 import { useTranslation } from "react-i18next";
 import useUser from "@/hooks/useUser";
 
+// SCHAT keeps these actions in the admin settings instead of the empty chat
+// screen, so the shortcuts are not rendered.
+export const SHOW_QUICK_ACTIONS = false;
+
 /**
  * Quick action buttons for home and empty workspace states.
  * @param {Object} props
@@ -18,6 +22,7 @@ export default function QuickActions({
   const { t } = useTranslation();
   const { user } = useUser();
 
+  if (!SHOW_QUICK_ACTIONS) return null;
   return (
     <div className="flex flex-wrap justify-center gap-2 mt-6">
       <QuickActionButton

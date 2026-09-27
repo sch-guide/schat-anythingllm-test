@@ -65,6 +65,103 @@ describe("runSafetyGatedCompletion", () => {
     expect(result.text).not.toContain("후보 답변");
   });
 
+  test("sends one image with the grounded prompt and exposes only validated output", async () => {
+    const image = {
+      name: "device.webp",
+      mime: "image/webp",
+      contentString: `data:image/webp;base64,${Buffer.from("image").toString("base64")}`,
+    };
+    let sentMessages;
+    const safetyClient = {
+      prepare: jest.fn(async () => ({
+        contract_id: "c1",
+        generation_prompt: "structured grounded prompt",
+        structured_output_schema: { type: "object" },
+        source_units: [{ source_unit_id: "su001" }],
+        fallback: { text: "safe source fallback", sources: [] },
+      })),
+      validate: jest.fn(async () => ({
+        decision: "PASS",
+        retry_count: 0,
+        display_output: {
+          kind: "candidate",
+          text: "validated answer",
+          sources: [],
+        },
+      })),
+    };
+    const LLMConnector = {
+      getChatCompletion: jest.fn(async (messages) => {
+        sentMessages = messages;
+        return {
+          textResponse: JSON.stringify({
+            statements: [
+              { text: "hidden candidate", supporting_source_unit_ids: ["su001"] },
+            ],
+          }),
+          metrics: {},
+        };
+      }),
+    };
+
+    const result = await runSafetyGatedCompletion({
+      question: "이 장비와 관련된 지침은?",
+      sources,
+      attachments: [image],
+      LLMConnector,
+      safetyClient,
+    });
+
+    expect(sentMessages).toHaveLength(1);
+    expect(sentMessages[0].content).toEqual([
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringContaining("SourceUnit"),
+      }),
+      {
+        type: "image_url",
+        image_url: { url: image.contentString, detail: "high" },
+      },
+    ]);
+    expect(result.text).toBe("validated answer");
+    expect(result.text).not.toContain("hidden candidate");
+    expect(LLMConnector.getChatCompletion).toHaveBeenCalledTimes(1);
+    expect(safetyClient.validate).toHaveBeenCalledTimes(1);
+  });
+
+  test("falls back without Gemini call when image validation fails", async () => {
+    const safetyClient = {
+      prepare: jest.fn(async () => ({
+        contract_id: "c1",
+        generation_prompt: "prompt",
+        source_units: [{ source_unit_id: "su001" }],
+        fallback: { text: "safe source fallback", sources: [] },
+      })),
+      validate: jest.fn(),
+    };
+    const LLMConnector = { getChatCompletion: jest.fn() };
+
+    const result = await runSafetyGatedCompletion({
+      question: "질문",
+      sources,
+      attachments: [
+        {
+          name: "unsafe.gif",
+          mime: "image/gif",
+          contentString: "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBA==",
+        },
+      ],
+      LLMConnector,
+      safetyClient,
+    });
+
+    expect(result.text).toBe("safe source fallback");
+    expect(result.safety.errorCode).toBe("image_type_unsupported");
+    expect(result.safety.retryCount).toBe(0);
+    expect(LLMConnector.getChatCompletion).not.toHaveBeenCalled();
+    expect(safetyClient.validate).not.toHaveBeenCalled();
+  });
+
   test("returns fallback when validation service fails and never retries", async () => {
     const safetyClient = {
       prepare: jest.fn(async () => ({

@@ -231,6 +231,12 @@ function convertToChatHistory(history = []) {
         sentAt: moment(createdAt).unix(),
         feedbackScore,
         metrics: data?.metrics || {},
+        ...(data?.presentation && typeof data.presentation === "object"
+          ? { presentation: data.presentation }
+          : {}),
+        ...(Array.isArray(data?.relatedImages) && data.relatedImages.length > 0
+          ? { relatedImages: data.relatedImages }
+          : {}),
         ...(data?.outputs?.length > 0 ? { outputs: data.outputs } : {}),
         ...(data?.clarifyingQuestions?.length > 0
           ? { clarifyingQuestions: data.clarifyingQuestions }

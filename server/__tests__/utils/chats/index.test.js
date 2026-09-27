@@ -194,3 +194,32 @@ describe("chatPrompt", () => {
     expect(promptWithMemories).not.toHaveBeenCalled();
   });
 });
+
+describe("chatPrompt default prompt inheritance", () => {
+  const { SystemSettings } = require("../../../models/systemSettings");
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it("uses the admin Default System Prompt when the workspace has none", async () => {
+    jest
+      .spyOn(SystemSettings, "effectiveDefaultSystemPrompt")
+      .mockResolvedValue("Admin answer rule.");
+    const result = await chatPrompt({ id: 7, openAiPrompt: null }, null, {
+      skipMemories: true,
+    });
+    expect(result).toBe("Admin answer rule.");
+  });
+
+  it("keeps a workspace's own prompt ahead of the default", async () => {
+    const spy = jest
+      .spyOn(SystemSettings, "effectiveDefaultSystemPrompt")
+      .mockResolvedValue("Admin answer rule.");
+    const result = await chatPrompt(
+      { id: 7, openAiPrompt: "Workspace prompt." },
+      null,
+      { skipMemories: true }
+    );
+    expect(result).toBe("Workspace prompt.");
+    expect(spy).not.toHaveBeenCalled();
+  });
+});

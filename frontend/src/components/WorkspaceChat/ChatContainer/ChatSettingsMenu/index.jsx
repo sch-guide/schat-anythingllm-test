@@ -2,15 +2,9 @@ import { useState, useRef, useEffect } from "react";
 import { SlidersHorizontal } from "@phosphor-icons/react";
 import useLoginMode from "@/hooks/useLoginMode";
 import TextSizeRow from "./TextSize";
-import MemoriesRow from "./Memories";
-import CopyLinkToChatRow from "./CopyLinkToChat";
-import ExportRow from "./Export";
+import DarkModeRow from "./DarkMode";
 
-export default function ChatSettingsMenu({
-  history = [],
-  workspace = null,
-  threadSlug = null,
-}) {
+export default function ChatSettingsMenu() {
   const mode = useLoginMode();
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
@@ -36,7 +30,13 @@ export default function ChatSettingsMenu({
 
   return (
     <div
-      className={`absolute top-3 md:top-5 z-30 ${hasUserIcon ? "right-[55px] md:right-[67px]" : "right-4 md:right-6"}`}
+      className={`absolute top-3 md:top-5 z-30 ${
+        mode === "multi"
+          ? "right-[98px] md:right-[110px]" // user button + notification bell
+          : hasUserIcon
+            ? "right-[55px] md:right-[67px]"
+            : "right-4 md:right-6"
+      }`}
     >
       <button
         ref={buttonRef}
@@ -61,17 +61,10 @@ export default function ChatSettingsMenu({
       {showMenu && (
         <div
           ref={menuRef}
-          className="absolute right-0 top-[42px] bg-zinc-800 light:bg-slate-50 border border-zinc-700 light:border-slate-300 rounded-lg p-3.5 w-[226px] flex flex-col gap-1.5 shadow-lg"
+          className="schat-popover absolute right-0 top-[42px] bg-zinc-800 light:bg-slate-50 border border-zinc-700 light:border-slate-300 rounded-lg p-3.5 w-[226px] flex flex-col gap-1.5 shadow-lg"
         >
           <TextSizeRow />
-          <MemoriesRow onClose={() => setShowMenu(false)} />
-          <ExportRow
-            history={history}
-            workspace={workspace}
-            threadSlug={threadSlug}
-            onClose={() => setShowMenu(false)}
-          />
-          <CopyLinkToChatRow />
+          <DarkModeRow />
         </div>
       )}
     </div>

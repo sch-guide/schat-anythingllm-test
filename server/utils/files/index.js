@@ -4,6 +4,7 @@ const { spawn } = require("child_process");
 const { v5: uuidv5, v4: uuidv4 } = require("uuid");
 const { Document } = require("../../models/documents");
 const { DocumentSyncQueue } = require("../../models/documentSyncQueue");
+const { publicOriginalPdfMetadata } = require("../originalDocuments");
 const documentsPath =
   process.env.NODE_ENV === "development"
     ? path.resolve(__dirname, `../../storage/documents`)
@@ -802,6 +803,7 @@ async function fileToPickerData({
       name: filename,
       type: "file",
       ...metadata,
+      ...publicOriginalPdfMetadata(metadata),
       cached: cachedStatus,
       canWatch: liveSyncAvailable
         ? DocumentSyncQueue.canWatch(metadata)
@@ -852,6 +854,7 @@ async function fileToPickerData({
     name: filename,
     type: "file",
     ...metadata,
+    ...publicOriginalPdfMetadata(metadata),
     cached: cachedStatus,
     canWatch: liveSyncAvailable ? DocumentSyncQueue.canWatch(metadata) : false,
   };

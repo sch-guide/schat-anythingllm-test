@@ -299,7 +299,14 @@ export default function handleSocketResponse(socket, event, setChatHistory) {
                 ? {
                     ...msg,
                     type: "textResponse",
-                    content: msg.content + content,
+                    // A status event can reuse the final answer UUID. It is
+                    // execution telemetry, not an answer prefix, so the first
+                    // visible chunk must replace it instead of concatenating
+                    // strings such as "undefined: Found ... context".
+                    content:
+                      msg.type === "statusResponse"
+                        ? content
+                        : msg.content + content,
                   }
                 : msg?.content
                   ? msg

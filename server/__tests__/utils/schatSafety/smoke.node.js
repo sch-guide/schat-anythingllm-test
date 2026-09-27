@@ -142,11 +142,11 @@ async function main() {
     "/app/server/utils/chats/stream.js",
     "utf8"
   );
-  const gatePosition = streamSource.indexOf("SCHAT_SAFETY_ENABLED");
+  const gatePosition = streamSource.indexOf("SCHAT_SAFETY_GATE_ENABLED");
   const streamingPosition = streamSource.indexOf("streamGetChatCompletion", gatePosition);
   assert.ok(gatePosition >= 0);
   assert.ok(streamingPosition > gatePosition);
-  assert.match(streamSource.slice(gatePosition, streamingPosition), /runSafetyGatedCompletion/);
+  assert.match(streamSource.slice(gatePosition, streamingPosition), /runSchatCompletion/);
 
   console.log("SCHAT safety smoke tests: PASS");
 }

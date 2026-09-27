@@ -1,6 +1,7 @@
 import PreLoader from "@/components/Preloader";
 import WorkspaceFileRow from "./WorkspaceFileRow";
-import { memo, useEffect, useState } from "react";
+import OriginalPdfRow from "./OriginalPdfRow";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import Modal, {
   ModalHeader,
   ModalBody,
@@ -20,11 +21,18 @@ import { SEEN_DOC_PIN_ALERT, SEEN_WATCH_ALERT } from "@/utils/constants";
 import paths from "@/utils/paths";
 import { Link } from "react-router-dom";
 import Workspace from "@/models/workspace";
+import Checklist from "@/models/checklist";
 import { Tooltip } from "react-tooltip";
 import { safeJsonParse } from "@/utils/request";
 import { useTranslation } from "react-i18next";
 import { middleTruncate } from "@/utils/directories";
 import { useEmbeddingProgress } from "@/EmbeddingProgressContext";
+import {
+  buildOriginalDocumentRows,
+  workspaceDocumentSummary,
+  getOriginalDocumentSelectionState,
+  toggleOriginalDocumentSelection,
+} from "./workspaceDocumentPresentation";
 
 function WorkspaceDirectory({
   workspace,
@@ -43,9 +51,27 @@ function WorkspaceDirectory({
   const { embeddingProgressMap, removeQueuedFile } = useEmbeddingProgress();
   const embeddingProgress = embeddingProgressMap[workspace.slug] || null;
   const [selectedItems, setSelectedItems] = useState({});
-  const embeddedDocCount = (files?.items ?? []).reduce(
-    (sum, folder) => sum + (folder.items?.length ?? 0),
-    0
+  const [checklists, setChecklists] = useState([]);
+  const loadChecklists = useCallback(async () => {
+    setChecklists(await Checklist.list(workspace.slug, { scope: "admin" }));
+  }, [workspace.slug]);
+
+  useEffect(() => {
+    loadChecklists();
+  }, [loadChecklists]);
+  const documentSummary = useMemo(
+    () =>
+      workspaceDocumentSummary(
+        buildOriginalDocumentRows(
+          (files?.items ?? []).flatMap((folder) =>
+            (folder.items ?? []).map((item) => ({
+              item,
+              folderName: folder.name,
+            }))
+          )
+        )
+      ),
+    [files]
   );
 
   const toggleSelection = (item) => {
@@ -72,6 +98,12 @@ function WorkspaceDirectory({
       });
       setSelectedItems(newSelectedItems);
     }
+  };
+
+  const toggleOriginalDocument = (row) => {
+    setSelectedItems((current) =>
+      toggleOriginalDocumentSelection(row, current)
+    );
   };
 
   const removeSelectedItems = async () => {
@@ -219,11 +251,10 @@ function WorkspaceDirectory({
                 )}
                 <p className="ml-[7px] text-theme-text-primary">Name</p>
               </div>
-              {embeddedDocCount > 0 && (
-                <p className="col-span-2 text-right text-theme-text-secondary pr-2">
-                  {t(`connectors.directory.total-documents`, {
-                    count: embeddedDocCount,
-                  })}
+              {documentSummary.documents > 0 && (
+                <p className="col-span-2 text-right text-theme-text-secondary pr-2 whitespace-nowrap">
+                  등록 문서 {documentSummary.documents}개 · 총{" "}
+                  {documentSummary.pages.toLocaleString("ko-KR")}쪽
                 </p>
               )}
             </div>
@@ -235,23 +266,42 @@ function WorkspaceDirectory({
                   movedItems={movedItems}
                   workspace={workspace}
                 >
-                  {({ item, folder }) => (
-                    <WorkspaceFileRow
-                      key={item.id}
-                      item={item}
-                      folderName={folder.name}
-                      workspace={workspace}
-                      setLoading={setLoading}
-                      setLoadingMessage={setLoadingMessage}
-                      fetchKeys={fetchKeys}
-                      hasChanges={hasChanges}
-                      movedItems={movedItems}
-                      selected={selectedItems[item.id]}
-                      toggleSelection={() => toggleSelection(item)}
-                      disableSelection={hasChanges}
-                      setSelectedItems={setSelectedItems}
-                    />
-                  )}
+                  {(row) =>
+                    row.kind === "pdf" ? (
+                      <OriginalPdfRow
+                        key={row.key}
+                        row={row}
+                        selectionState={getOriginalDocumentSelectionState(
+                          row,
+                          selectedItems
+                        )}
+                        toggleSelection={() => toggleOriginalDocument(row)}
+                        disableSelection={hasChanges}
+                        workspaceSlug={workspace.slug}
+                        onOriginalLinked={() => fetchKeys(true)}
+                        checklists={checklists.filter(
+                          (checklist) => checklist.source?.pdfRef === row.pdfRef
+                        )}
+                        onChecklistUpdated={loadChecklists}
+                      />
+                    ) : (
+                      <WorkspaceFileRow
+                        key={row.entry.item.id}
+                        item={row.entry.item}
+                        folderName={row.entry.folder.name}
+                        workspace={workspace}
+                        setLoading={setLoading}
+                        setLoadingMessage={setLoadingMessage}
+                        fetchKeys={fetchKeys}
+                        hasChanges={hasChanges}
+                        movedItems={movedItems}
+                        selected={selectedItems[row.entry.item.id]}
+                        toggleSelection={() => toggleSelection(row.entry.item)}
+                        disableSelection={hasChanges}
+                        setSelectedItems={setSelectedItems}
+                      />
+                    )
+                  }
                 </RenderFileRows>
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
@@ -429,27 +479,34 @@ const DocumentWatchAlert = memo(() => {
 
 function RenderFileRows({ files, movedItems, children, workspace }) {
   function sortMovedItemsAndFiles(a, b) {
-    const aIsMovedItem = movedItems.some((movedItem) => movedItem.id === a.id);
-    const bIsMovedItem = movedItems.some((movedItem) => movedItem.id === b.id);
+    const aItem = a.item;
+    const bItem = b.item;
+    const aIsMovedItem = movedItems.some(
+      (movedItem) => movedItem.id === aItem.id
+    );
+    const bIsMovedItem = movedItems.some(
+      (movedItem) => movedItem.id === bItem.id
+    );
     if (aIsMovedItem && !bIsMovedItem) return -1;
     if (!aIsMovedItem && bIsMovedItem) return 1;
 
     // Sort pinned items to the top
-    const aIsPinned = a.pinnedWorkspaces?.includes(workspace.id);
-    const bIsPinned = b.pinnedWorkspaces?.includes(workspace.id);
+    const aIsPinned = aItem.pinnedWorkspaces?.includes(workspace.id);
+    const bIsPinned = bItem.pinnedWorkspaces?.includes(workspace.id);
     if (aIsPinned && !bIsPinned) return -1;
     if (!aIsPinned && bIsPinned) return 1;
 
     return 0;
   }
 
-  return files.items
-    .flatMap((folder) => folder.items)
+  const entries = files.items
+    .flatMap((folder) =>
+      folder.items.map((item) => ({ item, folder, folderName: folder.name }))
+    )
     .sort(sortMovedItemsAndFiles)
-    .map((item) => {
-      const folder = files.items.find((f) => f.items.includes(item));
-      return children({ item, folder });
-    });
+    .map(({ item, folder, folderName }) => ({ item, folder, folderName }));
+
+  return buildOriginalDocumentRows(entries).map(children);
 }
 
 /**

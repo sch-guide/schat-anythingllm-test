@@ -39,3 +39,28 @@ describe("DocumentSyncQueue.defaultStaleAfter", () => {
     expect(DocumentSyncQueue.defaultStaleAfter).toBe(DEFAULT_STALE_AFTER);
   });
 });
+
+describe("DocumentSyncQueue.canWatch", () => {
+  it("keeps generic link documents watchable", () => {
+    expect(
+      DocumentSyncQueue.canWatch({
+        title: "example.html",
+        chunkSource: "link://https://example.com",
+      })
+    ).toBe(true);
+  });
+
+  it.each([
+    "youtube://video",
+    "confluence://page",
+    "github://file",
+    "gitlab://file",
+    "gitea://file",
+    "drupalwiki://page",
+    "paperless-ngx://document",
+  ])("does not watch removed connector source %s", (chunkSource) => {
+    expect(
+      DocumentSyncQueue.canWatch({ title: "connector-document", chunkSource })
+    ).toBe(false);
+  });
+});

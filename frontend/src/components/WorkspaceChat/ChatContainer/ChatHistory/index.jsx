@@ -1,4 +1,4 @@
-import { useMemo, useCallback, forwardRef } from "react";
+import { useMemo, useCallback, forwardRef, useEffect, useState } from "react";
 import HistoricalMessage from "./HistoricalMessage";
 import PromptReply from "./PromptReply";
 import StatusResponse from "./StatusResponse";
@@ -26,6 +26,10 @@ import {
   THOUGHT_REGEX_COMPLETE,
 } from "./ThoughtContainer";
 import { MessageActionsProvider } from "./MessageActionsContext";
+import Checklist from "@/models/checklist";
+import { matchChecklists } from "@/utils/checklistMatcher";
+import ChecklistFloatingPanel from "./Checklist/ChecklistFloatingPanel";
+import { openChecklistPopup } from "@/utils/checklistPopup";
 
 export default forwardRef(function (
   {
@@ -45,6 +49,56 @@ export default forwardRef(function (
   const { showing, hideModal } = useManageWorkspaceModal();
   const { showScrollbar } = Appearance.getSettings();
   const { textSizeClass } = useTextSize();
+  const [checklists, setChecklists] = useState([]);
+  // Open panels in stacking order (last = front) and every panel opened on
+  // this screen, so closing with X keeps each checklist's own state for reuse.
+  const [openChecklistIds, setOpenChecklistIds] = useState([]);
+  const [mountedChecklistIds, setMountedChecklistIds] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    Checklist.list(workspace?.slug).then((items) => {
+      if (active) setChecklists(items);
+    });
+    return () => {
+      active = false;
+    };
+  }, [workspace?.slug]);
+
+  const popOutChecklist = useCallback(
+    (checklistId) => openChecklistPopup(workspace?.slug, checklistId),
+    [workspace?.slug]
+  );
+  const openChecklist = useCallback(
+    (checklistId, mode = "panel") => {
+      if (mode === "window") {
+        popOutChecklist(checklistId);
+        return;
+      }
+      setMountedChecklistIds((ids) =>
+        ids.includes(checklistId) ? ids : [...ids, checklistId]
+      );
+      setOpenChecklistIds((ids) => [
+        ...ids.filter((id) => id !== checklistId),
+        checklistId,
+      ]);
+    },
+    [popOutChecklist]
+  );
+  const focusChecklist = useCallback(
+    (checklistId) =>
+      setOpenChecklistIds((ids) =>
+        ids[ids.length - 1] === checklistId
+          ? ids
+          : [...ids.filter((id) => id !== checklistId), checklistId]
+      ),
+    []
+  );
+  const closeChecklist = useCallback(
+    (checklistId) =>
+      setOpenChecklistIds((ids) => ids.filter((id) => id !== checklistId)),
+    []
+  );
 
   const saveEditedMessage = useCallback(
     async ({
@@ -138,6 +192,8 @@ export default forwardRef(function (
         saveEditedMessage,
         forkThread,
         websocket,
+        checklists,
+        onOpenChecklist: openChecklist,
       }),
     [
       workspace,
@@ -146,6 +202,8 @@ export default forwardRef(function (
       saveEditedMessage,
       forkThread,
       websocket,
+      checklists,
+      openChecklist,
     ]
   );
   // A chain stays animated while the run feeding it is still live: an open
@@ -156,23 +214,9 @@ export default forwardRef(function (
   // running, next status not yet arrived).
   const isLastMessageAnimating = !!history?.[history.length - 1]?.animate;
   const runIsLive = !!websocket || isLastMessageAnimating;
-  const renderStatusResponse = useCallback(
-    (item, index) => {
-      const hasSubsequentMessages = index < compiledHistory.length - 1;
-      return (
-        <StatusResponse
-          // Keyed by the first node so a chain keeps its own client-side
-          // timing state when items above it are removed (regenerate, the
-          // content-less message sweeps) and compiled indexes shift.
-          key={item[0]?.uuid ?? `status-group-${index}`}
-          messages={item}
-          isLastGroup={!hasSubsequentMessages}
-          isThinking={!hasSubsequentMessages && runIsLive}
-        />
-      );
-    },
-    [compiledHistory.length, runIsLive]
-  );
+  const answerHasStarted = hasVisibleAssistantAnswer(history);
+  const isWaitingForAnswer = runIsLive && !answerHasStarted;
+  const latestUserTurnKey = latestUserMessageKey(history);
 
   return (
     <MessageActionsProvider>
@@ -184,9 +228,11 @@ export default forwardRef(function (
           {...scrollHandlers}
         >
           <div className="w-full max-w-[750px]">
-            {compiledHistory.map((item, index) =>
-              Array.isArray(item) ? renderStatusResponse(item, index) : item
-            )}
+            {compiledHistory.map((item) => (Array.isArray(item) ? null : item))}
+            <StatusResponse
+              key={latestUserTurnKey}
+              isThinking={isWaitingForAnswer}
+            />
           </div>
           {showing && (
             <ManageWorkspace
@@ -207,10 +253,57 @@ export default forwardRef(function (
             </div>
           </div>
         )}
+        {mountedChecklistIds.map((checklistId, mountIndex) => {
+          const checklist = checklists.find((item) => item.id === checklistId);
+          const stackIndex = openChecklistIds.indexOf(checklistId);
+          return (
+            <ChecklistFloatingPanel
+              key={checklistId}
+              checklist={checklist}
+              isOpen={Boolean(checklist) && stackIndex >= 0}
+              zIndex={115 + Math.max(stackIndex, 0)}
+              cascadeIndex={mountIndex}
+              onClose={() => closeChecklist(checklistId)}
+              onFocus={focusChecklist}
+              onPopOut={popOutChecklist}
+            />
+          );
+        })}
       </ThoughtExpansionProvider>
     </MessageActionsProvider>
   );
 });
+
+function hasVisibleAssistantAnswer(history = []) {
+  const lastUserIndex = latestUserMessageIndex(history);
+
+  return history.slice(lastUserIndex + 1).some((message) => {
+    if (
+      message?.role !== "assistant" ||
+      typeof message.content !== "string" ||
+      message.type === "statusResponse" ||
+      message.type === "toolCallInvocation"
+    )
+      return false;
+
+    return (
+      message.content.replace(THOUGHT_REGEX_COMPLETE, "").trim().length > 0
+    );
+  });
+}
+
+function latestUserMessageKey(history = []) {
+  const index = latestUserMessageIndex(history);
+  const message = history[index];
+  return message?.uuid || message?.chatId || `user-turn-${index}`;
+}
+
+function latestUserMessageIndex(history = []) {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    if (history[index]?.role === "user") return index;
+  }
+  return -1;
+}
 
 /**
  * Builds the history of messages for the chat.
@@ -234,10 +327,21 @@ function buildMessages({
   saveEditedMessage,
   forkThread,
   websocket,
+  checklists = [],
+  onOpenChecklist,
 }) {
   return history.reduce((acc, props, index) => {
     const isLastBotReply =
       index === history.length - 1 && props.role === "assistant";
+    const matchedChecklists =
+      props.role === "assistant"
+        ? matchChecklists(questionForAssistant(history, index), checklists)
+        : [];
+    const citationQuestion =
+      props.role === "assistant" ? questionForAssistant(history, index) : "";
+    const citationAliases = matchedChecklists.flatMap(
+      (checklist) => checklist.aliases || []
+    );
 
     if (props?.type === "statusResponse" && !!props.content) {
       pushActivity(acc, props);
@@ -330,6 +434,13 @@ function buildMessages({
             reply={props.content}
             pending={props.pending}
             sources={props.sources}
+            presentation={props.presentation}
+            relatedImages={props.relatedImages}
+            checklists={matchedChecklists}
+            onOpenChecklist={onOpenChecklist}
+            citationQuestion={citationQuestion}
+            citationAliases={citationAliases}
+            workspaceSlug={workspace?.slug}
             error={props.error}
             closed={props.closed}
           />
@@ -343,6 +454,12 @@ function buildMessages({
             role={props.role}
             workspace={workspace}
             sources={props.sources}
+            presentation={props.presentation}
+            relatedImages={props.relatedImages}
+            checklists={matchedChecklists}
+            onOpenChecklist={onOpenChecklist}
+            citationQuestion={citationQuestion}
+            citationAliases={citationAliases}
             feedbackScore={props.feedbackScore}
             chatId={props.chatId}
             error={props.error}
@@ -360,6 +477,13 @@ function buildMessages({
     }
     return acc;
   }, []);
+}
+
+function questionForAssistant(history, assistantIndex) {
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    if (history[index]?.role === "user") return history[index]?.content || "";
+  }
+  return "";
 }
 
 /**

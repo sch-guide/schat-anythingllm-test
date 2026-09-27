@@ -278,6 +278,23 @@ const Workspace = {
     const data = await response.json();
     return { response, data };
   },
+  linkOriginalPdf: async function (slug, pdfRef, file) {
+    const formData = new FormData();
+    formData.append("file", file, file.name);
+    const response = await fetch(
+      `${API_BASE}/workspace/${encodeURIComponent(slug)}/original-pdf/${encodeURIComponent(pdfRef)}`,
+      {
+        method: "POST",
+        body: formData,
+        headers: baseHeaders(),
+      }
+    );
+    const data = await response.json().catch(() => ({
+      success: false,
+      error: "Failed to link the original PDF.",
+    }));
+    return { response, data };
+  },
   parseFile: async function (slug, formData) {
     const response = await fetch(`${API_BASE}/workspace/${slug}/parse`, {
       method: "POST",

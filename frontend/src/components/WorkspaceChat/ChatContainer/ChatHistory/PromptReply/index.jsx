@@ -9,33 +9,29 @@ import {
   THOUGHT_REGEX_COMPLETE,
   THOUGHT_REGEX_OPEN,
 } from "../ThoughtContainer";
+import ProcedurePresentation from "../ProcedurePresentation";
+import { buildProcedurePresentationModel } from "@/utils/schatPresentation";
+import RelatedImages from "../RelatedImages";
+import ChecklistLauncher from "../Checklist/ChecklistLauncher";
 
-const PromptReply = ({ uuid, reply, pending, error, sources = [] }) => {
+const PromptReply = ({
+  uuid,
+  reply,
+  pending,
+  error,
+  sources = [],
+  presentation = null,
+  relatedImages = [],
+  checklists = [],
+  onOpenChecklist,
+  citationQuestion = "",
+  citationAliases = [],
+  workspaceSlug,
+}) => {
   const { t } = useTranslation();
   if (!reply && sources.length === 0 && !pending && !error) return null;
 
-  if (pending) {
-    return (
-      <div className="flex justify-start w-full">
-        <div className="py-4 pl-0 pr-4 flex flex-col md:max-w-[80%]">
-          {/*
-            The animation below is the only signal that a reply is coming, and it
-            is purely visual. The status region gives a screen reader user the
-            same information. It carries the text rather than wrapping the
-            animation so that it announces once, on appearance, instead of on
-            every repaint.
-          */}
-          <span className="sr-only" role="status">
-            {t("chat_window.generating_response")}
-          </span>
-          <div
-            className="mt-3 ml-1 dot-falling light:invert"
-            aria-hidden="true"
-          ></div>
-        </div>
-      </div>
-    );
-  }
+  if (pending) return null;
 
   if (error) {
     return (
@@ -63,14 +59,36 @@ const PromptReply = ({ uuid, reply, pending, error, sources = [] }) => {
     );
   }
 
+  const procedureModel = buildProcedurePresentationModel(presentation, sources);
+
   return (
     <div key={uuid} className="flex justify-start w-full">
       <div className="py-4 pl-0 pr-4 flex flex-col w-full">
-        <RenderAssistantChatContent
-          key={`${uuid}-prompt-reply-content`}
-          message={reply}
+        {procedureModel ? (
+          <ProcedurePresentation
+            presentation={presentation}
+            sources={sources}
+          />
+        ) : (
+          <div className="w-full max-w-[780px] leading-[1.7]">
+            <RenderAssistantChatContent
+              key={`${uuid}-prompt-reply-content`}
+              message={reply}
+            />
+          </div>
+        )}
+        <ChecklistLauncher
+          checklists={checklists}
+          onOpenChecklist={onOpenChecklist}
         />
-        <Citations sources={sources} />
+        <Citations
+          sources={sources}
+          workspaceSlug={workspaceSlug}
+          question={citationQuestion}
+          answer={reply}
+          aliases={citationAliases}
+        />
+        <RelatedImages images={relatedImages} workspaceSlug={workspaceSlug} />
       </div>
     </div>
   );

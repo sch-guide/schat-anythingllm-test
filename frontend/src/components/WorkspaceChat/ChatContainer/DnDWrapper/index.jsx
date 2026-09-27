@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, createContext, useContext, useRef } from "react";
 import { v4 } from "uuid";
 import System from "@/models/system";
 import { useDropzone } from "react-dropzone";
@@ -7,6 +7,8 @@ import Workspace from "@/models/workspace";
 import showToast from "@/utils/toast";
 import FileUploadWarningModal from "./FileUploadWarningModal";
 import pluralize from "pluralize";
+import { validateSchatImageFile } from "@/utils/schatImageAttachment";
+import { SCHAT_TEXT_ONLY_INPUT } from "@/utils/schatUi";
 
 export const DndUploaderContext = createContext();
 export const REMOVE_ATTACHMENT_EVENT = "ATTACHMENT_REMOVE";
@@ -54,6 +56,11 @@ export function DnDFileUploaderProvider({
   const [pendingFiles, setPendingFiles] = useState([]);
   const [tokenCount, setTokenCount] = useState(0);
   const [maxTokens, setMaxTokens] = useState(Number.POSITIVE_INFINITY);
+  const filesRef = useRef([]);
+
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
 
   useEffect(() => {
     System.checkDocumentProcessorOnline().then((status) => setReady(status));
@@ -148,8 +155,16 @@ export function DnDFileUploaderProvider({
     const { files = [], storageFilename = null } = event.detail;
     if (!files.length) return;
     const newAccepted = [];
+    let imageCount = filesRef.current.filter(
+      (item) => item.type === "attachment"
+    ).length;
     for (const file of files) {
-      if (file.type.startsWith("image/")) {
+      const imageValidation = validateSchatImageFile(file, imageCount);
+      if (imageValidation.error) {
+        showToast(imageValidation.error, "error");
+        continue;
+      }
+      if (imageValidation.isImage) {
         newAccepted.push({
           uid: v4(),
           file,
@@ -159,6 +174,7 @@ export function DnDFileUploaderProvider({
           type: "attachment",
           ...(storageFilename && { storageFilename }),
         });
+        imageCount += 1;
       } else {
         newAccepted.push({
           uid: v4(),
@@ -184,8 +200,16 @@ export function DnDFileUploaderProvider({
 
     /** @type {Attachment[]} */
     const newAccepted = [];
+    let imageCount = filesRef.current.filter(
+      (item) => item.type === "attachment"
+    ).length;
     for (const file of acceptedFiles) {
-      if (file.type.startsWith("image/")) {
+      const imageValidation = validateSchatImageFile(file, imageCount);
+      if (imageValidation.error) {
+        showToast(imageValidation.error, "error");
+        continue;
+      }
+      if (imageValidation.isImage) {
         newAccepted.push({
           uid: v4(),
           file,
@@ -194,6 +218,7 @@ export function DnDFileUploaderProvider({
           error: null,
           type: "attachment",
         });
+        imageCount += 1;
       } else {
         newAccepted.push({
           uid: v4(),
@@ -206,6 +231,7 @@ export function DnDFileUploaderProvider({
       }
     }
 
+    if (newAccepted.length === 0) return;
     setFiles((prev) => [...prev, ...newAccepted]);
     embedEligibleAttachments(newAccepted);
   }
@@ -427,7 +453,7 @@ export default function DnDFileUploaderWrapper({ children }) {
     useContext(DndUploaderContext);
   const { getRootProps, getInputProps } = useDropzone({
     onDrop,
-    disabled: !ready,
+    disabled: !ready || SCHAT_TEXT_ONLY_INPUT,
     noClick: true,
     noKeyboard: true,
     onDragEnter: () => setDragging(true),

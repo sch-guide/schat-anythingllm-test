@@ -590,8 +590,11 @@ class Provider {
   static async systemPrompt({ workspace = null, user = null, prompt = "" }) {
     const { SystemSettings } = require("../../../../models/systemSettings");
     const { promptWithMemories } = require("../../../memories");
+    // A workspace without its own prompt inherits the admin Default System Prompt.
     const basePrompt =
-      workspace?.openAiPrompt ?? SystemSettings.saneDefaultSystemPrompt;
+      workspace?.openAiPrompt ??
+      (await SystemSettings.effectiveDefaultSystemPrompt?.()) ??
+      SystemSettings.saneDefaultSystemPrompt;
     const systemPrompt =
       await SystemPromptVariables.expandSystemPromptVariables(
         basePrompt,

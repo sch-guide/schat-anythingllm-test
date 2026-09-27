@@ -22,6 +22,9 @@ python 문서도구/문서화면_만들기.py
 python 검사/문서화면_분리_검사.py
 ```
 
+- `문서화면_만들기.py`는 저장소 설정을 정적으로 확인해 `docs_view/schat-overview-data.json`과 비개발자용 `docs_view/index.html`을 함께 갱신한다.
+- frontend 개발·production build와 저장소의 `.githooks/pre-commit`에서도 같은 갱신을 비차단 방식으로 실행한다. 자동 갱신에 실패해도 앱 실행·build·commit을 막지 않으며, 작업 완료 전 위 두 명령으로 최종 결과를 확인한다.
+
 - `docs/`를 이 저장소의 공식 문서 정본으로 사용한다.
 - `docs_view/`는 생성된 열람용 화면이므로 직접 고치지 않는다.
 - 확인되지 않은 결과를 완료로 기록하지 않는다.

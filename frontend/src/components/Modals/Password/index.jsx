@@ -7,16 +7,15 @@ import {
   AUTH_USER,
   AUTH_TIMESTAMP,
 } from "../../../utils/constants";
-import useLogo from "../../../hooks/useLogo";
+import SchLogo from "@/components/SchLogo";
 
 export default function PasswordModal({ mode = "single" }) {
-  const { loginLogo, isCustomLogo } = useLogo();
   return (
     <div className="schat-login fixed inset-0 flex items-center justify-center overflow-auto">
       <main className="schat-login__shell">
         <section className="schat-login__brand" aria-label="서비스 소개">
           <div className="schat-login__hospital">
-            <span className="schat-login__mark">SCH</span>
+            <SchLogo className="schat-login__mark" />
             <span>순천향대학교 부속 천안병원</span>
           </div>
           <div>
@@ -33,12 +32,10 @@ export default function PasswordModal({ mode = "single" }) {
           </div>
         </section>
         <section className="schat-login__form">
-          <img
-            src={loginLogo}
-            alt="병원 실무지침 AI"
-            className={`schat-login__logo ${isCustomLogo ? "rounded-lg" : ""}`}
-            style={{ objectFit: "contain" }}
-          />
+          <div className="schat-login__product">
+            <SchLogo className="schat-login__product-mark" />
+            <span>병원 실무지침 AI</span>
+          </div>
           {mode === "single" ? <SingleUserAuth /> : <MultiUserAuth />}
         </section>
       </main>

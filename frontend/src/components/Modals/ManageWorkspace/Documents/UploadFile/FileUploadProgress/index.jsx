@@ -61,7 +61,10 @@ function FileUploadProgressComponent({
       } else {
         setStatus("complete");
       }
-      onSettled?.();
+      onSettled?.({
+        success: response.ok,
+        docpaths: response.ok ? (data.docpaths ?? []) : [],
+      });
 
       // Let the result sit for a beat, fade it, then drop it from the queue.
       track(

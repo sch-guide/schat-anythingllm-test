@@ -1,0 +1,25 @@
+{
+  "statements": [
+    {
+      "statement_index": 0,
+      "text": "진정 QSED 처방을 확인한다.",
+      "supporting_source_unit_ids": [
+        "su001"
+      ]
+    },
+    {
+      "statement_index": 1,
+      "text": "계획한 진정 치료에 대해 설명하고 진정 동의서를 받는다.",
+      "supporting_source_unit_ids": [
+        "su002"
+      ]
+    },
+    {
+      "statement_index": 2,
+      "text": "진정 중 응급상황 발생 시 일차적인 처치 방법 및 연락처 등을 진정기록지에 기록한다.",
+      "supporting_source_unit_ids": [
+        "su003"
+      ]
+    }
+  ]
+}

@@ -9,6 +9,10 @@ const {
   searchDocuments,
   getDocumentsByDocPaths,
 } = require("../utils/files");
+const {
+  validateUploadLookupDocpaths,
+  toPublicUploadPickerDocument,
+} = require("../utils/files/uploadBatch");
 const { purgeDocument, purgeFolder } = require("../utils/files/purgeDocument");
 const { getVectorDbClass } = require("../utils/helpers");
 const { updateENV, dumpENV } = require("../utils/helpers/updateENV");
@@ -214,7 +218,9 @@ function systemEndpoints(app) {
         const { username, password } = reqBody(request);
         const existingUser = await User._get({ username: String(username) });
 
-        if (!existingUser) {
+        // SCHAT: accounts with an employee number sign in with
+        // department/number/name only, so they are unknown to this form.
+        if (!existingUser || existingUser.employee_number) {
           await EventLogs.logEvent(
             "failed_login_invalid_username",
             {
@@ -283,6 +289,9 @@ function systemEndpoints(app) {
           existingUser?.id
         );
 
+        await User._update(existingUser.id, { last_login_at: new Date() }).catch(
+          () => null
+        );
         // Generate a session token for the user then check if they have seen the recovery codes
         // and if not, generate recovery codes and return them to the frontend.
         const sessionToken = makeJWT(
@@ -548,6 +557,30 @@ function systemEndpoints(app) {
         const { docpaths = [] } = reqBody(request);
         const documents = await getDocumentsByDocPaths(docpaths);
         response.status(200).json({ documents });
+      } catch (e) {
+        console.error(e.message, e);
+        response.sendStatus(500).end();
+      }
+    }
+  );
+
+  app.post(
+    "/system/local-files/upload-batch",
+    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    async (request, response) => {
+      try {
+        const lookup = validateUploadLookupDocpaths(reqBody(request)?.docpaths);
+        if (!lookup.ok)
+          return response
+            .status(lookup.code)
+            .json({ documents: [], error: "Invalid upload batch." });
+
+        const documents = await getDocumentsByDocPaths(lookup.docpaths);
+        response.status(200).json({
+          documents: documents
+            .map(toPublicUploadPickerDocument)
+            .filter(Boolean),
+        });
       } catch (e) {
         console.error(e.message, e);
         response.sendStatus(500).end();

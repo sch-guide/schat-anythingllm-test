@@ -7,7 +7,17 @@ const { toChunks, getEmbeddingEngineSelection } = require("../../helpers");
 const { parseAuthHeader } = require("../../http");
 const { sourceIdentifier } = require("../../chats");
 const { VectorDatabase } = require("../base");
-const { rankByBm25, fuseGeminiAndBm25 } = require("./schatBm25");
+const {
+  rankByBm25,
+  fuseGeminiAndBm25,
+  addHeadingContinuationCandidates,
+  addProcedureWorkflowCandidates,
+  evidenceResultLimit,
+  limitImageDescriptionCandidates,
+} = require("./schatBm25");
+const {
+  buildImageDescriptionChunks,
+} = require("./imageDescriptionChunks");
 const { attachVectorIdentity } = require("./sourceIdentity");
 const {
   SCHAT_CHUNK_SIZE,
@@ -143,6 +153,9 @@ class Chroma extends VectorDatabase {
     namespace,
     queryVector,
     queryText = "",
+    relatedImageQueryVector = queryVector,
+    relatedImageQueryText = queryText,
+    includeRelatedImages = true,
     similarityThreshold = 0.25,
     topN = 4,
     filterIdentifiers = [],
@@ -156,29 +169,76 @@ class Chroma extends VectorDatabase {
       nResults: candidateLimit,
     });
 
-    const vectorRanked = [];
-    response.ids[0].forEach((id, i) => {
-      if (!isEmployeeSearchDocument(response.metadatas[0][i])) return;
-      const similarity = this.distanceToSimilarity(response.distances[0][i]);
-      if (similarity < similarityThreshold) return;
-      if (
-        filterIdentifiers.includes(sourceIdentifier(response.metadatas[0][i]))
-      ) {
-        this.logger(
-          "A source was filtered from context as it's parent document is pinned."
-        );
-        return;
-      }
-      vectorRanked.push({
-        id,
-        text: response.documents[0][i],
-        metadata: response.metadatas[0][i],
-        vectorScore: similarity,
-        corpusPosition: i,
-      });
-    });
+    const relatedImageResponse = includeRelatedImages
+      ? relatedImageQueryText === queryText
+        ? response
+        : await collection.query({
+            queryEmbeddings: relatedImageQueryVector,
+            nResults: candidateLimit,
+          })
+      : null;
 
-    let fused = vectorRanked.slice(0, topN);
+    const rankedFromResponse = (queryResponse) => {
+      const ranked = [];
+      queryResponse.ids[0].forEach((id, i) => {
+        if (!isEmployeeSearchDocument(queryResponse.metadatas[0][i])) return;
+        const similarity = this.distanceToSimilarity(
+          queryResponse.distances[0][i]
+        );
+        if (similarity < similarityThreshold) return;
+        if (
+          filterIdentifiers.includes(
+            sourceIdentifier(queryResponse.metadatas[0][i])
+          )
+        ) {
+          this.logger(
+            "A source was filtered from context as it's parent document is pinned."
+          );
+          return;
+        }
+        ranked.push({
+          id,
+          text: queryResponse.documents[0][i],
+          metadata: queryResponse.metadatas[0][i],
+          vectorScore: similarity,
+          corpusPosition: i,
+        });
+      });
+      return ranked;
+    };
+    const vectorRanked = rankedFromResponse(response);
+    const relatedImageVectorRanked = includeRelatedImages
+      ? rankedFromResponse(relatedImageResponse)
+      : [];
+
+    // Keep the same evidence threshold even if the BM25 supplement becomes
+    // unavailable. A keyword-side failure must not turn weak vector matches
+    // into employee-visible evidence.
+    let fused = fuseGeminiAndBm25(vectorRanked, [], {
+      topN,
+      vectorWeight: 0.75,
+      bm25Weight: 0.25,
+      queryText,
+      maxImageResults: 1,
+    });
+    let relatedImageSources = includeRelatedImages
+      ? fuseGeminiAndBm25(relatedImageVectorRanked, [], {
+          topN: candidateLimit,
+          vectorWeight: 0.75,
+          bm25Weight: 0.25,
+          queryText: relatedImageQueryText,
+          maxImageResults: 3,
+        })
+          .filter(
+            (candidate) =>
+              candidate?.metadata?.content_type === "image_description"
+          )
+          .map((candidate) => ({
+            ...candidate.metadata,
+            id: candidate.id,
+            text: candidate.text,
+          }))
+      : [];
     try {
       const stored = await collection.get({
         include: ["documents", "metadatas"],
@@ -200,10 +260,54 @@ class Chroma extends VectorDatabase {
         0,
         candidateLimit
       );
+      const relatedImageBm25Ranked = includeRelatedImages
+        ? relatedImageQueryText === queryText
+          ? bm25Ranked
+          : rankByBm25(relatedImageQueryText, corpusDocuments).slice(
+              0,
+              candidateLimit
+            )
+        : [];
       fused = fuseGeminiAndBm25(vectorRanked, bm25Ranked, {
         topN,
         vectorWeight: 0.75,
         bm25Weight: 0.25,
+        queryText,
+        maxImageResults: 1,
+      });
+      relatedImageSources = includeRelatedImages
+        ? fuseGeminiAndBm25(
+            relatedImageVectorRanked,
+            relatedImageBm25Ranked,
+            {
+              topN: candidateLimit,
+              vectorWeight: 0.75,
+              bm25Weight: 0.25,
+              queryText: relatedImageQueryText,
+              maxImageResults: 3,
+            }
+          )
+            .filter(
+              (candidate) =>
+                candidate?.metadata?.content_type === "image_description"
+            )
+            .map((candidate) => ({
+              ...candidate.metadata,
+              id: candidate.id,
+              text: candidate.text,
+            }))
+        : [];
+      const evidenceTopN = evidenceResultLimit(queryText, topN);
+      fused = addHeadingContinuationCandidates(fused, corpusDocuments, {
+        queryText,
+        topN: evidenceTopN,
+      });
+      fused = addProcedureWorkflowCandidates(fused, corpusDocuments, {
+        queryText,
+        topN: evidenceTopN,
+      });
+      fused = limitImageDescriptionCandidates(fused, {
+        maxImageResults: 1,
       });
       this.logger(
         "SCHAT hybrid retrieval summary",
@@ -228,6 +332,10 @@ class Chroma extends VectorDatabase {
       );
     }
 
+    fused = limitImageDescriptionCandidates(fused, {
+      maxImageResults: 1,
+    });
+
     return {
       contextTexts: fused.map((candidate) => candidate.text),
       sourceDocuments: fused.map((candidate) => ({
@@ -238,6 +346,7 @@ class Chroma extends VectorDatabase {
         (candidate) =>
           candidate.retrieval?.fusionScore ?? candidate.vectorScore ?? 0
       ),
+      relatedImageSources,
     };
   }
 
@@ -284,8 +393,32 @@ class Chroma extends VectorDatabase {
   ) {
     const { DocumentVectors } = require("../../../models/vectors");
     try {
-      const { pageContent, docId, ...metadata } = documentData;
-      if (!pageContent || pageContent.length == 0) return false;
+      const {
+        pageContent = "",
+        docId,
+        pdf_images: pdfImages = [],
+        ...metadata
+      } = documentData;
+      const imageDescriptionChunks = buildImageDescriptionChunks({
+        images: pdfImages,
+        metadata,
+      });
+      if ((!pageContent || pageContent.length === 0) && imageDescriptionChunks.length === 0)
+        return false;
+
+      const relatedImageKeys = Array.from(
+        new Set(
+          (Array.isArray(pdfImages) ? pdfImages : [])
+            .map((image) => image?.image_key)
+            .filter((key) => /^[a-f0-9]{64}$/.test(String(key || "")))
+        )
+      );
+      const bodyMetadata = {
+        ...metadata,
+        ...(relatedImageKeys.length
+          ? { related_image_keys: JSON.stringify(relatedImageKeys) }
+          : {}),
+      };
 
       this.logger("Adding new vectorized document into namespace", namespace);
       // Include the clinical chunking policy in the cache key. This keeps the
@@ -338,7 +471,7 @@ class Chroma extends VectorDatabase {
       // because we then cannot atomically control our namespace to granularly find/remove documents
       // from vectordb.
       const EmbedderEngine = getEmbeddingEngineSelection();
-      const chunkPolicy = searchableChunkMetadata(metadata);
+      const chunkPolicy = searchableChunkMetadata(bodyMetadata);
       const chunkSize = Math.min(
         Number(
           await SystemSettings.getValueOrFallback(
@@ -361,12 +494,16 @@ class Chroma extends VectorDatabase {
         chunkHeaderMeta: chunkPolicy.chunkHeaderMeta,
         chunkPrefix: EmbedderEngine?.embeddingPrefix,
       });
-      const textChunks = await textSplitter.splitText(pageContent);
+      const textChunks = pageContent
+        ? await textSplitter.splitText(pageContent)
+        : [];
 
       this.logger("Snippets created from document:", textChunks.length);
       const documentVectors = [];
       const vectors = [];
-      const vectorValues = await EmbedderEngine.embedChunks(textChunks);
+      const vectorValues = textChunks.length
+        ? await EmbedderEngine.embedChunks(textChunks)
+        : [];
       const submission = {
         ids: [],
         embeddings: [],
@@ -376,24 +513,68 @@ class Chroma extends VectorDatabase {
 
       if (!!vectorValues && vectorValues.length > 0) {
         for (const [i, vector] of vectorValues.entries()) {
+          const storedChunkMetadata = searchableChunkMetadata(
+            bodyMetadata,
+            textChunks[i]
+          ).metadata;
           const vectorRecord = {
             id: uuidv4(),
             values: vector,
             // [DO NOT REMOVE]
             // LangChain will be unable to find your text if you embed manually and dont include the `text` key.
             // https://github.com/hwchase17/langchainjs/blob/2def486af734c0ca87285a48f1a04c057ab74bdf/langchain/src/vectorstores/pinecone.ts#L64
-            metadata: { ...metadata, text: textChunks[i] },
+            metadata: { ...storedChunkMetadata, text: textChunks[i] },
           };
 
           submission.ids.push(vectorRecord.id);
           submission.embeddings.push(vectorRecord.values);
-          submission.metadatas.push(metadata);
+          submission.metadatas.push(storedChunkMetadata);
           submission.documents.push(textChunks[i]);
 
           vectors.push(vectorRecord);
           documentVectors.push({ docId, vectorId: vectorRecord.id });
         }
-      } else {
+      } else if (textChunks.length > 0) {
+        throw new Error(
+          "Could not embed document chunks! This document will not be recorded."
+        );
+      }
+
+      if (imageDescriptionChunks.length > 0) {
+        try {
+          const imageVectors = await EmbedderEngine.embedChunks(
+            imageDescriptionChunks.map((chunk) => chunk.text)
+          );
+          if (Array.isArray(imageVectors)) {
+            for (const [index, vector] of imageVectors.entries()) {
+              const imageChunk = imageDescriptionChunks[index];
+              if (!imageChunk || !vector) continue;
+              const id = uuidv4();
+              const storedMetadata = searchableChunkMetadata(
+                imageChunk.metadata,
+                imageChunk.text
+              ).metadata;
+              submission.ids.push(id);
+              submission.embeddings.push(vector);
+              submission.metadatas.push(storedMetadata);
+              submission.documents.push(imageChunk.text);
+              vectors.push({
+                id,
+                values: vector,
+                metadata: { ...storedMetadata, text: imageChunk.text },
+              });
+              documentVectors.push({ docId, vectorId: id });
+            }
+          }
+        } catch (error) {
+          this.logger(
+            "Image description embedding skipped; body vectors remain available.",
+            error.message
+          );
+        }
+      }
+
+      if (vectors.length === 0) {
         throw new Error(
           "Could not embed document chunks! This document will not be recorded."
         );
@@ -453,6 +634,8 @@ class Chroma extends VectorDatabase {
   async performSimilaritySearch({
     namespace = null,
     input = "",
+    relatedImageQueryText = input,
+    includeRelatedImages = true,
     LLMConnector = null,
     similarityThreshold = 0.25,
     topN = 4,
@@ -471,12 +654,20 @@ class Chroma extends VectorDatabase {
     }
 
     const queryVector = await LLMConnector.embedTextInput(input);
-    const { contextTexts, sourceDocuments, scores } =
+    const relatedImageQueryVector = includeRelatedImages
+      ? relatedImageQueryText === input
+        ? queryVector
+        : await LLMConnector.embedTextInput(relatedImageQueryText)
+      : queryVector;
+    const { contextTexts, sourceDocuments, scores, relatedImageSources } =
       await this.similarityResponse({
         client,
         namespace,
         queryVector,
         queryText: input,
+        relatedImageQueryVector,
+        relatedImageQueryText,
+        includeRelatedImages,
         similarityThreshold,
         topN,
         filterIdentifiers,
@@ -504,6 +695,7 @@ class Chroma extends VectorDatabase {
     return {
       contextTexts,
       sources: this.curateSources(sources),
+      relatedImageSources: relatedImageSources || [],
       message: false,
     };
   }

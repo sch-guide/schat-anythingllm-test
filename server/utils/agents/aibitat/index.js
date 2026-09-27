@@ -5,6 +5,13 @@ const Providers = require("./providers/index.js");
 const { Telemetry } = require("../../../models/telemetry.js");
 const { v4 } = require("uuid");
 const { ToolReranker } = require("./utils/toolReranker.js");
+const {
+  buildPublicRagSource,
+  ragSourceIdentity,
+} = require("./utils/ragSources.js");
+const {
+  shouldForceHospitalRagSearch,
+} = require("./utils/hospitalDocumentIntent.js");
 
 /**
  * AIbitat is a class that manages the conversation between agents.
@@ -62,6 +69,16 @@ class AIbitat {
    * @type {Array<{id: string, title: string, text: string, chunkSource?: string, score?: number}>}
    */
   _pendingCitations = [];
+
+  /**
+   * Public, employee-safe sources returned by actual rag-memory searches.
+   * Kept separate from generic tool citations so Automatic chat only shows
+   * hospital documents that the agent really searched for this answer.
+   */
+  _pendingRagSources = [];
+  _pendingRagSourceKeys = new Set();
+  _pendingRagImageKeys = new Set();
+  _forcedRagSearchQueries = new Set();
 
   /**
    * Buffer for attachments (images) collected during tool execution.
@@ -222,6 +239,34 @@ class AIbitat {
   }
 
   /**
+   * Preserve sources returned by rag-memory across one or more tool calls.
+   * Internal vector/document identifiers are used only for deduplication and
+   * are never copied into the public source object.
+   * @param {Object[]} sources
+   */
+  addRagMemorySources(sources = [], { question = "" } = {}) {
+    if (!Array.isArray(sources)) return;
+    for (const source of sources) {
+      if (!source || typeof source !== "object") continue;
+      const identity = ragSourceIdentity(source);
+      if (!identity || this._pendingRagSourceKeys.has(identity)) continue;
+
+      const publicSource = buildPublicRagSource(source, { question });
+      publicSource.relatedImages = publicSource.relatedImages.filter((image) => {
+        if (this._pendingRagImageKeys.has(image.imageKey)) return false;
+        this._pendingRagImageKeys.add(image.imageKey);
+        return true;
+      });
+      this._pendingRagSourceKeys.add(identity);
+      this._pendingRagSources.push(publicSource);
+    }
+  }
+
+  getRagMemorySources() {
+    return this._pendingRagSources;
+  }
+
+  /**
    * Register attached documents (parsed/pinned files) as citations so they surface as
    * sources, mirroring normal chat. Dedupes by id since this runs on every reply turn.
    * @param {Array<{name: string, content: string, metadata?: object}>} documents
@@ -249,11 +294,12 @@ class AIbitat {
    * @param {string} messageUuid - The UUID of the message to attach citations to
    */
   flushCitations(messageUuid) {
-    if (!messageUuid || this._pendingCitations.length === 0) return;
+    const citations = this.getRagMemorySources();
+    if (!messageUuid || citations.length === 0) return;
     this.socket?.send?.("reportStreamEvent", {
       type: "citations",
       uuid: messageUuid,
-      citations: this._pendingCitations,
+      citations,
     });
   }
 
@@ -262,6 +308,25 @@ class AIbitat {
    */
   clearCitations() {
     this._pendingCitations = [];
+    this._pendingRagSources = [];
+    this._pendingRagSourceKeys = new Set();
+    this._pendingRagImageKeys = new Set();
+    this._forcedRagSearchQueries = new Set();
+  }
+
+  async forceHospitalRagSearch(question = "", ragMemory = null) {
+    if (
+      !shouldForceHospitalRagSearch(question) ||
+      !ragMemory?.handler ||
+      this._forcedRagSearchQueries.has(question)
+    )
+      return null;
+
+    this._forcedRagSearchQueries.add(question);
+    return ragMemory.handler({
+      action: "search",
+      content: question,
+    });
   }
 
   /**
@@ -921,6 +986,23 @@ ${this.getHistory({ to: route.to })
     let functions = fromConfig.functions
       ?.map((name) => this.functions.get(this.#parseFunctionName(name)))
       .filter((a) => !!a);
+
+    const forcedRagContext = await this.forceHospitalRagSearch(
+      userPrompt,
+      functions?.find((fn) => fn.name === "rag-memory")
+    );
+    if (forcedRagContext) {
+      for (let index = messages.length - 1; index >= 0; index -= 1) {
+        if (messages[index].role !== "user") continue;
+        messages[index] = {
+          ...messages[index],
+          content:
+            `${messages[index].content}\n\n` +
+            `<hospital_document_context>\n${forcedRagContext}\n</hospital_document_context>`,
+        };
+        break;
+      }
+    }
 
     // Rerank tools based on user prompt if enabled
     if (ToolReranker.isEnabled() && functions?.length) {

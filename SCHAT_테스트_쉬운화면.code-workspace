@@ -4,6 +4,8 @@
     { "name": "01_현재상태", "path": "docs/00_현재상태" },
     { "name": "02_작업일지", "path": "docs/01_작업일지" },
     { "name": "03_전체_공식문서", "path": "docs" },
+    { "name": "04_화면디자인", "path": "04_화면디자인" },
+    { "name": "05_인수인계", "path": "05_인수인계" },
     { "name": "90_개발자용_프로그램파일", "path": "." }
   ],
   "settings": {
@@ -16,6 +18,8 @@
       ".vscode": true,
       "00_현재상태": true,
       "01_작업일지": true,
+      "04_화면디자인": true,
+      "05_인수인계": true,
       "docs": true,
       "docs_view": true,
       "**/node_modules": true,

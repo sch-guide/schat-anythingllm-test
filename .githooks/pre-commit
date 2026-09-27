@@ -1,0 +1,18 @@
+#!/bin/sh
+
+# SCHAT 설명 화면은 보조 문서입니다. 갱신 실패가 commit을 막지 않습니다.
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+cd "$ROOT" || exit 0
+
+if [ -x "../.venv/Scripts/python.exe" ]; then
+  "../.venv/Scripts/python.exe" "문서도구/SCHAT_설명화면_자동갱신.py" --staged --stage-output || true
+elif command -v python3 >/dev/null 2>&1; then
+  python3 "문서도구/SCHAT_설명화면_자동갱신.py" --staged --stage-output || true
+elif command -v python >/dev/null 2>&1; then
+  python "문서도구/SCHAT_설명화면_자동갱신.py" --staged --stage-output || true
+else
+  echo "[SCHAT 문서] Python을 찾지 못해 pre-commit 자동 갱신을 건너뜁니다."
+fi
+
+exit 0
+

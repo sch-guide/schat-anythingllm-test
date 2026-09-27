@@ -36,6 +36,15 @@ const SystemSettings = {
   /** A default system prompt that is used when no other system prompt is set or available to the function caller. */
   saneDefaultSystemPrompt:
     "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. The current date and time is {datetime}. Return only your response to the question given the above information following the users instructions as needed.",
+  /**
+   * The prompt a workspace inherits when it has no prompt of its own: the
+   * admin-managed Default System Prompt, or the built-in default if unset.
+   * @returns {Promise<string>}
+   */
+  effectiveDefaultSystemPrompt: async function () {
+    const setting = await this.get({ label: "default_system_prompt" });
+    return setting?.value || this.saneDefaultSystemPrompt;
+  },
   protectedFields: ["multi_user_mode", "hub_api_key", "onboarding_complete"],
   publicFields: [
     "footer_data",

@@ -1,6 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import {
+  createBrowserRouter,
+  Navigate,
+  RouterProvider,
+} from "react-router-dom";
 import App from "@/App.jsx";
 import PrivateRoute, {
   AdminRoute,
@@ -36,13 +40,36 @@ const router = createBrowserRouter([
         path: "/sso/simple",
         element: <SimpleSSOPassthrough />,
       },
+      // SCHAT: workspace settings are managed from the single admin screen.
       {
         path: "/workspace/:slug/settings/:tab",
+        element: <Navigate to="/settings/schat/brand" replace />,
+      },
+      {
+        path: "/settings/schat",
+        element: <Navigate to="/settings/schat/brand" replace />,
+      },
+      {
+        path: "/settings/schat/:section",
         lazy: async () => {
-          const { default: WorkspaceSettings } = await import(
-            "@/pages/WorkspaceSettings"
+          const { default: SchatAdmin } = await import("@/pages/SchatAdmin");
+          return { element: <AdminRoute Component={SchatAdmin} /> };
+        },
+      },
+      {
+        path: "/guide",
+        lazy: async () => {
+          const { default: GuidePage } = await import("@/pages/Guide");
+          return { element: <PrivateRoute Component={GuidePage} /> };
+        },
+      },
+      {
+        path: "/workspace/:slug/checklist/:checklistId",
+        lazy: async () => {
+          const { default: ChecklistPopup } = await import(
+            "@/pages/ChecklistPopup"
           );
-          return { element: <ManagerRoute Component={WorkspaceSettings} /> };
+          return { element: <ChecklistPopup /> };
         },
       },
       {

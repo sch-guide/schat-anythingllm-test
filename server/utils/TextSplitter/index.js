@@ -79,8 +79,8 @@ class TextSplitter {
       chunkSource: {
         as: "source",
         pluck: (metadata) => {
-          const validPrefixes = ["link://", "youtube://"];
-          // If the chunkSource is a link or youtube link, we can add the URL
+          const validPrefixes = ["link://"];
+          // If the chunkSource is a link, we can add the URL
           // as its source in the metadata so the LLM can use it for context.
           // eg prompt: Where did you get this information? -> answer: "from https://example.com"
           if (
