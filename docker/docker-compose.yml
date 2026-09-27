@@ -28,8 +28,8 @@ services:
       SCHAT_SAFETY_HOST: 0.0.0.0
       SCHAT_SAFETY_PORT: 8001
     volumes:
-      - "../../src:/schat-core/src:ro"
-      - "../../tools/evaluation_action_strength.py:/schat-core/tools/evaluation_action_strength.py:ro"
+      - "../schat-core/src:/schat-core/src:ro"
+      - "../schat-core/tools/evaluation_action_strength.py:/schat-core/tools/evaluation_action_strength.py:ro"
     expose:
       - "8001"
     healthcheck:

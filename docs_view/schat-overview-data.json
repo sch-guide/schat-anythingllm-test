@@ -241,6 +241,13 @@
     },
     {
       "date": "2026-09-27",
+      "title": "안전 검사 저장소 내부 독립 배포",
+      "summary": "외부 `sch-guide-ai/src`, `sch-guide-ai/tools`에서 실제 안전 검사에 필요한 파일만 `schat-core/src`, `schat-core/tools`로 복사했습니다.",
+      "feature": "안전검사 저장소내부 독립배포",
+      "document": "docs/01_작업일지/2026-09-27_안전검사_저장소내부_독립배포.md"
+    },
+    {
+      "date": "2026-09-27",
       "title": "문서 관리 표시 정리와 `custom-documents (2008)` 조사",
       "summary": "문서 관리 화면의 `custom-documents` 폴더는 화면에서만 `등록된 문서`로 보입니다. 내부 폴더 이름과 저장 위치는 그대로입니다.",
       "feature": "문서관리 표시정리와 문서수 조사",
