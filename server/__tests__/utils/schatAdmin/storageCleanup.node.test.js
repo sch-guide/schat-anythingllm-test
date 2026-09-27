@@ -197,3 +197,232 @@ test("manifest and post-deletion comparison are ready but nothing is deleted", (
     { field: "imageVectors", before: 5, after: 4 },
   ]);
 });
+
+// ---- actual deletion (temporary folder, synthetic data only) -----------------
+
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const {
+  executeStorageCleanup,
+  deletionTargets,
+  vectorCacheNames,
+} = require("../../../utils/schatAdmin/storageCleanup");
+
+test("PDF viewer, image-description vectors and relatedImages each protect", () => {
+  const status = (overrides) =>
+    classifyStorage(fixture(overrides)).groups.find(
+      (g) =>
+        g.kind === "upload" &&
+        g.title === "가상지침.pdf" &&
+        g.usage.workspacePages === 0
+    ).status;
+  assert.equal(status({}), STATUS.OLD_UPLOAD);
+  assert.equal(
+    status({ workspaceDocumentIds: new Set([CURRENT, OLD]) }),
+    STATUS.IN_USE
+  );
+  assert.equal(
+    status({ imageVectorsByDocument: new Map([[OLD, 2]]) }),
+    STATUS.IN_USE
+  );
+  assert.equal(status({ relatedImageFolders: new Set([OLD]) }), STATUS.IN_USE);
+});
+
+function makeStorage() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "schat-cleanup-"));
+  const dirs = {
+    pages: path.join(root, "documents", "custom-documents"),
+    cache: path.join(root, "vector-cache"),
+    images: path.join(root, "document-images"),
+    originals: path.join(root, "original-documents"),
+  };
+  Object.values(dirs).forEach((d) => fs.mkdirSync(d, { recursive: true }));
+  const base = fixture();
+  for (const record of base.pageRecords) {
+    fs.writeFileSync(path.join(dirs.pages, record.fileName), "x".repeat(100));
+    const [cacheName] = vectorCacheNames(`custom-documents/${record.fileName}`);
+    fs.writeFileSync(path.join(dirs.cache, cacheName), "[]");
+  }
+  for (const id of [CURRENT, OLD, STRAY_FOLDER]) {
+    fs.mkdirSync(path.join(dirs.images, id));
+    fs.writeFileSync(path.join(dirs.images, id, "page-1-image-1.png"), "png");
+  }
+  fs.mkdirSync(path.join(dirs.images, ".description-cache"));
+  fs.writeFileSync(
+    path.join(dirs.images, ".description-cache", "d.json"),
+    "{}"
+  );
+  for (const id of [CURRENT, OLD]) {
+    const key = originalStorageKey(id);
+    fs.writeFileSync(path.join(dirs.originals, `${key}.pdf`), "%PDF-");
+    fs.writeFileSync(path.join(dirs.originals, `${key}.json`), "{}");
+  }
+  // Inputs are rebuilt from what is still on disk, like the real loader.
+  const loadInputs = async () => {
+    const cached = new Set(fs.readdirSync(dirs.cache));
+    const pageRecords = base.pageRecords
+      .filter((r) => fs.existsSync(path.join(dirs.pages, r.fileName)))
+      .map((r) => ({
+        ...r,
+        cacheFiles: vectorCacheNames(`custom-documents/${r.fileName}`)
+          .filter((n) => cached.has(n))
+          .map((name) => ({ name, bytes: 2 })),
+      }));
+    return {
+      ...base,
+      pageRecords,
+      workspaceDocumentIds: new Set([CURRENT]),
+      imageFolders: base.imageFolders.filter((f) =>
+        fs.existsSync(path.join(dirs.images, f.name))
+      ),
+      originals: base.originals.filter((o) =>
+        fs.existsSync(path.join(dirs.originals, `${o.storageKey}.pdf`))
+      ),
+    };
+  };
+  return { root, dirs, loadInputs };
+}
+
+test("deletes only the selected old upload and verifies the live data", async () => {
+  const { root, dirs, loadInputs } = makeStorage();
+  const report = classifyStorage(await loadInputs());
+  const old = report.groups.find((g) => g.status === STATUS.OLD_UPLOAD);
+  const result = await executeStorageCleanup([old.key], {
+    loadInputs,
+    root,
+    actorId: 1,
+    at: new Date("2026-09-27T00:00:00Z"),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.remaining, 0);
+  assert.deepEqual(result.changed, []);
+  assert.deepEqual(result.before, result.after);
+  // old upload: pages, cache, image folder and original are gone
+  for (const r of fixture().pageRecords.filter((r) => r.documentId === OLD))
+    assert.equal(fs.existsSync(path.join(dirs.pages, r.fileName)), false);
+  assert.equal(fs.existsSync(path.join(dirs.images, OLD)), false);
+  assert.equal(
+    fs.existsSync(path.join(dirs.originals, `${originalStorageKey(OLD)}.pdf`)),
+    false
+  );
+  // live upload, other groups and the description cache are untouched
+  assert.equal(fs.existsSync(path.join(dirs.images, CURRENT)), true);
+  assert.equal(fs.existsSync(path.join(dirs.images, STRAY_FOLDER)), true);
+  assert.equal(
+    fs.existsSync(path.join(dirs.images, ".description-cache", "d.json")),
+    true
+  );
+  assert.equal(
+    fs.existsSync(
+      path.join(dirs.originals, `${originalStorageKey(CURRENT)}.pdf`)
+    ),
+    true
+  );
+  assert.equal(fs.readdirSync(dirs.pages).length, 5);
+  assert.equal(fs.readdirSync(dirs.cache).length, 5);
+  const manifestDir = path.join(root, "schat-diagnostics", "storage-cleanup");
+  const manifests = fs.readdirSync(manifestDir);
+  assert.equal(manifests.length, 1);
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(manifestDir, manifests[0]), "utf8")
+  );
+  assert.equal(manifest.verified, true);
+  assert.equal(manifest.admin, "user:1");
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("refuses live selections and never trusts the browser label", async () => {
+  const { root, dirs, loadInputs } = makeStorage();
+  const report = classifyStorage(await loadInputs());
+  const live = report.groups.find(
+    (g) => g.status === STATUS.IN_USE && g.usage.workspacePages > 0
+  );
+  const before = fs.readdirSync(dirs.pages).length;
+  const result = await executeStorageCleanup([live.key], { loadInputs, root });
+  assert.equal(result.ok, false);
+  assert.equal(result.stage, "verify");
+  assert.equal(fs.readdirSync(dirs.pages).length, before);
+  assert.equal(fs.existsSync(path.join(dirs.images, CURRENT)), true);
+
+  // A group that became "in use" between preview and delete is refused too.
+  const old = report.groups.find((g) => g.status === STATUS.OLD_UPLOAD);
+  const nowLive = async () => ({
+    ...(await loadInputs()),
+    workspaceDocumentIds: new Set([CURRENT, OLD]),
+  });
+  const late = await executeStorageCleanup([old.key], {
+    loadInputs: nowLive,
+    root,
+  });
+  assert.equal(late.stage, "verify");
+  assert.equal(fs.existsSync(path.join(dirs.images, OLD)), true);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a changed operational snapshot is not reported as success", async () => {
+  const { root, loadInputs } = makeStorage();
+  const report = classifyStorage(await loadInputs());
+  const old = report.groups.find((g) => g.status === STATUS.OLD_UPLOAD);
+  let calls = 0;
+  const drifting = async () => {
+    const inputs = await loadInputs();
+    calls += 1;
+    return calls > 1
+      ? { ...inputs, vectorCounts: { body: 3, image: 4 } }
+      : inputs;
+  };
+  const result = await executeStorageCleanup([old.key], {
+    loadInputs: drifting,
+    root,
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.changed, [
+    { field: "imageVectors", before: 5, after: 4 },
+  ]);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("deletion targets refuse unsafe names and protected groups", () => {
+  const report = classifyStorage(fixture());
+  const old = report.groups.find((g) => g.status === STATUS.OLD_UPLOAD);
+  const live = report.groups.find((g) => g.status === STATUS.IN_USE);
+  const root = path.join(os.tmpdir(), "schat-cleanup-targets");
+  assert.throws(() => deletionTargets([live], root), /protected/);
+  assert.throws(
+    () => deletionTargets([{ ...old, pageFiles: ["../escape.json"] }], root),
+    /unsafe/
+  );
+  assert.throws(
+    () => deletionTargets([{ ...old, documentId: ".description-cache" }], root),
+    /unsafe/
+  );
+  const json = JSON.stringify(publicReport(report));
+  assert.equal(json.includes("pageFiles"), false);
+  assert.equal(json.includes("cacheFileNames"), false);
+});
+
+test("delete endpoints are admin only and need a matching preview", () => {
+  const admin = fs.readFileSync(
+    path.join(__dirname, "../../../endpoints/schatAdmin.js"),
+    "utf8"
+  );
+  const route = admin.slice(
+    admin.indexOf('"/schat-admin/storage-cleanup/delete"')
+  );
+  assert.match(
+    route.slice(0, 200),
+    /\[validatedRequest, flexUserRoleValid\(\[ROLES\.admin\]\)\]/
+  );
+  assert.match(route, /confirm !== true/);
+  assert.match(route, /consumePreviewToken\(previewToken, userId, keys\)/);
+  assert.match(route, /cleanupRunning/);
+  const accounts = fs.readFileSync(
+    path.join(__dirname, "../../../endpoints/schatAccounts.js"),
+    "utf8"
+  );
+  assert.match(
+    accounts,
+    /app\.delete\(\s*"\/schat-admin\/reports\/:id",\s*adminOnly,/
+  );
+});

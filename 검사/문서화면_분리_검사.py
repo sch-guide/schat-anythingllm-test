@@ -123,7 +123,21 @@ class DocsViewIsolationTest(unittest.TestCase):
         self.assertNotIn("문서종류:", html)
         self.assertNotIn("주제:", html)
         self.assertNotIn("GEMINI_API_KEY=", html)
-        self.assertNotIn("server/storage", html)
+        # Secret-shaped values are never allowed anywhere, including guides.
+        self.assertIsNone(
+            re.search(r"github_pat_[A-Za-z0-9_]{10,}|AIza[0-9A-Za-z_-]{20,}", html)
+        )
+        # Only the server deployment guide may name the server storage path
+        # (its backup command needs it); the rest of the page may not.
+        guide_pattern = r'<div class="guide-block" id="guide-\d+">.*?<!--/guide-->'
+        guides = re.findall(guide_pattern, html, re.S)
+        outside_guides = re.sub(guide_pattern, "", html, flags=re.S)
+        self.assertNotIn("server/storage", outside_guides)
+        self.assertTrue(any("서버 배포 및 업데이트 안내" in g for g in guides))
+        # shown inside the 인수인계 section, not as a separate menu item
+        handover = re.search(r'<section id="handover">.*?</section>', html, re.S).group(0)
+        self.assertIn('id="guide-0"', handover)
+        self.assertNotIn('href="#guide-', html)
 
     def test_saved_view_matches_fresh_generation(self):
         builder = load_builder()

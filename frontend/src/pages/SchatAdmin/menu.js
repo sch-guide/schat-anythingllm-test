@@ -27,6 +27,12 @@ export const SCHAT_ADMIN_SECTIONS = [
     description: "직원이 보낸 문제 신고를 처리하고 통계와 FAQ를 관리합니다.",
   },
   {
+    key: "quiz",
+    label: "퀴즈 관리",
+    description:
+      "지침서 근거로 AI 퀴즈 문제를 만들고, 검토·수정·공개하며 풀이 통계를 확인합니다.",
+  },
+  {
     key: "connections",
     label: "시스템 연결",
     description: "AI 답변과 문서 검색에 쓰는 API 키를 확인하고 교체합니다.",

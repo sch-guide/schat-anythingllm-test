@@ -47,6 +47,10 @@ const {
 const { memoryEndpoints } = require("./endpoints/memory");
 const { schatAdminEndpoints } = require("./endpoints/schatAdmin");
 const { schatAccountEndpoints } = require("./endpoints/schatAccounts");
+const { schatQuizEndpoints } = require("./endpoints/schatQuiz");
+const {
+  schatQuizGenerationEndpoints,
+} = require("./endpoints/schatQuizGeneration");
 const { httpLogger } = require("./middleware/httpLogger");
 const app = express();
 const apiRouter = express.Router();
@@ -87,6 +91,8 @@ chatEndpoints(apiRouter);
 adminEndpoints(apiRouter);
 schatAdminEndpoints(apiRouter);
 schatAccountEndpoints(apiRouter);
+schatQuizEndpoints(apiRouter);
+schatQuizGenerationEndpoints(apiRouter);
 modelRouterEndpoints(apiRouter);
 inviteEndpoints(apiRouter);
 embedManagementEndpoints(apiRouter);

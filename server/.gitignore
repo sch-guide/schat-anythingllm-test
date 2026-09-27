@@ -37,3 +37,5 @@ yarn-error.log
 
 # Local SSL Certs for HTTPS
 sslcert
+# 저장공간 정리 삭제 기록(운영 중 생성)
+storage/schat-diagnostics/storage-cleanup/

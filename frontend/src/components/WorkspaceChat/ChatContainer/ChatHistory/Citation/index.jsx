@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import SourceExcerpt from "../../SourcesSidebar/SourceExcerpt";
 import RelatedImages from "../RelatedImages";
 import PdfPageViewer from "./PdfPageViewer";
+import MobileSourceScreen, { useMobileViewport } from "./MobileSourceScreen";
 import { filterDirectCitationSources } from "@/utils/citationFilter";
 
 const LONG_EXCERPT_LENGTH = 420;
@@ -64,6 +65,11 @@ export function SourceEvidenceRow({
   const [isOpen, setIsOpen] = useState(initiallyOpen);
   const [isExpanded, setIsExpanded] = useState(initiallyExpanded);
   const [pdfUnavailable, setPdfUnavailable] = useState(!source?.pdfRef);
+  // "텍스트 원문으로 보기" is a view choice, not a PDF failure: the reader can
+  // switch back with "PDF 원문으로 보기".
+  const [textMode, setTextMode] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const isMobile = useMobileViewport();
   const contentId = useId();
   const excerpt =
     typeof source?.excerpt === "string" ? source.excerpt.trim() : "";
@@ -73,7 +79,10 @@ export function SourceEvidenceRow({
     .split(/\n\s*\n/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
-  const showPdf = Boolean(source?.pdfRef && workspaceSlug && !pdfUnavailable);
+  const pdfAvailable = Boolean(
+    source?.pdfRef && workspaceSlug && !pdfUnavailable
+  );
+  const showPdf = pdfAvailable && !textMode;
   const markPdfUnavailable = useCallback(() => setPdfUnavailable(true), []);
 
   useEffect(() => {
@@ -89,7 +98,17 @@ export function SourceEvidenceRow({
           </span>
           {summary && ` · ${summary}`}
         </p>
-        {(excerpt || source?.pdfRef) && (
+        {(excerpt || source?.pdfRef) && isMobile && (
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            onClick={() => setMobileOpen(true)}
+            className="w-fit shrink-0 text-left text-xs font-medium text-blue-300 hover:text-blue-200 light:text-blue-700 light:hover:text-blue-800"
+          >
+            근거 원문 보기 ▸
+          </button>
+        )}
+        {(excerpt || source?.pdfRef) && !isMobile && (
           <button
             type="button"
             aria-expanded={isOpen}
@@ -102,7 +121,18 @@ export function SourceEvidenceRow({
         )}
       </div>
 
-      {isOpen && (excerpt || source?.pdfRef) && (
+      {isMobile && mobileOpen && (
+        <MobileSourceScreen
+          source={source}
+          summary={summary}
+          paragraphs={paragraphs}
+          documentName={sourceDocumentName(source)}
+          workspaceSlug={workspaceSlug}
+          onClose={() => setMobileOpen(false)}
+        />
+      )}
+
+      {!isMobile && isOpen && (excerpt || source?.pdfRef) && (
         <section
           id={contentId}
           className="mt-3 min-w-0 rounded-lg bg-zinc-900/60 px-4 py-4 light:bg-slate-100 sm:px-7"
@@ -114,12 +144,24 @@ export function SourceEvidenceRow({
               page={source.page}
               documentName={sourceDocumentName(source)}
               onUnavailable={markPdfUnavailable}
+              onShowText={() => setTextMode(true)}
             />
           ) : (
             <div className="mx-auto w-full max-w-[720px]">
-              <p className="mb-3 text-xs font-medium text-zinc-400 light:text-slate-500">
-                근거 원문
-              </p>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-zinc-400 light:text-slate-500">
+                  근거 원문
+                </p>
+                {pdfAvailable && (
+                  <button
+                    type="button"
+                    onClick={() => setTextMode(false)}
+                    className="text-xs font-medium text-blue-300 hover:text-blue-200 light:text-blue-700 light:hover:text-blue-800"
+                  >
+                    PDF 원문으로 보기
+                  </button>
+                )}
+              </div>
               <div className="relative">
                 <div
                   className={`space-y-3 break-words text-sm leading-[1.7] text-zinc-100 light:text-slate-900 ${

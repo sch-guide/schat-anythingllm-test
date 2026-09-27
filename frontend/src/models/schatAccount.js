@@ -124,11 +124,14 @@ const SchatAccount = {
   reports: (filters) => call(`/schat-admin/reports${query(filters)}`),
   updateReport: (id, changes) =>
     call(`/schat-admin/reports/${id}`, { method: "PATCH", body: changes }),
+  deleteReport: (id) =>
+    call(`/schat-admin/reports/${id}`, { method: "DELETE" }),
   reportStats: () => call("/schat-admin/reports/stats"),
   faqs: () => call("/schat-admin/faq"),
   createFaq: (form) => call("/schat-admin/faq", { method: "POST", body: form }),
   updateFaq: (id, form) =>
     call(`/schat-admin/faq/${id}`, { method: "PATCH", body: form }),
+  deleteFaq: (id) => call(`/schat-admin/faq/${id}`, { method: "DELETE" }),
 };
 
 export default SchatAccount;

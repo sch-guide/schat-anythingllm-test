@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import Modal, { ModalBody, ModalHeader } from "@/components/lib/Modal";
 import SchatAccount from "@/models/schatAccount";
 import showToast from "@/utils/toast";
 import {
@@ -8,6 +9,7 @@ import {
   Field,
   InfoRow,
   Loading,
+  Notice,
   inputClass,
 } from "../ui";
 
@@ -171,6 +173,12 @@ function ReportList({ onMakeFaq }) {
         <Loading />
       ) : (
         <div className="overflow-x-auto">
+          <p
+            className="text-xs text-theme-text-secondary mb-2"
+            data-testid="report-count"
+          >
+            {reports.length}건
+          </p>
           <table className="w-full min-w-[760px] text-sm text-left">
             <thead className="text-xs text-theme-text-secondary border-b border-theme-sidebar-border">
               <tr>
@@ -234,14 +242,19 @@ function ReportList({ onMakeFaq }) {
             load();
           }}
           onMakeFaq={onMakeFaq}
+          onDeleted={() => {
+            setSelected(null);
+            load();
+          }}
         />
       )}
     </Card>
   );
 }
 
-function ReportDetail({ report, onSaved, onMakeFaq }) {
+function ReportDetail({ report, onSaved, onMakeFaq, onDeleted }) {
   const [status, setStatus] = useState(report.status);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [resolution, setResolution] = useState(report.resolution || "");
   const [saving, setSaving] = useState(false);
 
@@ -322,7 +335,83 @@ function ReportDetail({ report, onSaved, onMakeFaq }) {
           </Button>
         )}
       </div>
+      <section
+        className="flex flex-col gap-y-2 border-t border-theme-sidebar-border pt-3"
+        data-testid="report-danger"
+      >
+        <p className="text-sm font-semibold text-red-500">위험 영역</p>
+        <p className="text-xs text-theme-text-secondary">
+          테스트·중복·잘못 등록된 신고처럼 더 보관할 필요가 없는 신고만
+          삭제하세요. 삭제한 신고는 복구할 수 없습니다.
+        </p>
+        <div>
+          <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+            신고 삭제
+          </Button>
+        </div>
+      </section>
+      {confirmDelete && (
+        <DeleteReportDialog
+          report={report}
+          onClose={() => setConfirmDelete(false)}
+          onDeleted={onDeleted}
+        />
+      )}
     </div>
+  );
+}
+
+// 신고 삭제: the server removes the report for good (admin only).
+function DeleteReportDialog({ report, onClose, onDeleted }) {
+  const [deleting, setDeleting] = useState(false);
+  async function remove() {
+    setDeleting(true);
+    const result = await SchatAccount.deleteReport(report.id);
+    setDeleting(false);
+    if (!result.success)
+      return showToast(result.error || "삭제하지 못했습니다.", "error");
+    showToast("문제 신고를 삭제했습니다.", "success");
+    onClose();
+    onDeleted?.();
+  }
+  return (
+    <Modal isOpen onClose={onClose} size="md">
+      <ModalHeader title="문제 신고를 삭제하시겠습니까?" onClose={onClose} />
+      <ModalBody>
+        <div
+          className="flex flex-col gap-y-3"
+          data-testid="report-delete-dialog"
+        >
+          <dl className="grid grid-cols-[4rem_1fr] gap-y-1 text-sm">
+            <dt className="text-theme-text-secondary">제목</dt>
+            <dd className="text-theme-text-primary break-all">
+              {report.title}
+            </dd>
+            <dt className="text-theme-text-secondary">신고자</dt>
+            <dd className="text-theme-text-primary">
+              {report.reporterName || "-"}
+              {report.reporterDeleted ? " (삭제된 사용자)" : ""}
+            </dd>
+            <dt className="text-theme-text-secondary">등록일</dt>
+            <dd className="text-theme-text-primary">
+              {when(report.createdAt)}
+            </dd>
+          </dl>
+          <Notice tone="warning">
+            이 신고는 삭제 후 복구할 수 없습니다. 이 신고로 보낸 직원 알림도
+            함께 지워지고, 이 신고로 만든 FAQ는 그대로 남습니다.
+          </Notice>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onClose} disabled={deleting}>
+              취소
+            </Button>
+            <Button variant="danger" onClick={remove} disabled={deleting}>
+              {deleting ? "삭제 중..." : "삭제"}
+            </Button>
+          </div>
+        </div>
+      </ModalBody>
+    </Modal>
   );
 }
 
@@ -381,6 +470,7 @@ function Stats() {
 function FaqManager({ draft, onDraftUsed }) {
   const [faqs, setFaqs] = useState(null);
   const [form, setForm] = useState(null);
+  const [deleting, setDeleting] = useState(null);
   const [categories, setCategories] = useState([]);
   useEffect(() => {
     SchatAccount.reportCategories().then((r) =>
@@ -503,6 +593,24 @@ function FaqManager({ draft, onDraftUsed }) {
               취소
             </Button>
           </div>
+          {form.id && (
+            <section
+              className="flex flex-col gap-y-2 border-t border-theme-sidebar-border pt-3"
+              data-testid="faq-danger"
+            >
+              <p className="text-sm font-semibold text-red-500">위험 영역</p>
+              <p className="text-xs text-theme-text-secondary">
+                더 이상 필요 없는 FAQ만 삭제하세요. 잠시 숨기려면 &apos;직원에게
+                보이기(승인)&apos;를 끄고 저장하면 됩니다. 삭제한 FAQ는 복구할
+                수 없습니다.
+              </p>
+              <div>
+                <Button variant="danger" onClick={() => setDeleting(form)}>
+                  FAQ 삭제
+                </Button>
+              </div>
+            </section>
+          )}
         </form>
       ) : (
         <div>
@@ -563,6 +671,65 @@ function FaqManager({ draft, onDraftUsed }) {
           ))}
         </ul>
       )}
+      {deleting && (
+        <DeleteFaqDialog
+          faq={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => {
+            setDeleting(null);
+            setForm(null);
+            load();
+          }}
+        />
+      )}
     </Card>
+  );
+}
+
+// FAQ 삭제: removed for good (admin only). It disappears from 이용 가이드 and
+// report suggestions; reports that linked it keep their own copy of the title.
+function DeleteFaqDialog({ faq, onClose, onDeleted }) {
+  const [busy, setBusy] = useState(false);
+  async function remove() {
+    setBusy(true);
+    const result = await SchatAccount.deleteFaq(faq.id);
+    setBusy(false);
+    if (!result.success)
+      return showToast(result.error || "삭제하지 못했습니다.", "error");
+    showToast("FAQ를 삭제했습니다.", "success");
+    onDeleted?.();
+  }
+  return (
+    <Modal isOpen onClose={onClose} size="md">
+      <ModalHeader title="FAQ를 삭제하시겠습니까?" onClose={onClose} />
+      <ModalBody>
+        <div className="flex flex-col gap-y-3" data-testid="faq-delete-dialog">
+          <dl className="grid grid-cols-[4rem_1fr] gap-y-1 text-sm">
+            <dt className="text-theme-text-secondary">제목</dt>
+            <dd className="text-theme-text-primary break-all">{faq.title}</dd>
+            <dt className="text-theme-text-secondary">분류</dt>
+            <dd className="text-theme-text-primary">
+              {faq.category || "기타"}
+            </dd>
+            <dt className="text-theme-text-secondary">상태</dt>
+            <dd className="text-theme-text-primary">
+              {faq.active ? "직원에게 보임" : "숨김"}
+            </dd>
+          </dl>
+          <Notice tone="warning">
+            삭제하면 이용 가이드와 문제 신고의 관련 도움말에서 바로 사라지고
+            복구할 수 없습니다. 이 FAQ와 연결된 문제 신고는 그대로 남습니다.
+          </Notice>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onClose} disabled={busy}>
+              취소
+            </Button>
+            <Button variant="danger" onClick={remove} disabled={busy}>
+              {busy ? "삭제 중..." : "삭제"}
+            </Button>
+          </div>
+        </div>
+      </ModalBody>
+    </Modal>
   );
 }

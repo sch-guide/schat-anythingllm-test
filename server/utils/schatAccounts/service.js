@@ -787,6 +787,33 @@ async function updateReportStatus(adminId, id, { status, resolution }) {
   return presentReport(updated, { forAdmin: true });
 }
 
+// Hard delete (admin only, enforced by the endpoint). The notices that
+// announced this report's status go with it; an FAQ made from it stays and
+// only loses the link (source_report_id is SET NULL by the foreign key).
+async function deleteReport(adminId, id) {
+  const reportId = Number(id);
+  if (!Number.isInteger(reportId) || reportId <= 0)
+    throw userError("신고를 찾을 수 없습니다.");
+  const report = await prisma.schat_issue_reports.findUnique({
+    where: { id: reportId },
+  });
+  if (!report) throw userError("신고를 찾을 수 없습니다.");
+  await prisma.$transaction([
+    prisma.schat_user_notifications.deleteMany({
+      where: { report_id: reportId },
+    }),
+    prisma.schat_issue_reports.delete({ where: { id: reportId } }),
+  ]);
+  // Audit: which report and who removed it. The report content is not copied.
+  const { EventLogs } = require("../../models/eventLogs");
+  await EventLogs.logEvent(
+    "schat_report_deleted",
+    { reportId, category: report.category, status: report.status },
+    adminId
+  ).catch(() => null);
+  return { id: reportId };
+}
+
 async function listNotifications(userId) {
   const rows = await prisma.schat_user_notifications.findMany({
     where: { user_id: Number(userId) },
@@ -897,6 +924,25 @@ async function recordGuideFeedback(id, type) {
   if (!count) throw userError("이용 가이드를 찾을 수 없습니다.");
 }
 
+// FAQ 삭제 (admin only, enforced by the endpoint). Reports that linked this
+// FAQ keep their own copy of its title (related_faq_title), so they are not
+// changed. The FAQ disappears from 이용 가이드 and report suggestions at once.
+async function deleteFaq(adminId, id) {
+  const faqId = Number(id);
+  if (!Number.isInteger(faqId) || faqId <= 0)
+    throw userError("FAQ를 찾을 수 없습니다.");
+  const faq = await prisma.schat_faq_items.findUnique({ where: { id: faqId } });
+  if (!faq) throw userError("FAQ를 찾을 수 없습니다.");
+  await prisma.schat_faq_items.delete({ where: { id: faqId } });
+  const { EventLogs } = require("../../models/eventLogs");
+  await EventLogs.logEvent(
+    "schat_faq_deleted",
+    { faqId, category: faq.category || null },
+    adminId
+  ).catch(() => null);
+  return { id: faqId };
+}
+
 async function listFaqs({ activeOnly = false } = {}) {
   const faqs = await prisma.schat_faq_items.findMany({
     where: activeOnly ? { active: true } : {},
@@ -980,10 +1026,12 @@ module.exports = {
   listMyReports,
   listReports,
   updateReportStatus,
+  deleteReport,
   listNotifications,
   markNotificationsRead,
   reportStats,
   listFaqs,
   saveFaq,
+  deleteFaq,
   suggestFaqs,
 };
