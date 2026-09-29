@@ -292,6 +292,66 @@ function queryTokens(text = "") {
   ];
 }
 
+// Retrieval ranking keeps using queryTokens above. These terms are used only
+// after retrieval, when deciding which already-found chunks are safe to pass
+// to the answer model. Conversational request wording must not make a relevant
+// clinical chunk look incomplete.
+const EVIDENCE_REQUEST_WORDS = new Set([
+  ...COVERAGE_REQUEST_WORDS,
+  "전체적",
+  "전체적으로",
+  "핵심",
+  "요약",
+  "정리",
+  "진행",
+  "어떻게",
+  "뭐부터",
+  "그중",
+  "그중에서",
+  "그거",
+  "그다음",
+  "그후",
+  "후에",
+  "후에는",
+  "점",
+  "점은",
+  "거야",
+]);
+
+function normalizeEvidenceQuestionToken(token = "") {
+  if (!/^[가-힣]+$/u.test(token)) return token;
+  const normalized = stripKoreanParticle(token);
+  const endings = ["하는", "할", "해", "하"];
+  for (const ending of endings) {
+    if (!normalized.endsWith(ending)) continue;
+    const stem = normalized.slice(0, -ending.length);
+    if (stem.length >= 2) return stem;
+  }
+  return normalized;
+}
+
+function evidenceQueryTerms(text = "") {
+  const terms = tokenize(text)
+    .map(normalizeEvidenceQuestionToken)
+    .flatMap(splitIntentSuffix)
+    .filter((term) => term.length >= 2 && !QUERY_STOPWORDS.has(term))
+    .filter((term) => !EVIDENCE_REQUEST_WORDS.has(term));
+  return [...new Set(subjectTerms(terms))];
+}
+
+const EVIDENCE_TERM_EQUIVALENTS = new Map([
+  ["관찰", ["관찰", "모니터링"]],
+]);
+
+function matchesEveryEvidenceTerm(text = "", terms = []) {
+  return terms.every((term) => {
+    const alternatives = EVIDENCE_TERM_EQUIVALENTS.get(term) || [term];
+    return alternatives.some(
+      (alternative) => matchedSubjectTerms(text, [alternative]) === 1
+    );
+  });
+}
+
 function tokenMatchesQueryTerm(token = "", term = "") {
   if (token === term) return true;
   if (
@@ -984,9 +1044,30 @@ function fuseGeminiAndBm25(
   const queryFocused = filterImageCandidatesByQueryFocus(ranked, { queryText });
   const relevant = filterWeakHybridTail(queryFocused, { queryText });
   const focused = filterIntentFocusedCandidates(relevant, { queryText });
-  return limitImageDescriptionCandidates(focused, {
+  const bodyFirst = prioritizeBodyEvidenceForTextAnswer(focused, queryText);
+  return limitImageDescriptionCandidates(bodyFirst, {
     maxImageResults,
   }).slice(0, topN);
+}
+
+function prioritizeBodyEvidenceForTextAnswer(candidates = [], queryText = "") {
+  if (
+    isImageRequest(queryText) ||
+    !/(?:어떻게|주의|관찰|요약|정리|전체적|핵심|진행)/u.test(
+      String(queryText)
+    )
+  )
+    return candidates;
+  const body = candidates.filter(
+    (candidate) => candidate?.metadata?.content_type !== "image_description"
+  );
+  if (!body.length) return candidates;
+  return [
+    ...body,
+    ...candidates.filter(
+      (candidate) => candidate?.metadata?.content_type === "image_description"
+    ),
+  ];
 }
 
 function uppercaseIdentifiers(text = "") {
@@ -1037,6 +1118,7 @@ function filterWeakHybridTail(
   } = {}
 ) {
   const terms = queryTokens(queryText);
+  const evidenceTerms = evidenceQueryTerms(queryText);
   const bestExactCoverage = ranked.reduce(
     (best, candidate) =>
       Math.max(best, candidate.retrieval?.bm25Coverage ?? 0),
@@ -1080,9 +1162,19 @@ function filterWeakHybridTail(
       imageSubjects.length;
 
   return ranked.filter((candidate) => {
+    if (
+      /(?:전체적|핵심|요약)/u.test(String(queryText)) &&
+      /[.·]{5,}/u.test(String(candidate?.text || ""))
+    )
+      return false;
     const bm25Coverage = candidate.retrieval?.bm25Coverage ?? 0;
     if (bm25Coverage >= minimumBm25Coverage) return true;
     if (containsAbbreviations(candidate)) return true;
+    if (
+      evidenceTerms.length > 0 &&
+      matchesEveryEvidenceTerm(candidate?.text, evidenceTerms)
+    )
+      return true;
     const vectorScore =
       candidate.vectorScore ?? candidate.retrieval?.vectorScore ?? null;
     if (subjectAtTop(candidate, vectorScore)) return true;
@@ -1180,6 +1272,7 @@ module.exports = {
   addSamePageImageCandidates,
   tokenize,
   queryTokens,
+  evidenceQueryTerms,
   coverageTerms,
   COVERAGE_REQUEST_WORDS,
   isImageRequest,

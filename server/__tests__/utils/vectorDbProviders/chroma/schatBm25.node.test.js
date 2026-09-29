@@ -81,6 +81,81 @@ test("질문의 조사와 요청 표현을 제거해 병원 핵심어만 남긴�
   assert.deepEqual(queryTokens("수혈 종류 알려줘"), ["수혈", "종류"]);
 });
 
+test("검색 후 근거 선택은 요청 표현과 제한적 활용형 때문에 임상 근거를 버리지 않는다", () => {
+  const candidate = (id, text, vectorScore = 0.64) => ({
+    id,
+    text,
+    metadata: { content_type: "text" },
+    vectorScore,
+    retrieval: { bm25Coverage: 0.25, vectorScore },
+  });
+
+  assert.deepEqual(
+    filterWeakHybridTail(
+      [candidate("sedation", "진정 시행 후 활력징후와 산소포화도를 관찰한다")],
+      { queryText: "진정할 때 주의할 점은?" }
+    ).map(({ id }) => id),
+    ["sedation"]
+  );
+  assert.deepEqual(
+    filterWeakHybridTail(
+      [candidate("transfusion", "수혈간호 절차와 확인사항")],
+      { queryText: "수혈간호를 전체적으로 핵심 요약해줘" }
+    ).map(({ id }) => id),
+    ["transfusion"]
+  );
+  assert.deepEqual(
+    filterWeakHybridTail(
+      [candidate("follow-up", "진정 후 환자 상태를 평가하고 모니터링한다")],
+      { queryText: "그중 진정 후에는 어떻게 관찰해?" }
+    ).map(({ id }) => id),
+    ["follow-up"]
+  );
+});
+
+test("목차의 점선 항목은 broad 질문의 답변 근거로 선택하지 않는다", () => {
+  const kept = filterWeakHybridTail(
+    [
+      {
+        id: "toc",
+        text: "11. 수혈간호············ 237",
+        vectorScore: 0.8,
+        retrieval: { bm25Coverage: 1, vectorScore: 0.8 },
+      },
+      {
+        id: "body",
+        text: "11. 수혈간호 절차와 확인사항",
+        vectorScore: 0.64,
+        retrieval: { bm25Coverage: 0.25, vectorScore: 0.64 },
+      },
+    ],
+    { queryText: "수혈간호를 전체적으로 핵심 요약해줘" }
+  );
+  assert.deepEqual(kept.map(({ id }) => id), ["body"]);
+});
+
+test("텍스트 절차 질문은 이미지 설명만 남기지 않고 본문 근거를 우선한다", () => {
+  const result = fuseGeminiAndBm25(
+    [
+      {
+        id: "fall-image",
+        text: "낙상 위험 환자의 진정 주의 화면",
+        metadata: { content_type: "image_description", page: 75 },
+        vectorScore: 0.82,
+      },
+      {
+        id: "sedation-body",
+        text: "진정 진행 중 모니터링과 시행 후 관찰",
+        metadata: { content_type: "text", page: 161 },
+        vectorScore: 0.66,
+      },
+    ],
+    [],
+    { topN: 1, queryText: "진정은 어떻게 진행하는 거야?", maxImageResults: 1 }
+  );
+  assert.deepEqual(result.map(({ id }) => id), ["sedation-body"]);
+});
+
 test("대해·대해서·관해는 질문 핵심어를 희석하지 않는다", () => {
   assert.deepEqual(queryTokens("FPRS에 대해 알려줘"), ["fprs"]);
   assert.deepEqual(queryTokens("FPRS에 대해서 알려줘"), ["fprs"]);

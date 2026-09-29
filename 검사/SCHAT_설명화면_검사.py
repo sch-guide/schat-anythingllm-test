@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -55,8 +56,33 @@ class SchatOverviewPageTest(unittest.TestCase):
         combined = page + public_json
         self.assertNotIn("GEMINI_API_KEY=", combined)
         self.assertNotIn("SCHAT_TEST_EMPLOYEE_PASSWORD", combined)
-        self.assertNotIn("server/storage", combined)
         self.assertNotIn(".pdf · p.", combined)
+        # The approved server deployment guide (05_인수인계, 2026-09-28) names
+        # the server data folder in its commands. Anywhere else on the page
+        # the storage path must still never appear.
+        outside_guides = re.sub(
+            r'<div class="guide-block".*?<!--/guide-->', "", page, flags=re.S
+        )
+        self.assertNotIn("server/storage", outside_guides + public_json)
+
+    def test_mentoring_overview_is_primary_and_evidence_is_collapsed(self):
+        """상세근거를 다시 항상 펼쳐 보이게 만드는 변경을 막는다."""
+        builder = load_builder()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "docs_view"
+            builder.build_docs_view(ROOT, output)
+            page = (output / "index.html").read_text(encoding="utf-8")
+
+        mentoring = re.search(
+            r'<section id="mentoring">.*?</section>', page, re.S
+        ).group(0)
+        self.assertIn("멘토링 조언 이행 현황", mentoring)
+        self.assertIn('<details class="mentoring-evidence">', mentoring)
+        self.assertIn("▶ 자세한 근거 보기", mentoring)
+        evidence = re.search(
+            r'<details class="mentoring-evidence">.*?</details>', mentoring, re.S
+        ).group(0)
+        self.assertIn("2026-09-19 멘토링 조언과 이행 현황", evidence)
 
 
 if __name__ == "__main__":

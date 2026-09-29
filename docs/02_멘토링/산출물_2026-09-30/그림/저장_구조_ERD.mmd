@@ -1,0 +1,8 @@
+erDiagram
+  DEPARTMENT ||--o{ USER : contains
+  WORKSPACE ||--o{ DOCUMENT : registers
+  DOCUMENT ||--o{ CHUNK : splits
+  DOCUMENT ||--o{ CHECKLIST : derives
+  WORKSPACE ||--o{ QUIZ : provides
+  WORKSPACE ||--o{ SYNONYM : uses
+  USER }o--o{ WORKSPACE : accesses

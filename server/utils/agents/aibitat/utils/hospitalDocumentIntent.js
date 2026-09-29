@@ -32,7 +32,20 @@ const HOSPITAL_DOCUMENT_ROOTS = [
   "치료",
   "용량",
   "부작용",
+  "모니터링",
 ];
+
+const HOSPITAL_QUERY_ALIASES = [
+  { pattern: /피\s*(?:를\s*)?넣기/u, replacement: "수혈" },
+];
+const FOLLOW_UP_PATTERN = /(?:그중에서|그중|그거|그\s*다음|그\s*후)/u;
+
+function applyHospitalQueryAliases(question = "") {
+  return HOSPITAL_QUERY_ALIASES.reduce(
+    (value, { pattern, replacement }) => value.replace(pattern, replacement),
+    String(question).normalize("NFKC")
+  );
+}
 
 function hasHospitalDocumentTerm(question = "") {
   return queryTokens(question).some((token) =>
@@ -49,11 +62,46 @@ function hasClinicalAbbreviation(question = "") {
 
 function shouldForceHospitalRagSearch(question = "") {
   if (typeof question !== "string" || !question.trim()) return false;
-  if (hasClinicalAbbreviation(question)) return true;
-  if (!hasHospitalDocumentTerm(question)) return false;
+  const normalizedQuestion = applyHospitalQueryAliases(question);
+  if (hasClinicalAbbreviation(normalizedQuestion)) return true;
+  if (!hasHospitalDocumentTerm(normalizedQuestion)) return false;
   return Boolean(
-    detectQuestionIntent(question) || queryTokens(question).length
+    detectQuestionIntent(normalizedQuestion) || queryTokens(normalizedQuestion).length
   );
+}
+
+function previousClinicalTopic(chatHistory = [], currentQuestion = "") {
+  if (!FOLLOW_UP_PATTERN.test(String(currentQuestion))) return "";
+  let skippedCurrent = false;
+  for (let index = chatHistory.length - 1; index >= 0; index -= 1) {
+    const message = chatHistory[index];
+    if (message?.role !== "user") continue;
+    if (!skippedCurrent) {
+      skippedCurrent = true;
+      continue;
+    }
+    const normalized = applyHospitalQueryAliases(message.content || "");
+    const topic = queryTokens(normalized).find((token) =>
+      HOSPITAL_DOCUMENT_ROOTS.some((root) => token.includes(root))
+    );
+    if (topic) return topic;
+  }
+  return "";
+}
+
+function buildHospitalRetrievalQuery(question = "", chatHistory = []) {
+  const normalized = applyHospitalQueryAliases(question).trim();
+  const topic = previousClinicalTopic(chatHistory, normalized);
+  if (!topic || normalized.includes(topic)) return normalized;
+  return `${topic} ${normalized}`;
+}
+
+function isolateCurrentHospitalQuestion(messages = [], currentQuestion = "") {
+  const system = messages.find((message) => message?.role === "system");
+  return [
+    ...(system ? [system] : []),
+    { role: "user", content: currentQuestion },
+  ];
 }
 
 // Option A of the re-search comparison (default off): see aibitat/index.js.
@@ -110,6 +158,8 @@ function forcedEvidenceIsSufficient(sources = []) {
 
 module.exports = {
   shouldForceHospitalRagSearch,
+  buildHospitalRetrievalQuery,
+  isolateCurrentHospitalQuestion,
   skipToolsAfterForcedSearch,
   boundedResearchEnabled,
   forcedEvidenceIsSufficient,

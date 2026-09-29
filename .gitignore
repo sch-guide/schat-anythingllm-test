@@ -12,3 +12,6 @@ aws_cf_deploy_anything_llm.json
 yarn.lock
 *.bak
 .idea
+
+# 병원 지침 원문이 들어가는 멘토링 눈검토 엑셀은 로컬에서만 보관한다.
+docs/02_멘토링/산출물_2026-09-30/로컬전용_원자료/

@@ -17,7 +17,7 @@ FOLDER_CATALOG = (
     ("server", "SCHAT 서버", "로그인, 검색, Gemini 답변, 출처 검증과 API를 담당합니다.", "utils/chats/stream.js"),
     ("collector", "문서 처리", "업로드한 PDF와 파일을 읽고 검색 가능한 단위로 처리합니다.", "processSingleFile/"),
     ("docker", "실행 환경", "SCHAT 웹과 ChromaDB 등 필요한 서비스를 함께 실행합니다.", "docker-compose.yml"),
-    ("safety_evaluator", "연구용 안전검사", "현재 기본 답변 경로와 분리된 Python 안전검사 코드를 보존합니다.", "core.py"),
+    ("safety_evaluator", "안전 검사 서비스", "Python 안전 검사 코드를 독립 서비스로 보관함.", "core.py"),
     ("검사", "자동 검사", "설정, 검색, 문서 화면과 실행 구성이 맞는지 확인합니다.", ""),
     ("문서도구", "문서 자동화", "공식 문서를 읽어 이 설명 화면과 개요 데이터를 만듭니다.", "문서화면_만들기.py"),
     ("docs", "공식 문서", "현재 상태와 작업일지 등 프로젝트 공식 문서를 보관합니다.", ""),
@@ -82,6 +82,8 @@ def _inline(text: str) -> str:
             return keep(
                 f'<a href="{html.escape(target, quote=True)}" rel="noreferrer">{html.escape(label)}</a>'
             )
+        if re.fullmatch(r"#[A-Za-z0-9_-]+", target):
+            return keep(f'<a href="{target}">{html.escape(label)}</a>')
         # Links to other files in the repository are shown as their label.
         return keep(html.escape(label))
 
@@ -183,15 +185,20 @@ def markdown_to_safe_html(markdown: str) -> str:
             result.append(f"<h{level}>{_inline(heading.group(2))}</h{level}>")
             continue
         bullet = re.match(r"^[-*]\s+(.+)$", line)
-        number = re.match(r"^\d+[.)]\s+(.+)$", line)
+        number = re.match(r"^(\d+)[.)]\s+(.+)$", line)
         if bullet or number:
             desired = "ul" if bullet else "ol"
             if list_kind != desired:
                 close_list()
                 list_kind = desired
-                result.append(f"<{desired}>")
-            value = (bullet or number).group(1)
+                start = int(number.group(1)) if number else 1
+                result.append(f'<ol start="{start}">' if start > 1 else f"<{desired}>")
+            value = bullet.group(1) if bullet else number.group(2)
             result.append(f"<li>{_inline(value)}</li>")
+            continue
+        if list_kind and raw.startswith("  ") and result[-1].endswith("</li>"):
+            # An indented line right under a list item continues that item.
+            result[-1] = result[-1][: -len("</li>")] + f"<br>{_inline(line)}</li>"
             continue
         close_list()
         result.append(f"<p>{_inline(line)}</p>")
@@ -220,6 +227,36 @@ def _guides(repository_root: Path) -> list[dict[str, str]]:
             }
         )
     return guides
+
+
+def _mentoring(repository_root: Path) -> list[dict[str, str]]:
+    """Mentoring records in docs/02_멘토링 (newest first). Files whose name
+    starts with "_" (the template) are not shown."""
+    folder = repository_root / "docs" / "02_멘토링"
+    paths = [
+        path
+        for path in (folder.glob("*.md") if folder.is_dir() else [])
+        if not path.name.startswith("_") and path.name.upper() != "README.MD"
+    ]
+    # Newest meeting first; within one meeting the easy "한눈에 보기" first.
+    paths.sort(key=lambda path: (path.name[:10], "한눈에" in path.name, path.name), reverse=True)
+    anchors = {path.name: f"#mentoring-{index}" for index, path in enumerate(paths)}
+    records = []
+    for path in paths:
+        markdown = _read(path)
+        if not markdown:
+            continue
+        for name, anchor in anchors.items():
+            markdown = markdown.replace(f"]({name})", f"]({anchor})")
+        records.append(
+            {
+                "title": _markdown_title(markdown, path.stem.replace("_", " ")),
+                "summary": _first_summary(markdown),
+                "html": markdown_to_safe_html(markdown),
+                "document": f"docs/02_멘토링/{path.name}",
+            }
+        )
+    return records
 
 
 def _compose_services(compose: str) -> list[str]:
@@ -384,10 +421,10 @@ def collect_overview(repository_root: Path) -> dict:
         "schemaVersion": 1,
         "generatedOn": date.today().isoformat(),
         "project": {
-            "name": "SCHAT 기능 비교 테스트",
-            "relationship": "AnythingLLM을 기반으로 병원 등록 문서만 사용하는 SCHAT 검색·답변 방식을 검증하는 별도 테스트 저장소입니다.",
-            "audience": "문서를 관리하는 관리자와 병원 지침을 검색하는 직원이 사용합니다.",
-            "purpose": "등록된 병원 문서에서 관련 근거를 찾아 자연스러운 답변과 확인 가능한 출처를 제공하는 것이 핵심 목적입니다.",
+            "name": "SCHAT 병원 실무지침 AI 시스템",
+            "relationship": "AnythingLLM의 서비스 기반에 직접 검증한 SCHAT 검색과 병원 전용 기능을 적용함.",
+            "audience": "관리자는 병원 문서를 관리하고 직원은 지침 근거를 검색함.",
+            "purpose": "등록된 병원 지침과 교육자료에서 관련 근거를 찾아 답변과 출처를 제공함.",
         },
         "workflow": [
             {"title": "문서 업로드", "description": "관리자가 승인된 PDF를 등록합니다."},
@@ -417,11 +454,11 @@ def collect_overview(repository_root: Path) -> dict:
         "status": _status(root),
         "tests": _test_files(root),
         "safeguards": [
-            "근거가 없으면 Gemini를 호출하지 않고 답변을 중단합니다.",
-            "등록된 SCHAT 문서 밖의 일반 지식과 외부 웹검색을 사용하지 않습니다.",
-            "structured JSON과 허용된 출처 번호를 서버에서 검증합니다.",
-            "내부 ID, metadata, 경로와 SVG를 직원 화면에 노출하지 않습니다.",
-            "Docker healthcheck, production build와 git diff 검사를 사용합니다.",
+            "등록된 병원 문서 근거 안에서만 답변함.",
+            "근거가 없으면 일반 지식으로 추측하지 않음.",
+            "내부 ID, metadata와 경로를 직원 화면에 노출하지 않음.",
+            "운영 데이터는 승인 없이 삭제하거나 초기화하지 않음.",
+            "검색 관련 변경 뒤 기존 질문 회귀검사를 실행함.",
         ],
         "history": _history(root),
         "handover": {
@@ -430,6 +467,7 @@ def collect_overview(repository_root: Path) -> dict:
             "document": "05_인수인계/SCHAT_인수인계.md",
         },
         "guides": _guides(root),
+        "mentoring": _mentoring(root),
     }
     serialized = json.dumps(data, ensure_ascii=False)
     if SECRET_WORDS.search(serialized):
@@ -455,6 +493,10 @@ def public_data(data: dict) -> dict:
         "guides": [
             {key: guide[key] for key in ("title", "summary", "document")}
             for guide in data.get("guides", [])
+        ],
+        "mentoring": [
+            {key: record[key] for key in ("title", "summary", "document")}
+            for record in data.get("mentoring", [])
         ],
     }
 

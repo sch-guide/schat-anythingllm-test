@@ -112,7 +112,7 @@ class DocsViewIsolationTest(unittest.TestCase):
             html = (output / "index.html").read_text(encoding="utf-8")
             overview_data_exists = (output / "schat-overview-data.json").is_file()
 
-        self.assertIn("SCHAT 기능 비교 테스트", html)
+        self.assertIn("SCHAT 병원 실무지침 AI 시스템", html)
         self.assertIn("SCHAT 한눈에 보기", html)
         self.assertIn("현재 상태와 안전장치", html)
         self.assertIn("변경 이력 보기", html)
@@ -148,6 +148,26 @@ class DocsViewIsolationTest(unittest.TestCase):
 
         actual = (ROOT / "docs_view" / "index.html").read_bytes()
         self.assertEqual(actual, expected)
+
+    def test_generated_view_shows_four_mentoring_diagrams_as_images(self):
+        builder = load_builder()
+        expected_files = (
+            "시스템_아키텍처.svg",
+            "질문_처리_흐름.svg",
+            "문서_등록_DFD.svg",
+            "저장_구조_ERD.svg",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "docs_view"
+            builder.build_docs_view(ROOT, output)
+            html = (output / "index.html").read_text(encoding="utf-8")
+            asset_dir = output / "assets" / "mentoring"
+
+            for filename in expected_files:
+                self.assertTrue((asset_dir / filename).is_file(), filename)
+                self.assertIn(f"assets/mentoring/{filename}", html)
+
+            self.assertGreaterEqual(html.count('class="mentoring-diagram"'), 4)
 
     def test_official_document_links_point_to_existing_files(self):
         link_pattern = re.compile(r"\[[^]]+\]\(([^)]+)\)")

@@ -1,0 +1,7 @@
+flowchart LR
+  B[직원·관리자 브라우저] --> C[Caddy HTTPS]
+  C --> W[SCHAT Web]
+  W --> S[(SQLite·파일)]
+  W --> V[(ChromaDB)]
+  W --> M[BM25]
+  W --> G[Google Gemini]

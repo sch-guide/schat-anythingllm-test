@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="580" viewBox="0 0 1180 580">
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#64748b"/></marker></defs>
+<rect width="100%" height="100%" fill="#f8fafc"/><text x="40" y="48" font-family="sans-serif" font-size="26" font-weight="700" fill="#0f172a">SCHAT 시스템 아키텍처</text>
+<rect x="40" y="110" rx="14" width="210" height="54" fill="#dbeafe" stroke="#334155"/>
+<text x="145" y="144" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#0f172a">직원·관리자 브라우저</text>
+<rect x="310" y="110" rx="14" width="210" height="54" fill="#dcfce7" stroke="#334155"/>
+<text x="415" y="144" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#0f172a">Caddy · HTTPS</text>
+<rect x="580" y="110" rx="14" width="210" height="54" fill="#fef3c7" stroke="#334155"/>
+<text x="685" y="144" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#0f172a">SCHAT Web</text>
+<rect x="850" y="45" rx="14" width="210" height="54" fill="#fce7f3" stroke="#334155"/>
+<text x="955" y="79" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#0f172a">SQLite·파일 저장</text>
+<rect x="850" y="115" rx="14" width="210" height="54" fill="#ede9fe" stroke="#334155"/>
+<text x="955" y="149" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#0f172a">Chroma + BM25</text>
+<rect x="850" y="185" rx="14" width="210" height="54" fill="#fee2e2" stroke="#334155"/>
+<text x="955" y="219" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#0f172a">Google Gemini</text>
+<line x1="250" y1="137" x2="302" y2="137" stroke="#64748b" stroke-width="2" marker-end="url(#a)"/>
+<line x1="520" y1="137" x2="572" y2="137" stroke="#64748b" stroke-width="2" marker-end="url(#a)"/>
+<line x1="790" y1="137" x2="842" y2="72" stroke="#64748b" stroke-width="2" marker-end="url(#a)"/>
+<line x1="790" y1="137" x2="842" y2="142" stroke="#64748b" stroke-width="2" marker-end="url(#a)"/>
+<line x1="790" y1="137" x2="842" y2="212" stroke="#64748b" stroke-width="2" marker-end="url(#a)"/>
+</svg>

@@ -1,0 +1,7 @@
+flowchart LR
+  P[PDF] --> E[글·그림 추출]
+  E --> C[900자 청킹·120자 겹침]
+  C --> V[Gemini 임베딩]
+  V --> S[(ChromaDB)]
+  E --> I[(원본 PDF·이미지·JSON)]
+  E --> K[체크리스트 구조 추출]

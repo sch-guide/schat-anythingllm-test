@@ -11,6 +11,8 @@ const {
 } = require("./utils/ragSources.js");
 const {
   shouldForceHospitalRagSearch,
+  buildHospitalRetrievalQuery,
+  isolateCurrentHospitalQuestion,
   skipToolsAfterForcedSearch,
   boundedResearchEnabled,
   forcedEvidenceIsSufficient,
@@ -994,8 +996,12 @@ ${this.getHistory({ to: route.to })
       ?.map((name) => this.functions.get(this.#parseFunctionName(name)))
       .filter((a) => !!a);
 
-    const forcedRagContext = await this.forceHospitalRagSearch(
+    const hospitalRetrievalQuery = buildHospitalRetrievalQuery(
       userPrompt,
+      chatHistory
+    );
+    const forcedRagContext = await this.forceHospitalRagSearch(
+      hospitalRetrievalQuery,
       functions?.find((fn) => fn.name === "rag-memory")
     );
     if (forcedRagContext) {
@@ -1008,6 +1014,16 @@ ${this.getHistory({ to: route.to })
             `<hospital_document_context>\n${forcedRagContext}\n</hospital_document_context>`,
         };
         break;
+      }
+      if (
+        shouldForceHospitalRagSearch(hospitalRetrievalQuery) &&
+        (this.getRagMemorySources?.() || []).length === 0
+      ) {
+        messages.splice(
+          0,
+          messages.length,
+          ...isolateCurrentHospitalQuestion(messages, messages.at(-1)?.content)
+        );
       }
     }
 

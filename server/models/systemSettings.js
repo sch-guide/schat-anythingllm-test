@@ -8,6 +8,7 @@ const prisma = require("../utils/prisma");
 const { MetaGenerator } = require("../utils/boot/MetaGenerator");
 const { PGVector } = require("../utils/vectorDbProviders/pgvector");
 const { getBaseLLMProviderModel } = require("../utils/helpers");
+const { loadPromptBaseline } = require("../utils/prompts");
 const {
   ConnectionStringParser,
 } = require("../utils/agents/aibitat/plugins/sql-agent/SQLConnectors/utils");
@@ -36,6 +37,8 @@ const SystemSettings = {
   /** A default system prompt that is used when no other system prompt is set or available to the function caller. */
   saneDefaultSystemPrompt:
     "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. The current date and time is {datetime}. Return only your response to the question given the above information following the users instructions as needed.",
+  yamlDefaultSystemPrompt:
+    loadPromptBaseline("answer-system")?.prompt || null,
   /**
    * The prompt a workspace inherits when it has no prompt of its own: the
    * admin-managed Default System Prompt, or the built-in default if unset.
@@ -43,7 +46,11 @@ const SystemSettings = {
    */
   effectiveDefaultSystemPrompt: async function () {
     const setting = await this.get({ label: "default_system_prompt" });
-    return setting?.value || this.saneDefaultSystemPrompt;
+    return (
+      setting?.value ||
+      this.yamlDefaultSystemPrompt ||
+      this.saneDefaultSystemPrompt
+    );
   },
   protectedFields: ["multi_user_mode", "hub_api_key", "onboarding_complete"],
   publicFields: [
