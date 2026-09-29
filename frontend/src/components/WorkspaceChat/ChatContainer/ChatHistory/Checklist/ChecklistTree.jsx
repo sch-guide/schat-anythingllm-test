@@ -2,8 +2,8 @@ import { useEffect, useRef } from "react";
 import { CaretDown, CaretRight } from "@phosphor-icons/react";
 import {
   detailKey,
+  isCheckableDetail,
   isInformationalItem,
-  isNoteDetail,
   parentState,
   toggleDetail,
   toggleParent,
@@ -79,7 +79,7 @@ function CheckableItem({ scope, item, checkedItems, onCheckedChange }) {
       {item.details.length > 0 && (
         <div className="flex flex-col gap-1 pl-8">
           {item.details.map((detail, index) => {
-            if (isNoteDetail(detail))
+            if (!isCheckableDetail(item, index))
               return (
                 <NoteDetail
                   key={`${item.id}-detail-${index}`}

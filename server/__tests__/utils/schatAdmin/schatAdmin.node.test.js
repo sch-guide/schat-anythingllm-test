@@ -27,8 +27,9 @@ test("checklists needing review are counted separately", () => {
       { status: "active", active: true },
       { status: "needs_review", active: false },
       { active: true },
+      { status: "hidden", active: false },
     ]),
-    { total: 3, active: 2, review: 1 }
+    { total: 4, active: 2, review: 1, hidden: 1 }
   );
 });
 

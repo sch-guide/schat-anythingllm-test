@@ -9,6 +9,8 @@ const {
   ROLES,
 } = require("../utils/middleware/multiUserProtected");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
+const Synonyms = require("../utils/synonyms");
+const { loadUsageStats } = require("../utils/schatAdmin/usageStats");
 const {
   ChecklistRepository,
 } = require("../utils/documentChecklists/repository");
@@ -255,6 +257,87 @@ function schatAdminEndpoints(app) {
         });
       } finally {
         cleanupRunning = false;
+      }
+    }
+  );
+
+  // 사용 통계 (admin only, read only, no AI calls). Cached for 5 minutes.
+  app.get(
+    "/schat-admin/usage-stats",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      try {
+        const period = String(request.query?.period || "7d");
+        response.status(200).json(await loadUsageStats(period));
+      } catch (e) {
+        console.error("[schat-admin] usage stats failed:", e.message);
+        response.sendStatus(500).end();
+      }
+    }
+  );
+
+  // 동의어 관리 (admin only). Drafts are added once, as "검토 필요".
+  const synonymError = (response, error) =>
+    response.status(400).json({
+      success: false,
+      error: /[가-힣]/.test(error?.message || "")
+        ? error.message
+        : "동의어를 저장하지 못했습니다.",
+    });
+
+  app.get(
+    "/schat-admin/synonyms",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (_request, response) => {
+      try {
+        response.status(200).json({ groups: await Synonyms.listGroups() });
+      } catch (e) {
+        console.error("[schat-admin] synonym list failed:", e.message);
+        response.status(500).json({ groups: [] });
+      }
+    }
+  );
+
+  app.post(
+    "/schat-admin/synonyms",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      try {
+        const group = await Synonyms.createGroup(reqBody(request) || {});
+        response.status(200).json({ success: true, group });
+      } catch (e) {
+        synonymError(response, e);
+      }
+    }
+  );
+
+  app.put(
+    "/schat-admin/synonyms/:id",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      try {
+        const group = await Synonyms.updateGroup(
+          request.params.id,
+          reqBody(request) || {}
+        );
+        if (!group) return response.sendStatus(404);
+        response.status(200).json({ success: true, group });
+      } catch (e) {
+        synonymError(response, e);
+      }
+    }
+  );
+
+  app.delete(
+    "/schat-admin/synonyms/:id",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      try {
+        const deleted = await Synonyms.deleteGroup(request.params.id);
+        if (!deleted) return response.sendStatus(404);
+        response.status(200).json({ success: true });
+      } catch (e) {
+        synonymError(response, e);
       }
     }
   );

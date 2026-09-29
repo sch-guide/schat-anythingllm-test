@@ -112,7 +112,7 @@ test("employee tree renders read-only rows, parent/child checkboxes, indetermina
   assert.match(tree, /toggleParent\(scope, item, checkedItems\)/);
   assert.match(tree, /toggleDetail\(scope, item, index, checkedItems\)/);
   assert.match(tree, /checklistId: checklist\.id, sectionId: section\.id/);
-  assert.match(tree, /isNoteDetail\(detail\)/);
+  assert.match(tree, /isCheckableDetail\(item, index\)/);
   assert.match(tree, /line-through/);
 });
 

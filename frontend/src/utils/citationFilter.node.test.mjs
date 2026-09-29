@@ -98,3 +98,37 @@ test("an alias-bearing page wins over a generic page even when the generic page 
     [56]
   );
 });
+
+test("picture question keeps a picture source about the question subject", () => {
+  const picture = {
+    ...source(115, "가상 수혈 제품 사진 설명"),
+    relatedImages: [{ imageKey: "a".repeat(64), page: 115 }],
+  };
+  const unrelatedPicture = {
+    ...source(30, "가상 입원 절차 흐름도"),
+    relatedImages: [{ imageKey: "b".repeat(64), page: 30 }],
+  };
+  const text = source(125, "가상 수혈 세트는 필터가 있는 세트를 사용한다.");
+  const answer = "가상 수혈 세트는 필터가 있는 세트를 사용합니다.";
+
+  const result = filterDirectCitationSources({
+    question: "수혈 세트 그림 보여줘",
+    answer,
+    sources: [text, picture, unrelatedPicture],
+  });
+  assert.deepEqual(
+    result.map((item) => item.page),
+    [125, 115]
+  );
+
+  // the same sources for a non-picture question keep the old rule
+  const plain = filterDirectCitationSources({
+    question: "수혈 세트 알려줘",
+    answer,
+    sources: [text, picture, unrelatedPicture],
+  });
+  assert.deepEqual(
+    plain.map((item) => item.page),
+    [125]
+  );
+});

@@ -11,6 +11,13 @@ const {
 } = require("./utils/ragSources.js");
 const {
   shouldForceHospitalRagSearch,
+  skipToolsAfterForcedSearch,
+  boundedResearchEnabled,
+  forcedEvidenceIsSufficient,
+  BOUNDED_EXTRA_SEARCHES,
+  BOUNDED_FINAL_INSTRUCTION,
+  BOUNDED_SOURCES_ONLY_ANSWER,
+  BOUNDED_NOT_FOUND_ANSWER,
 } = require("./utils/hospitalDocumentIntent.js");
 
 /**
@@ -1004,6 +1011,42 @@ ${this.getHistory({ to: route.to })
       }
     }
 
+    // Optional (default off): when the forced hospital search already found
+    // evidence, answer from it in this turn without further tool calls.
+    // Enable with SCHAT_AGENT_SKIP_TOOLS_AFTER_FORCED_SEARCH=true.
+    if (
+      forcedRagContext &&
+      skipToolsAfterForcedSearch() &&
+      (this.getRagMemorySources?.() || []).length > 0
+    ) {
+      functions = [];
+      this.handlerProps?.log?.(
+        "[SCHAT] Forced hospital search found evidence - answering without extra tool calls."
+      );
+    }
+
+    // Option C (default off, SCHAT_AGENT_RESEARCH_MODE=bounded): answer at
+    // once when the forced search is sufficient, otherwise allow at most
+    // BOUNDED_EXTRA_SEARCHES extra searches (enforced in the executors).
+    this._schatExtraSearchLimit = null;
+    this._schatExtraSearches = 0;
+    if (boundedResearchEnabled()) {
+      if (
+        forcedRagContext &&
+        forcedEvidenceIsSufficient(this.getRagMemorySources?.() || [])
+      ) {
+        functions = [];
+        this.handlerProps?.log?.(
+          "[SCHAT] Bounded research: forced evidence is sufficient - answering without tools."
+        );
+      } else {
+        this._schatExtraSearchLimit = BOUNDED_EXTRA_SEARCHES;
+        this.handlerProps?.log?.(
+          `[SCHAT] Bounded research: up to ${BOUNDED_EXTRA_SEARCHES} extra searches.`
+        );
+      }
+    }
+
     // Rerank tools based on user prompt if enabled
     if (ToolReranker.isEnabled() && functions?.length) {
       const toolReranker = new ToolReranker();
@@ -1111,6 +1154,83 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
    *
    * @returns {Promise<string>}
    */
+  /** Option C: true when the model asks for a search beyond the limit. */
+  #extraSearchLimitReached() {
+    return (
+      Number.isInteger(this._schatExtraSearchLimit) &&
+      this._schatExtraSearches >= this._schatExtraSearchLimit
+    );
+  }
+
+  #countExtraSearch() {
+    if (Number.isInteger(this._schatExtraSearchLimit))
+      this._schatExtraSearches += 1;
+  }
+
+  /**
+   * Option C: produce the final answer without any further tool call. Earlier
+   * tool results are handed over as plain text (no tool-call history, no
+   * tools) so the model has nothing to repeat; a tool call it still returns
+   * is never executed. The second attempt sends one compact message
+   * (question + evidence + instruction) without any conversation structure.
+   * If the model still asks for a search, the answer points to the evidence
+   * already found, or says nothing was found when there is no evidence.
+   */
+  async #answerWithoutMoreTools(
+    messages = [],
+    { stream = false, eventHandler } = {}
+  ) {
+    this.handlerProps?.log?.(
+      `[SCHAT] Extra search limit (${this._schatExtraSearchLimit}) reached - ignoring the search request and answering from the evidence so far.`
+    );
+    const flattened = messages.map((message) =>
+      message?.role === "function"
+        ? {
+            role: "user",
+            content: `[병원 문서 검색 결과]\n${
+              typeof message.content === "string"
+                ? message.content
+                : JSON.stringify(message.content)
+            }`,
+          }
+        : message
+    );
+    flattened.push({ role: "user", content: BOUNDED_FINAL_INSTRUCTION });
+    const compact = [
+      ...flattened.filter((message) => message?.role === "system"),
+      {
+        role: "user",
+        content: flattened
+          .filter(
+            (message) =>
+              message?.role === "user" && typeof message.content === "string"
+          )
+          .map((message) => message.content)
+          .join("\n\n"),
+      },
+    ];
+    for (const attemptMessages of [flattened, compact]) {
+      const completion = await this.#safeProviderCall(() =>
+        stream
+          ? this.providerInstance.stream(attemptMessages, [], eventHandler)
+          : this.providerInstance.complete(attemptMessages, [])
+      );
+      if (this._aborted) return null;
+      if (!completion?.functionCall) return completion;
+      this.handlerProps?.log?.(
+        "[SCHAT] Model requested another search after the limit - not executed."
+      );
+    }
+    const hasEvidence = (this.getRagMemorySources?.() || []).length > 0;
+    return {
+      textResponse: hasEvidence
+        ? BOUNDED_SOURCES_ONLY_ANSWER
+        : BOUNDED_NOT_FOUND_ANSWER,
+      uuid: v4(),
+      fallback: true,
+    };
+  }
+
   async handleAsyncExecution(
     messages = [],
     functions = [],
@@ -1139,6 +1259,29 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     // An abort mid-stream resolves (not throws) with a partial completion,
     // which can include a truncated tool call - never act on it.
     if (this._aborted) return null;
+
+    if (completionStream.functionCall && this.#extraSearchLimitReached()) {
+      const answer = await this.#answerWithoutMoreTools(messages, {
+        stream: true,
+        eventHandler,
+      });
+      if (!answer) return null;
+      const uuid = answer.uuid || v4();
+      if (answer.fallback)
+        eventHandler?.("reportStreamEvent", {
+          type: "fullTextResponse",
+          uuid,
+          content: answer.textResponse,
+        });
+      eventHandler?.("reportStreamEvent", {
+        type: "usageMetrics",
+        uuid,
+        metrics: this.providerInstance.getCumulativeUsage(),
+      });
+      this?.flushCitations?.(uuid);
+      this?.emitChatId?.(uuid);
+      return answer.textResponse;
+    }
 
     if (completionStream.functionCall) {
       const { name, arguments: args } = completionStream.functionCall;
@@ -1184,6 +1327,7 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
       );
 
       const result = await fn.handler(args);
+      this.#countExtraSearch();
       Telemetry.sendTelemetry("agent_tool_call", { tool: name }, null, true);
       this.emitter.emit("toolCallResult", {
         toolName: name,
@@ -1307,6 +1451,21 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     // which can include a truncated tool call - never act on it.
     if (this._aborted) return null;
 
+    if (completion.functionCall && this.#extraSearchLimitReached()) {
+      const answer = await this.#answerWithoutMoreTools(messages, {
+        stream: false,
+      });
+      if (!answer) return null;
+      eventHandler?.("reportStreamEvent", {
+        type: "usageMetrics",
+        uuid: msgUUID,
+        metrics: this.providerInstance.getCumulativeUsage(),
+      });
+      this?.flushCitations?.(msgUUID);
+      this?.emitChatId?.(msgUUID);
+      return answer.textResponse;
+    }
+
     if (completion.functionCall) {
       const { name, arguments: args } = completion.functionCall;
       const fn = this.functions.get(name);
@@ -1352,6 +1511,7 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
       );
 
       const result = await fn.handler(args);
+      this.#countExtraSearch();
       Telemetry.sendTelemetry("agent_tool_call", { tool: name }, null, true);
       this.emitter.emit("toolCallResult", {
         toolName: name,

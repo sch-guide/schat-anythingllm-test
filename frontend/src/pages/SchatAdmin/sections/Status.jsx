@@ -98,7 +98,7 @@ export default function StatusSection() {
         ))}
         <InfoRow label="체크리스트 수">
           {checklists
-            ? `${formatNumber(checklists.total)}개 (사용 중 ${formatNumber(checklists.active)} · 검토 필요 ${formatNumber(checklists.review)})`
+            ? `${formatNumber(checklists.total)}개 (공개 ${formatNumber(checklists.active)} · 검토 필요 ${formatNumber(checklists.review)}${checklists.hidden ? ` · 숨김 ${formatNumber(checklists.hidden)}` : ""})`
             : "확인 불가"}
         </InfoRow>
       </Card>

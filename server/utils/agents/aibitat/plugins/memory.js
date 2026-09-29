@@ -5,6 +5,12 @@ const {
 } = require("../../../helpers");
 const { Deduplicator } = require("../utils/dedupe");
 const {
+  isImageRequest,
+  queryTokens,
+  subjectTerms,
+  matchedSubjectTerms,
+} = require("../../../vectorDbProviders/chroma/schatBm25");
+const {
   buildPublicRagSource,
   buildRagContext,
 } = require("../utils/ragSources");
@@ -24,11 +30,37 @@ function sourcePage(source = {}) {
   return String(source.page ?? "").trim();
 }
 
+const MAX_IMAGE_REQUEST_IMAGES = 3;
+const IMAGE_SHOWN_NOTICE =
+  "(안내) 위 지침서 그림은 답변 아래 출처에 원본 사진으로 함께 표시됩니다. 사진을 보여줄 수 없다고 말하지 말고, 그림 내용은 위 설명 범위 안에서만 답하세요.";
+const MAX_IMAGE_PAGE_DISTANCE = 2;
+
+function pageNumber(value = "") {
+  const text = String(value ?? "").trim();
+  return /^\d+$/.test(text) ? Number(text) : Number.NaN;
+}
+
+function nearEvidencePage(sources = [], documentIdentity = "", page = "") {
+  const imagePage = pageNumber(page);
+  if (!documentIdentity || !Number.isFinite(imagePage)) return false;
+  return sources.some((source) => {
+    const sourcePageNumber = pageNumber(sourcePage(source));
+    return (
+      sourceDocumentIdentity(source) === documentIdentity &&
+      Number.isFinite(sourcePageNumber) &&
+      Math.abs(sourcePageNumber - imagePage) <= MAX_IMAGE_PAGE_DISTANCE
+    );
+  });
+}
+
 function attachRelatedImageSources(
   sources = [],
   relatedImageSources = [],
   question = ""
 ) {
+  const imageRequest = isImageRequest(question);
+  const subjects = imageRequest ? subjectTerms(queryTokens(question)) : [];
+  let standaloneImages = 0;
   const linkedSources = sources.map((source) => ({ ...source }));
   const seenImageKeys = new Set(
     linkedSources.flatMap((source) =>
@@ -52,7 +84,27 @@ function attachRelatedImageSources(
         sourceDocumentIdentity(source) === documentIdentity &&
         sourcePage(source) === page
     );
-    if (sourceIndex < 0) continue;
+    if (sourceIndex < 0) {
+      // Picture questions only: an image without same-page text evidence is
+      // shown as its own source, with its own document and page, when its
+      // description holds every subject word of the question and it is
+      // printed near (within 2 pages of) the evidence in the same document.
+      if (
+        !imageRequest ||
+        standaloneImages >= MAX_IMAGE_REQUEST_IMAGES ||
+        !subjects.length ||
+        matchedSubjectTerms(candidate.text, subjects) !== subjects.length ||
+        !nearEvidencePage(sources, documentIdentity, page)
+      )
+        continue;
+      linkedSources.push({
+        ...candidate,
+        content_type: "image_description",
+      });
+      standaloneImages += 1;
+      seenImageKeys.add(image.imageKey);
+      continue;
+    }
 
     linkedSources[sourceIndex] = {
       ...linkedSources[sourceIndex],
@@ -63,6 +115,44 @@ function attachRelatedImageSources(
   }
 
   return linkedSources;
+}
+
+/**
+ * Picture questions only: the model also receives the descriptions of the
+ * images attached to the answer, so it knows which guideline pictures exist.
+ * Other questions get exactly the evidence text they received before.
+ */
+function imageRequestContextSources(
+  sources = [],
+  linkedSources = [],
+  question = ""
+) {
+  if (!isImageRequest(question)) return sources;
+  // linkedSources = copies of sources (same order) + standalone image sources
+  const imageDescriptions = linkedSources
+    .map((source, index) => {
+      if (index >= sources.length) return source.text;
+      return sources[index].image_key ? null : source.image_description;
+    })
+    .map((description, index) =>
+      description
+        ? {
+            text: `(지침서 그림 설명, p.${linkedSources[index].page ?? "?"}) ${description}`,
+          }
+        : null
+    )
+    .filter(Boolean);
+  // The Citation list shows these guideline pictures under the answer
+  // (decorative images such as the hospital logo are never shown).
+  const picturesShown = linkedSources.some(
+    (source) =>
+      buildPublicRagSource(source, { question }).relatedImages.length > 0
+  );
+  return [
+    ...sources,
+    ...imageDescriptions,
+    ...(picturesShown ? [{ text: IMAGE_SHOWN_NOTICE }] : []),
+  ];
 }
 
 const memory = {
@@ -163,23 +253,28 @@ const memory = {
                   rerank: workspace?.vectorSearchMode === "rerank",
                 });
 
-              const ragContext = buildRagContext(sources);
               if (sources.length === 0) {
                 this.super.introspect(
                   `${this.caller}: I didn't find anything locally that would help answer this question.`
                 );
-                return ragContext;
+                return buildRagContext(sources);
               }
 
               this.super.introspect(
                 `${this.caller}: Found ${contextTexts.length} additional piece of context to help answer this question.`
               );
 
-              this.super.addRagMemorySources?.(
-                attachRelatedImageSources(sources, relatedImageSources, query),
-                { question: query }
+              const linkedSources = attachRelatedImageSources(
+                sources,
+                relatedImageSources,
+                query
               );
-              return ragContext;
+              this.super.addRagMemorySources?.(linkedSources, {
+                question: query,
+              });
+              return buildRagContext(
+                imageRequestContextSources(sources, linkedSources, query)
+              );
             } catch (error) {
               this.super.handlerProps.log(
                 `memory.search raised an error. ${error.message}`
@@ -231,5 +326,6 @@ const memory = {
 
 module.exports = {
   attachRelatedImageSources,
+  imageRequestContextSources,
   memory,
 };

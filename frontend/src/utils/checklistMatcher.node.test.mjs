@@ -101,3 +101,73 @@ test("a Korean name inside a longer compound word does not match", () => {
     renalChecklist,
   ]);
 });
+
+test("everyday search names find a checklist; unrelated words do not", () => {
+  const ptnb = {
+    id: "ptnb",
+    active: true,
+    aliases: ["경피적 폐세침 조직검사", "PTNB"],
+    searchAliases: ["경피적 폐생검", "폐생검", "폐 조직검사"],
+  };
+  for (const question of [
+    "폐생검 후 간호 알려줘",
+    "경피적 폐생검 준비",
+    "폐 조직검사 후 관찰",
+    "PTNB 후 간호",
+  ])
+    assert.deepEqual(
+      matchChecklists(question, [ptnb]).map((c) => c.id),
+      ["ptnb"],
+      question
+    );
+  assert.deepEqual(matchChecklists("폐렴 간호", [ptnb]), []);
+  // search names never change the checklist's own aliases
+  assert.deepEqual(ptnb.aliases, ["경피적 폐세침 조직검사", "PTNB"]);
+});
+
+test("names found only through search names never open the opposite action", () => {
+  const insert = {
+    id: "hd-insert",
+    active: true,
+    title: "HD 투석관 삽입술 (HD Catheter Insertion)",
+    aliases: ["투석관 삽입술", "HD Catheter Insertion"],
+    searchAliases: ["HD 카테터", "HD cath", "HD 카테터 삽입술"],
+  };
+  const remove = {
+    id: "perm-remove",
+    active: true,
+    title: "투석관 제거술 Perm Catheter remove",
+    aliases: ["투석관 제거술", "Perm Catheter remove"],
+    searchAliases: ["카테터 제거술"],
+  };
+  const ids = (question) =>
+    matchChecklists(question, [insert, remove]).map((c) => c.id);
+  assert.deepEqual(ids("HD 카테터 삽입술 준비"), ["hd-insert"]);
+  assert.deepEqual(ids("HD cath 알려줘"), ["hd-insert"]);
+  assert.deepEqual(ids("HD 카테터 알려줘"), ["hd-insert"]);
+  assert.deepEqual(ids("HD 카테터 제거 방법"), []);
+  assert.deepEqual(ids("카테터 제거술 후 관찰"), ["perm-remove"]);
+  // the checklist's own name always works
+  assert.deepEqual(ids("투석관 삽입술 제거 전후"), ["hd-insert"]);
+});
+
+test("checklist names match whatever the spacing", () => {
+  const hd = {
+    id: "hd",
+    active: true,
+    title: "HD 투석관 삽입술",
+    aliases: ["투석관 삽입술", "HD Catheter Insertion"],
+    searchAliases: ["HD 투석관 삽입술"],
+  };
+  const gfs = {
+    id: "gfs",
+    active: true,
+    title: "위내시경 GFS",
+    aliases: ["위내시경", "GFS"],
+  };
+  const ids = (q) => matchChecklists(q, [hd, gfs]).map((c) => c.id);
+  assert.deepEqual(ids("투석관삽입술 준비"), ["hd"]);
+  assert.deepEqual(ids("HD투석관삽입술 후 관찰"), ["hd"]);
+  assert.deepEqual(ids("투석관 삽입 술 준비"), ["hd"]);
+  assert.deepEqual(ids("위 내시경 전 준비"), ["gfs"]);
+});

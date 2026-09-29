@@ -14,11 +14,16 @@ const {
   addProcedureWorkflowCandidates,
   evidenceResultLimit,
   limitImageDescriptionCandidates,
+  isImageRequest,
+  addSamePageImageCandidates,
 } = require("./schatBm25");
-const {
-  buildImageDescriptionChunks,
-} = require("./imageDescriptionChunks");
+const { buildImageDescriptionChunks } = require("./imageDescriptionChunks");
 const { attachVectorIdentity } = require("./sourceIdentity");
+const searchCache = require("./searchCache");
+const {
+  getActiveGroups: getActiveSynonymGroups,
+  synonymsVersion,
+} = require("../../synonyms");
 const {
   SCHAT_CHUNK_SIZE,
   SCHAT_CHUNK_OVERLAP,
@@ -159,10 +164,19 @@ class Chroma extends VectorDatabase {
     similarityThreshold = 0.25,
     topN = 4,
     filterIdentifiers = [],
+    // Optional speed-ups from performSimilaritySearch (results are identical):
+    // a cached corpus and a BM25 ranking started while the query was embedded.
+    collection: providedCollection = null,
+    corpus = null,
+    bm25RankedPromise = null,
+    // Active synonym groups (동의어 사전) for BM25 word matching only.
+    synonymGroups = [],
   }) {
-    const collection = await client.getCollection({
-      name: this.normalize(namespace),
-    });
+    const collection =
+      providedCollection ||
+      (await client.getCollection({
+        name: this.normalize(namespace),
+      }));
     const candidateLimit = Math.max(topN * 4, 20);
     const response = await collection.query({
       queryEmbeddings: queryVector,
@@ -240,30 +254,21 @@ class Chroma extends VectorDatabase {
           }))
       : [];
     try {
-      const stored = await collection.get({
-        include: ["documents", "metadatas"],
-      });
-      const corpusDocuments = stored.ids
-        .map((id, corpusPosition) => ({
-          id,
-          text: stored.documents[corpusPosition],
-          metadata: stored.metadatas[corpusPosition],
-          corpusPosition,
-        }))
-        .filter(
-          (document) =>
-            document.text &&
-            isEmployeeSearchDocument(document.metadata) &&
-            !filterIdentifiers.includes(sourceIdentifier(document.metadata))
-        );
-      const bm25Ranked = rankByBm25(queryText, corpusDocuments).slice(
-        0,
-        candidateLimit
-      );
+      const loaded =
+        corpus || (await searchCache.loadCorpus(collection, namespace));
+      const corpusDocuments = this.corpusDocuments(loaded, filterIdentifiers);
+      const bm25Ranked = bm25RankedPromise
+        ? await bm25RankedPromise
+        : rankByBm25(queryText, corpusDocuments, { synonymGroups }).slice(
+            0,
+            candidateLimit
+          );
       const relatedImageBm25Ranked = includeRelatedImages
         ? relatedImageQueryText === queryText
           ? bm25Ranked
-          : rankByBm25(relatedImageQueryText, corpusDocuments).slice(
+          : rankByBm25(relatedImageQueryText, corpusDocuments, {
+              synonymGroups,
+            }).slice(
               0,
               candidateLimit
             )
@@ -309,6 +314,13 @@ class Chroma extends VectorDatabase {
       fused = limitImageDescriptionCandidates(fused, {
         maxImageResults: 1,
       });
+      if (includeRelatedImages && isImageRequest(relatedImageQueryText))
+        relatedImageSources = addSamePageImageCandidates(relatedImageSources, {
+          evidence: fused,
+          candidates: [...relatedImageVectorRanked, ...relatedImageBm25Ranked],
+          corpus: corpusDocuments,
+          queryText: relatedImageQueryText,
+        });
       this.logger(
         "SCHAT hybrid retrieval summary",
         JSON.stringify({
@@ -350,6 +362,29 @@ class Chroma extends VectorDatabase {
     };
   }
 
+  /**
+   * Employee-searchable chunks for BM25. The same array is reused for the
+   * same corpus version and filter so the BM25 token index can be reused.
+   */
+  corpusDocuments(loaded, filterIdentifiers = []) {
+    const filterKey = JSON.stringify([...filterIdentifiers].sort());
+    return searchCache.corpusDocumentsFor(loaded, filterKey, (stored) =>
+      stored.ids
+        .map((id, corpusPosition) => ({
+          id,
+          text: stored.documents[corpusPosition],
+          metadata: stored.metadatas[corpusPosition],
+          corpusPosition,
+        }))
+        .filter(
+          (document) =>
+            document.text &&
+            isEmployeeSearchDocument(document.metadata) &&
+            !filterIdentifiers.includes(sourceIdentifier(document.metadata))
+        )
+    );
+  }
+
   async namespace(client, namespace = null) {
     if (!namespace) throw new Error("No namespace value provided.");
     const collection = await client
@@ -381,7 +416,9 @@ class Chroma extends VectorDatabase {
   }
 
   async deleteVectorsInNamespace(client, namespace = null) {
+    searchCache.invalidate();
     await client.deleteCollection({ name: this.normalize(namespace) });
+    searchCache.invalidate();
     return true;
   }
 
@@ -653,11 +690,56 @@ class Chroma extends VectorDatabase {
       };
     }
 
-    const queryVector = await LLMConnector.embedTextInput(input);
+    // Speed-up path only: if the collection or corpus can't be loaded here,
+    // similarityResponse does it itself exactly as before (and falls back to
+    // vector-only results when BM25 data is unavailable).
+    let collection = null;
+    try {
+      collection = await client.getCollection({
+        name: this.normalize(namespace),
+      });
+    } catch {
+      collection = null;
+    }
+    // Start the query embedding (Gemini) and the corpus load + BM25 ranking
+    // at the same time; they don't depend on each other.
+    const queryVectorPromise = searchCache.embedWithCache(LLMConnector, input);
+    queryVectorPromise.catch(() => null);
+    const corpus = collection
+      ? await searchCache.loadCorpus(collection, namespace).catch(() => null)
+      : null;
+    const synonymGroups = await getActiveSynonymGroups();
+    const cacheKey = corpus?.version
+      ? searchCache.searchKey([
+          namespace,
+          corpus.version,
+          synonymsVersion(),
+          input,
+          relatedImageQueryText,
+          includeRelatedImages,
+          similarityThreshold,
+          topN,
+          [...filterIdentifiers].sort(),
+        ])
+      : null;
+    const cached = cacheKey ? searchCache.getSearch(cacheKey) : null;
+    if (cached) return cached;
+
+    const candidateLimit = Math.max(topN * 4, 20);
+    // setImmediate lets the embedding request go out before BM25 uses the CPU.
+    const bm25RankedPromise = corpus
+      ? new Promise((resolve) => setImmediate(resolve)).then(() =>
+          rankByBm25(input, this.corpusDocuments(corpus, filterIdentifiers), {
+            synonymGroups,
+          }).slice(0, candidateLimit)
+        )
+      : null;
+    bm25RankedPromise?.catch(() => null);
+    const queryVector = await queryVectorPromise;
     const relatedImageQueryVector = includeRelatedImages
       ? relatedImageQueryText === input
         ? queryVector
-        : await LLMConnector.embedTextInput(relatedImageQueryText)
+        : await searchCache.embedWithCache(LLMConnector, relatedImageQueryText)
       : queryVector;
     const { contextTexts, sourceDocuments, scores, relatedImageSources } =
       await this.similarityResponse({
@@ -671,6 +753,10 @@ class Chroma extends VectorDatabase {
         similarityThreshold,
         topN,
         filterIdentifiers,
+        collection,
+        corpus,
+        bm25RankedPromise,
+        synonymGroups,
       });
 
     const { DocumentVectors } = require("../../../models/vectors");
@@ -692,12 +778,14 @@ class Chroma extends VectorDatabase {
       },
     }));
 
-    return {
+    const result = {
       contextTexts,
       sources: this.curateSources(sources),
       relatedImageSources: relatedImageSources || [],
       message: false,
     };
+    if (cacheKey) searchCache.setSearch(cacheKey, result);
+    return result;
   }
 
   async "namespace-stats"(reqBody = {}) {
@@ -727,7 +815,9 @@ class Chroma extends VectorDatabase {
 
   async reset() {
     const { client } = await this.connect();
+    searchCache.invalidate();
     await client.reset();
+    searchCache.invalidate();
     return { reset: true };
   }
 
@@ -757,7 +847,13 @@ class Chroma extends VectorDatabase {
    * @returns {Promise<boolean>} True if the add was successful, false otherwise.
    */
   async smartAdd(collection, submissions) {
-    await collection.add(submissions);
+    // Invalidate before and after so no search can cache a half-written state.
+    searchCache.invalidate();
+    try {
+      await collection.add(submissions);
+    } finally {
+      searchCache.invalidate();
+    }
     return true;
   }
 
@@ -770,7 +866,12 @@ class Chroma extends VectorDatabase {
    * @returns {Promise<boolean>} True if the delete was successful, false otherwise.
    */
   async smartDelete(collection, vectorIds) {
-    await collection.delete({ ids: vectorIds });
+    searchCache.invalidate();
+    try {
+      await collection.delete({ ids: vectorIds });
+    } finally {
+      searchCache.invalidate();
+    }
     return true;
   }
 }

@@ -32,6 +32,23 @@ const Checklist = {
     }));
     return { response, data };
   },
+
+  // status: "needs_review" | "active" (shown to employees) | "hidden"
+  setStatus: async function (workspaceSlug, checklistId, status) {
+    const response = await fetch(
+      `${API_BASE}/workspace/${encodeURIComponent(workspaceSlug)}/checklists/${encodeURIComponent(checklistId)}/status`,
+      {
+        method: "PUT",
+        headers: { ...baseHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      }
+    );
+    const data = await response.json().catch(() => ({
+      success: false,
+      error: "상태를 바꾸지 못했습니다.",
+    }));
+    return { response, data };
+  },
 };
 
 export default Checklist;

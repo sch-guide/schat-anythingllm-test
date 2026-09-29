@@ -701,3 +701,18 @@ model schat_quiz_generation_logs {
 
   @@index([createdAt])
 }
+
+// SCHAT 동의어 사전: 같은 뜻의 단어 묶음. status가 "active"인 묶음만
+// 검색·체크리스트 연결에 쓰인다. kind "drug"는 관리자가 직접 넣은 것만 존재.
+model schat_synonym_groups {
+  id            Int      @id @default(autoincrement())
+  terms         String // JSON array of words
+  kind          String   @default("procedure") // procedure | drug
+  status        String   @default("needs_review") // needs_review | active | off
+  source        String   @default("admin") // draft | admin
+  note          String?
+  createdAt     DateTime @default(now())
+  lastUpdatedAt DateTime @default(now())
+
+  @@index([status])
+}

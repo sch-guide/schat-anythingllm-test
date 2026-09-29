@@ -17,6 +17,9 @@ import AnswerSection from "./sections/Answer";
 import UsersSection from "./sections/Users";
 import ReportsSection from "./sections/Reports";
 import QuizSection from "./sections/Quiz";
+import ChecklistsSection from "./sections/Checklists";
+import SynonymsSection from "./sections/Synonyms";
+import UsageStatsSection from "./sections/UsageStats";
 import ConnectionsSection from "./sections/Connections";
 import StatusSection from "./sections/Status";
 import StorageSection from "./sections/Storage";
@@ -28,6 +31,9 @@ const SECTIONS = {
   users: UsersSection,
   reports: ReportsSection,
   quiz: QuizSection,
+  checklists: ChecklistsSection,
+  synonyms: SynonymsSection,
+  usage: UsageStatsSection,
   connections: ConnectionsSection,
   status: StatusSection,
   storage: StorageSection,
@@ -35,9 +41,17 @@ const SECTIONS = {
 };
 
 // Sections that change one workspace show a picker when there is more than one.
-const WORKSPACE_SECTIONS = ["brand", "answer", "danger"];
+const WORKSPACE_SECTIONS = ["brand", "answer", "checklists", "danger"];
 // Table-heavy sections get more width so rows stay on one line.
-const WIDE_SECTIONS = ["users", "reports", "quiz", "storage"];
+const WIDE_SECTIONS = [
+  "users",
+  "reports",
+  "quiz",
+  "checklists",
+  "synonyms",
+  "usage",
+  "storage",
+];
 
 function preferredSlug(workspaces = []) {
   const lastVisited = safeJsonParse(

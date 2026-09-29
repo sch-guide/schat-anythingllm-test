@@ -58,7 +58,11 @@ const {
 } = require("../utils/documentChecklists/processDocuments");
 const {
   ChecklistRepository,
+  CHECKLIST_STATUSES,
 } = require("../utils/documentChecklists/repository");
+const {
+  getActiveGroups: getActiveSynonymGroups,
+} = require("../utils/synonyms");
 const {
   toPublicChecklist,
 } = require("../utils/documentChecklists/presenter");
@@ -531,10 +535,11 @@ function workspaceEndpoints(app) {
           request.query?.scope === "admin" &&
           (!multiUserMode(response) ||
             [ROLES.admin, ROLES.manager].includes(user?.role));
+        const synonymGroups = await getActiveSynonymGroups();
         const checklists = ChecklistRepository.findByDocumentIds(
           workspaceDocumentIds(documents),
           { includeReview }
-        ).map((checklist) => toPublicChecklist(checklist));
+        ).map((checklist) => toPublicChecklist(checklist, { synonymGroups }));
         return response.status(200).json({ checklists });
       } catch (error) {
         console.error("Checklist list error:", error.message);
@@ -575,6 +580,45 @@ function workspaceEndpoints(app) {
         return response
           .status(400)
           .json({ success: false, error: "Invalid checklist definition." });
+      }
+    }
+  );
+
+  // Administrator decision: needs_review / active (shown to employees) / hidden.
+  app.put(
+    "/workspace/:slug/checklists/:checklistId/status",
+    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    async (request, response) => {
+      try {
+        const { slug, checklistId } = request.params;
+        const user = await userFromSession(request, response);
+        const workspace = multiUserMode(response)
+          ? await Workspace.getWithUser(user, { slug })
+          : await Workspace.get({ slug });
+        if (!workspace) return response.sendStatus(404);
+
+        const checklist = ChecklistRepository.getById(checklistId);
+        if (!checklist) return response.sendStatus(404);
+        const documents = await Document.forWorkspace(workspace.id);
+        const allowedDocumentIds = new Set(workspaceDocumentIds(documents));
+        if (!allowedDocumentIds.has(checklist.documentId))
+          return response.sendStatus(404);
+
+        const { status } = reqBody(request) || {};
+        if (!CHECKLIST_STATUSES.includes(status))
+          return response
+            .status(400)
+            .json({ success: false, error: "Invalid checklist status." });
+        const updated = ChecklistRepository.setStatus(checklistId, status);
+        return response.status(200).json({
+          success: true,
+          checklist: toPublicChecklist(updated),
+        });
+      } catch (error) {
+        console.error("Checklist status error:", error.message);
+        return response
+          .status(500)
+          .json({ success: false, error: "Could not change the status." });
       }
     }
   );

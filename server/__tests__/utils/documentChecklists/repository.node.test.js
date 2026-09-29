@@ -6,6 +6,7 @@ const path = require("node:path");
 
 const {
   createChecklistRepository,
+  validateEditableDefinition,
 } = require("../../../utils/documentChecklists/repository");
 const {
   toPublicChecklist,
@@ -59,7 +60,13 @@ test("automatic checklist is persisted as one opaque JSON file and is idempotent
   assert.equal(second.created, false);
   assert.equal(files.length, 1);
   assert.doesNotMatch(files[0], /internal-document-id/);
-  assert.equal(repository.findByDocumentIds(["internal-document-id"]).length, 1);
+  // automatic checklists wait for review: listed for administrators only
+  assert.equal(repository.findByDocumentIds(["internal-document-id"]).length, 0);
+  assert.equal(
+    repository.findByDocumentIds(["internal-document-id"], { includeReview: true })
+      .length,
+    1
+  );
 });
 
 test("administrator edits change only checklist JSON and are not overwritten automatically", () => {
@@ -116,4 +123,106 @@ test("invalid administrator item types are rejected", () => {
       }),
     /Invalid checklist item type/
   );
+});
+
+test("administrator status: only 'active' reaches employees, decisions survive re-extraction", () => {
+  const storageRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "schat-checklist-")
+  );
+  const repository = createChecklistRepository({ storageRoot });
+  const checklist = {
+    ...sampleChecklist(),
+    status: "needs_review",
+    active: false,
+  };
+  repository.saveAutoChecklist(checklist);
+  const docs = [checklist.documentId];
+  const employee = () => repository.findByDocumentIds(docs);
+  const admin = () =>
+    repository.findByDocumentIds(docs, { includeReview: true });
+
+  assert.equal(employee().length, 0);
+  assert.equal(admin().length, 1);
+
+  const published = repository.setStatus(checklist.id, "active");
+  assert.equal(published.status, "active");
+  assert.equal(published.active, true);
+  assert.equal(employee().length, 1);
+
+  const hidden = repository.setStatus(checklist.id, "hidden");
+  assert.equal(hidden.active, false);
+  assert.equal(employee().length, 0);
+  assert.equal(admin()[0].status, "hidden");
+  assert.equal(toPublicChecklist(admin()[0]).status, "hidden");
+  assert.equal(toPublicChecklist(admin()[0]).active, false);
+
+  // a later automatic extraction of the same page keeps the admin decision
+  repository.saveAutoChecklist({ ...sampleChecklist(), status: "active" });
+  assert.equal(admin()[0].status, "hidden");
+  assert.equal(employee().length, 0);
+
+  assert.throws(() => repository.setStatus(checklist.id, "public"));
+  assert.equal(repository.setStatus("missing", "active"), null);
+});
+
+test("per-line checkbox settings are optional, validated and kept only when given", () => {
+  const base = sampleChecklist();
+  const definition = (item) => ({
+    title: base.title,
+    aliases: base.aliases,
+    sections: [{ id: "before", title: "검사 전", items: [item] }],
+  });
+  const plain = validateEditableDefinition(
+    definition({ id: "c", type: "checkable", label: "동의서", details: ["①", "②"] })
+  );
+  assert.equal("detailCheckable" in plain.sections[0].items[0], false);
+  const set = validateEditableDefinition(
+    definition({
+      id: "c",
+      type: "checkable",
+      label: "동의서",
+      details: ["①", "②"],
+      detailCheckable: [true, false],
+    })
+  );
+  assert.deepEqual(set.sections[0].items[0].detailCheckable, [true, false]);
+  for (const wrong of [[true], [true, "yes"], "true"])
+    assert.throws(() =>
+      validateEditableDefinition(
+        definition({
+          id: "c",
+          type: "checkable",
+          label: "동의서",
+          details: ["①", "②"],
+          detailCheckable: wrong,
+        })
+      )
+    );
+});
+
+test("new automatic checklists always wait for review; unchanged re-runs keep their status", () => {
+  const storageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "schat-checklist-"));
+  const repository = createChecklistRepository({ storageRoot });
+  const docs = [sampleChecklist().documentId];
+
+  // a verified automatic result is saved as "검토 필요" (hidden from employees)
+  const first = repository.saveAutoChecklist({ ...sampleChecklist(), status: "active" });
+  assert.equal(first.checklist.status, "needs_review");
+  assert.equal(first.checklist.active, false);
+  assert.equal(first.checklist.autoVerified, true);
+  assert.deepEqual(toPublicChecklist(first.checklist).reviewReasons, ["auto-generated"]);
+  assert.equal(repository.findByDocumentIds(docs).length, 0);
+
+  // an already public legacy checklist stays public when the content is unchanged
+  const filePath = path.join(storageRoot, fs.readdirSync(storageRoot)[0]);
+  const legacy = { ...JSON.parse(fs.readFileSync(filePath, "utf8")), status: "active", active: true };
+  fs.writeFileSync(filePath, JSON.stringify(legacy));
+  repository.saveAutoChecklist({ ...sampleChecklist(), status: "active" });
+  assert.equal(repository.findByDocumentIds(docs).length, 1);
+
+  // changed content goes back to "검토 필요"
+  const changed = sampleChecklist();
+  changed.sections[0].items[0].details = ["바뀐 원문 설명"];
+  repository.saveAutoChecklist({ ...changed, status: "active" });
+  assert.equal(repository.findByDocumentIds(docs).length, 0);
 });

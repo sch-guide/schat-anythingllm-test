@@ -18,12 +18,17 @@ function summarizeDocuments(docpaths = []) {
 function summarizeChecklists(checklists = []) {
   let active = 0;
   let review = 0;
+  let hidden = 0;
   for (const checklist of checklists) {
-    if (checklist?.status === "needs_review" || checklist?.active === false)
+    if (checklist?.status === "hidden") hidden += 1;
+    else if (
+      checklist?.status === "needs_review" ||
+      checklist?.active === false
+    )
       review += 1;
     else active += 1;
   }
-  return { total: active + review, active, review };
+  return { total: active + review + hidden, active, review, hidden };
 }
 
 const CONNECTION_MESSAGES = {

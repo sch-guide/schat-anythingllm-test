@@ -312,10 +312,14 @@ test("review checklists are stored inactive and hidden from employee listings", 
   const stored = repository.getById(review.id);
   assert.equal(stored.status, "needs_review");
   assert.equal(stored.active, false);
+  // 2026-09-29: every automatic checklist (verified or not) waits for an
+  // administrator, so employees see none of them until they are published.
   assert.deepEqual(
     repository.findByDocumentIds(["doc-1"]).map((c) => c.id),
-    [active.id]
+    []
   );
+  assert.equal(repository.getById(active.id).autoVerified, true);
+  assert.equal(repository.getById(review.id).autoVerified, false);
   assert.deepEqual(
     repository
       .findByDocumentIds(["doc-1"], { includeReview: true })

@@ -33,6 +33,24 @@ export const SCHAT_ADMIN_SECTIONS = [
       "지침서 근거로 AI 퀴즈 문제를 만들고, 검토·수정·공개하며 풀이 통계를 확인합니다.",
   },
   {
+    key: "checklists",
+    label: "체크리스트 관리",
+    description:
+      "검사·시술 체크리스트를 원문 쪽과 비교해 검토하고, 공개·숨김 상태와 내용을 관리합니다.",
+  },
+  {
+    key: "synonyms",
+    label: "동의어 관리",
+    description:
+      "같은 뜻의 단어(예: 카테터 = cath = catheter)를 묶어 검색과 체크리스트 연결에 함께 쓰도록 관리합니다.",
+  },
+  {
+    key: "usage",
+    label: "사용 통계",
+    description:
+      "직원들이 무엇을 물었는지, 어떤 지침이 많이 쓰였는지 기간별로 봅니다. 개인별 기록은 보여주지 않습니다.",
+  },
+  {
     key: "connections",
     label: "시스템 연결",
     description: "AI 답변과 문서 검색에 쓰는 API 키를 확인하고 교체합니다.",

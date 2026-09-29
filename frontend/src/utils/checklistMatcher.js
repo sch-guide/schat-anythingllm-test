@@ -58,18 +58,54 @@ function aliasSpans(normalizedQuestion, alias) {
   return spans;
 }
 
+// Opposite procedure actions (same words as the server synonym rules).
+const ACTION_WORDS = {
+  insert: ["삽입", "거치", "설치", "insertion", "insert"],
+  remove: ["제거", "발거", "remove", "removal"],
+};
+
+function actionsIn(text = "") {
+  const lower = String(text).normalize("NFKC").toLowerCase();
+  return Object.keys(ACTION_WORDS).filter((action) =>
+    ACTION_WORDS[action].some((word) => lower.includes(word))
+  );
+}
+
+/**
+ * A checklist found only through an everyday or synonym name
+ * (searchAliases) is not shown when the question asks for the opposite
+ * action, e.g. "HD 카테터 제거" never opens the insertion checklist.
+ */
+function oppositeAction(question, checklist) {
+  const asked = actionsIn(question);
+  if (asked.length !== 1) return false;
+  const own = actionsIn(checklist?.title);
+  return own.length > 0 && !own.includes(asked[0]);
+}
+
 export function matchChecklists(question = "", checklists = []) {
   const normalizedQuestion = normalizeChecklistQuestion(question);
   if (!normalizedQuestion) return [];
 
   const matches = (Array.isArray(checklists) ? checklists : [])
     .filter((checklist) => checklist?.active !== false)
-    .map((checklist) => ({
-      checklist,
-      spans: (checklist?.aliases || []).flatMap((alias) =>
+    .map((checklist) => {
+      const ownSpans = (checklist?.aliases || []).flatMap((alias) =>
         aliasSpans(normalizedQuestion, alias)
-      ),
-    }))
+      );
+      // searchAliases: everyday/synonym names from the server (find only)
+      const searchSpans = (checklist?.searchAliases || []).flatMap((alias) =>
+        aliasSpans(normalizedQuestion, alias)
+      );
+      const onlyBySearchName = ownSpans.length === 0 && searchSpans.length > 0;
+      return {
+        checklist,
+        spans:
+          onlyBySearchName && oppositeAction(question, checklist)
+            ? []
+            : [...ownSpans, ...searchSpans],
+      };
+    })
     .filter((match) => match.spans.length > 0);
 
   // Longer names win: "위내시경점막하박리술" must not also open "위내시경".

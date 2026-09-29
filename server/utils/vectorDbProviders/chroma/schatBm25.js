@@ -34,6 +34,134 @@ const QUERY_STOPWORDS = new Set([
   "관해",
   "관하여",
 ]);
+// Request / conversational words that say HOW to answer, not WHAT to find.
+// They stay in the BM25 score but are left out of the word-coverage share
+// (bm25Coverage) used by filterWeakHybridTail, so "혈액제제 종류를 사진으로
+// 보여줘" is judged like "혈액제제 종류". Collected from staff questions
+// (2026-09-28) plus the display/request forms asked for by the reviewer.
+const COVERAGE_REQUEST_WORDS = new Set([
+  // show / picture requests
+  "사진",
+  "그림",
+  "이미지",
+  "도식",
+  "도표",
+  "그래프",
+  "영상",
+  "보여줘",
+  "보여주세요",
+  "보여줄래",
+  "보여줄",
+  "보여",
+  // tell / explain requests (and common typos)
+  "알려줘",
+  "알려주세요",
+  "알려줄래",
+  "알랴줘",
+  "알렺줘",
+  "가르쳐줘",
+  "설명해주",
+  "정리해줘",
+  "요약해줘",
+  "자세히",
+  "간단히",
+  "궁금해",
+  "궁금해요",
+  "궁금합니다",
+  "부탁해",
+  "부탁해요",
+  // conversational endings seen in staff questions
+  "어때",
+  "의미야",
+  "뭐예요",
+  "뭔가요",
+  "뭔지",
+  "받아야해",
+  "받아야할까",
+  "받아야",
+  "할까",
+  "할까요",
+  "해야해",
+  "했는데",
+  "했을",
+  "됐는데",
+  "되나요",
+  "하나요",
+  "있나요",
+]);
+
+const { termAlternatives } = require("../../synonyms");
+
+function coverageTerms(terms = []) {
+  const content = terms.filter((term) => !COVERAGE_REQUEST_WORDS.has(term));
+  return content.length ? content : terms;
+}
+
+// Questions that explicitly ask for a picture. Only these questions use the
+// image-request routes below; every other question keeps the old behaviour.
+// ("영상" is left out: 영상검사 is an exam name, not a picture request.)
+const IMAGE_REQUEST_PATTERN = /사진|그림|이미지|도식|도표|그래프/u;
+
+function isImageRequest(queryText = "") {
+  return (
+    typeof queryText === "string" &&
+    IMAGE_REQUEST_PATTERN.test(queryText.normalize("NFKC"))
+  );
+}
+
+// The subject of a question: its content words without request words and
+// without facet words such as 종류/방법/주의사항 ("혈액제제 종류" -> 혈액제제).
+function subjectTerms(terms = []) {
+  return terms.filter(
+    (term) =>
+      !COVERAGE_REQUEST_WORDS.has(term) &&
+      !QUESTION_FOCUS_TERMS.has(term) &&
+      !QUESTION_INTENT_ALIASES.has(term)
+  );
+}
+
+// Spacing-insensitive matching for Korean (띄어쓰기 차이). Guideline PDFs
+// often lose their spaces ("투석관삽입술") while staff type "투석관 삽입술",
+// and the other way round. A Korean word of 2+ letters that has no exact
+// token match is also looked for inside the text with every space removed.
+const SPACING_TERM_PATTERN = /^[가-힣]{2,}$/u;
+
+function compactText(text = "") {
+  return String(text || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s+/gu, "");
+}
+
+// Facet words (방법, 종류, 절차 ...) appear inside countless longer words
+// ("투여방법") and would make unrelated chunks look complete, so they only
+// ever match as whole words.
+function usesSpacingMatch(term = "") {
+  return SPACING_TERM_PATTERN.test(term) && !QUESTION_FOCUS_TERMS.has(term);
+}
+
+function countOccurrences(haystack = "", needle = "") {
+  if (!needle) return 0;
+  let count = 0;
+  let from = haystack.indexOf(needle);
+  while (from >= 0) {
+    count += 1;
+    from = haystack.indexOf(needle, from + needle.length);
+  }
+  return count;
+}
+
+function matchedSubjectTerms(text = "", subjects = []) {
+  if (!subjects.length) return 0;
+  const tokens = tokenize(String(text || ""));
+  const compact = compactText(text);
+  return subjects.filter(
+    (term) =>
+      tokens.some((token) => tokenMatchesQueryTerm(token, term)) ||
+      (usesSpacingMatch(term) && compact.includes(term))
+  ).length;
+}
+
 const QUERY_ACTION_STEMS = new Set([
   "평가",
   "확인",
@@ -585,11 +713,16 @@ function stableDocumentOrder(left, right) {
   return String(left.id).localeCompare(String(right.id));
 }
 
-function rankByBm25(query = "", documents = [], { k1 = 1.5, b = 0.75 } = {}) {
-  const terms = queryTokens(query);
-  const uniqueDocuments = dedupePublicEvidence(documents);
-  if (terms.length === 0 || uniqueDocuments.length === 0) return [];
+// Token index per corpus array. The chunk list SCHAT passes in is reused
+// between searches while documents are unchanged (see searchCache.js), so
+// tokenising every chunk and counting each query term is done once per
+// corpus version instead of on every search. Scores and order are unchanged.
+const bm25Indexes = new WeakMap();
 
+function bm25IndexFor(documents) {
+  const cached = bm25Indexes.get(documents);
+  if (cached) return cached;
+  const uniqueDocuments = dedupePublicEvidence(documents);
   const prepared = uniqueDocuments.map((document, corpusPosition) => {
     const tokens = tokenize(document.text);
     return {
@@ -599,45 +732,160 @@ function rankByBm25(query = "", documents = [], { k1 = 1.5, b = 0.75 } = {}) {
         : corpusPosition,
       tokenCount: tokens.length,
       tokens,
+      compact: compactText(document.text),
     };
   });
   const averageLength =
     prepared.reduce((sum, document) => sum + document.tokenCount, 0) /
       prepared.length || 1;
+  const index = {
+    prepared,
+    averageLength,
+    // term -> Int32Array of per-document frequencies (same order as prepared)
+    frequencies: new Map(),
+    documentFrequency: new Map(),
+  };
+  if (Array.isArray(documents) && Object.isExtensible(documents))
+    bm25Indexes.set(documents, index);
+  return index;
+}
 
-  const documentFrequency = new Map();
-  for (const token of terms) {
-    documentFrequency.set(
-      token,
-      prepared.reduce(
-        (count, document) =>
-          count + (queryTermFrequency(document.tokens, token) > 0 ? 1 : 0),
-        0
-      )
+function termFrequencies(index, term) {
+  let frequencies = index.frequencies.get(term);
+  if (!frequencies) {
+    frequencies = Int32Array.from(index.prepared, (document) =>
+      queryTermFrequency(document.tokens, term)
+    );
+    index.frequencies.set(term, frequencies);
+    index.documentFrequency.set(
+      term,
+      frequencies.reduce((count, value) => count + (value > 0 ? 1 : 0), 0)
     );
   }
+  return frequencies;
+}
 
+// Spacing-insensitive occurrences of a Korean word (0 where the word already
+// matches a token exactly; those documents keep their exact score).
+function spacingFrequencies(index, term) {
+  const key = `\u0000spacing:${term}`;
+  let frequencies = index.frequencies.get(key);
+  if (!frequencies) {
+    const exact = termFrequencies(index, term);
+    frequencies = usesSpacingMatch(term)
+      ? Int32Array.from(index.prepared, (document, position) =>
+          exact[position] > 0 ? 0 : countOccurrences(document.compact, term)
+        )
+      : new Int32Array(index.prepared.length);
+    index.frequencies.set(key, frequencies);
+    index.documentFrequency.set(
+      key,
+      frequencies.reduce((count, value) => count + (value > 0 ? 1 : 0), 0)
+    );
+  }
+  return frequencies;
+}
+
+// A 2-letter word found only inside a longer word ("관찰" in "관찰사항") is
+// counted only in a chunk that already matches another word of the question;
+// 3+ letter words ("투석관", "흉수천자") count on their own.
+const SPACING_STRONG_LENGTH = 3;
+
+// One BM25 token form for a synonym word ("chest tube" -> two tokens, so it
+// is not used for word matching; checklist names still use it).
+function singleTokenForm(word = "") {
+  const tokens = tokenize(String(word));
+  if (tokens.length > 1 && tokens.every((token) => usesSpacingMatch(token)))
+    return tokens.join("");
+  return tokens.join(" ");
+}
+
+function rankByBm25(
+  query = "",
+  documents = [],
+  { k1 = 1.5, b = 0.75, synonymGroups = [] } = {}
+) {
+  const terms = queryTokens(query);
+  if (terms.length === 0) return [];
+  const index = bm25IndexFor(documents);
+  const { prepared, averageLength } = index;
+  if (prepared.length === 0) return [];
+
+  // Active synonyms (동의어 사전): each query term may also match the other
+  // words of its group. A group counts as one word of the question and only
+  // its best-matching word adds to the score, so a question without synonyms
+  // is scored exactly as before.
+  const alternatives = synonymGroups.length
+    ? termAlternatives(terms, synonymGroups, singleTokenForm)
+    : null;
+  const alternativesOf = (token) => alternatives?.get(token) || [token];
+
+  const documentFrequency = new Map();
+  const frequencyByTerm = new Map();
+  const spacingByTerm = new Map();
+  for (const token of terms)
+    for (const word of alternativesOf(token)) {
+      frequencyByTerm.set(word, termFrequencies(index, word));
+      spacingByTerm.set(word, spacingFrequencies(index, word));
+      const exactDocuments = index.documentFrequency.get(word) || 0;
+      // Exact matches keep their usual weight; a word that appears only
+      // without spaces is weighted by how many chunks contain it that way.
+      documentFrequency.set(
+        word,
+        exactDocuments ||
+          index.documentFrequency.get(`\u0000spacing:${word}`) ||
+          0
+      );
+    }
+
+  const contentTerms = new Set(coverageTerms(terms));
   return prepared
-    .map((document) => {
+    .map((document, position) => {
       let bm25Score = 0;
       let matchedQueryTokens = 0;
+      let matchedContentTerms = 0;
+      const frequencyOf = (word, allowShort) => {
+        const exact = frequencyByTerm.get(word)[position];
+        if (exact > 0) return exact;
+        const spaced = spacingByTerm.get(word)[position];
+        if (spaced === 0) return 0;
+        return word.length >= SPACING_STRONG_LENGTH || allowShort ? spaced : 0;
+      };
+      // Does this chunk match a specific (3+ letter) word of the question?
+      const strongMatch = terms.some((token) =>
+        alternativesOf(token).some(
+          (word) =>
+            word.length >= SPACING_STRONG_LENGTH && frequencyOf(word, false) > 0
+        )
+      );
       for (const token of terms) {
-        const frequency = queryTermFrequency(document.tokens, token);
-        if (frequency === 0) continue;
+        let best = 0;
+        let matched = false;
+        for (const word of alternativesOf(token)) {
+          const frequency = frequencyOf(word, strongMatch);
+          if (frequency === 0) continue;
+          matched = true;
+          const matchedDocuments = documentFrequency.get(word) || 0;
+          const inverseDocumentFrequency = Math.log(
+            1 +
+              (prepared.length - matchedDocuments + 0.5) /
+                (matchedDocuments + 0.5)
+          );
+          const lengthNormalization =
+            frequency +
+            k1 * (1 - b + b * (document.tokenCount / averageLength));
+          best = Math.max(
+            best,
+            inverseDocumentFrequency *
+              ((frequency * (k1 + 1)) / lengthNormalization)
+          );
+        }
+        if (!matched) continue;
         matchedQueryTokens += 1;
-        const matchedDocuments = documentFrequency.get(token) || 0;
-        const inverseDocumentFrequency = Math.log(
-          1 +
-            (prepared.length - matchedDocuments + 0.5) /
-              (matchedDocuments + 0.5)
-        );
-        const lengthNormalization =
-          frequency + k1 * (1 - b + b * (document.tokenCount / averageLength));
-        bm25Score +=
-          inverseDocumentFrequency *
-          ((frequency * (k1 + 1)) / lengthNormalization);
+        if (contentTerms.has(token)) matchedContentTerms += 1;
+        bm25Score += best;
       }
-      const { tokenCount, tokens, ...result } = document;
+      const { tokenCount, tokens, compact, ...result } = document;
       const sectionCoverage = weightedCoverage(
         terms,
         document.metadata?.section || ""
@@ -649,7 +897,7 @@ function rankByBm25(query = "", documents = [], { k1 = 1.5, b = 0.75 } = {}) {
       return {
         ...result,
         bm25Score: bm25Score * (1 + sectionCoverage + titleCoverage * 0.25),
-        bm25Coverage: matchedQueryTokens / terms.length,
+        bm25Coverage: matchedContentTerms / contentTerms.size,
         sectionCoverage,
         titleCoverage,
       };
@@ -783,6 +1031,8 @@ function filterWeakHybridTail(
     minimumBm25Coverage = 2 / 3,
     minimumStandaloneVectorScore = 0.7,
     minimumSemanticSupplementScore = 0.8,
+    imageRequestMinimumVectorScore = 0.6,
+    imageRequestMaximumVectorGap = 0.05,
     queryText = "",
   } = {}
 ) {
@@ -797,11 +1047,45 @@ function filterWeakHybridTail(
     return Number.isFinite(score) ? Math.max(best, score) : best;
   }, Number.NEGATIVE_INFINITY);
 
+  // A clinical abbreviation in the question (e.g. PTNB) is very specific: a
+  // chunk that contains every such abbreviation is kept even when a generic
+  // word of the question ("간호") is missing from that chunk.
+  const abbreviations = uppercaseIdentifiers(queryText).filter(
+    (value) => value.length >= 3
+  );
+  const containsAbbreviations = (candidate) => {
+    const text = String(candidate?.text || "").normalize("NFKC");
+    return (
+      abbreviations.length > 0 &&
+      abbreviations.every((value) =>
+        new RegExp(
+          `(^|[^A-Za-z0-9])${value.replace(/[-]/g, "\\-")}([^A-Za-z0-9]|$)`
+        ).test(text)
+      )
+    );
+  };
+
+  // Picture questions only: descriptions and tables rarely repeat facet
+  // words such as "종류", so a chunk that holds every subject word of the
+  // question and is (almost) the best semantic match is kept. A question
+  // whose subject is not in the guidelines (라식, 엘보 ...) can never match.
+  const imageSubjects = isImageRequest(queryText) ? subjectTerms(terms) : [];
+  const subjectAtTop = (candidate, vectorScore) =>
+    imageSubjects.length > 0 &&
+    Number.isFinite(vectorScore) &&
+    vectorScore >= imageRequestMinimumVectorScore &&
+    Number.isFinite(bestVectorScore) &&
+    bestVectorScore - vectorScore <= imageRequestMaximumVectorGap &&
+    matchedSubjectTerms(candidate?.text, imageSubjects) ===
+      imageSubjects.length;
+
   return ranked.filter((candidate) => {
     const bm25Coverage = candidate.retrieval?.bm25Coverage ?? 0;
     if (bm25Coverage >= minimumBm25Coverage) return true;
+    if (containsAbbreviations(candidate)) return true;
     const vectorScore =
       candidate.vectorScore ?? candidate.retrieval?.vectorScore ?? null;
+    if (subjectAtTop(candidate, vectorScore)) return true;
     const strongSemantic =
       Number.isFinite(vectorScore) &&
       vectorScore >= minimumStandaloneVectorScore &&
@@ -828,9 +1112,80 @@ function limitImageDescriptionCandidates(
   });
 }
 
+function evidencePageKey(item = {}) {
+  const metadata = item.metadata || item;
+  const document = String(
+    metadata.document_id || metadata.documentId || metadata.document_name || ""
+  );
+  const page = String(metadata.page ?? "").trim();
+  return document && page ? `${document}|${page}` : null;
+}
+
+/**
+ * Picture questions only: images printed on a page that is already selected
+ * as text evidence are added as related-image candidates when they mention
+ * the most specific subject word of the question (the one found in the
+ * fewest chunks, e.g. "세트" rather than "수혈"). The page itself was
+ * validated by the normal retrieval filters, so no new page can enter.
+ */
+function addSamePageImageCandidates(
+  relatedImageSources = [],
+  {
+    evidence = [],
+    candidates = [],
+    corpus = [],
+    queryText = "",
+    maxImages = 3,
+  } = {}
+) {
+  const evidencePages = new Set(
+    evidence
+      .filter(
+        (candidate) => candidate?.metadata?.content_type !== "image_description"
+      )
+      .map(evidencePageKey)
+      .filter(Boolean)
+  );
+  const subjects = subjectTerms(queryTokens(queryText));
+  if (!evidencePages.size || !subjects.length) return relatedImageSources;
+  const index = bm25IndexFor(corpus);
+  const specificSubject = subjects
+    .map((term) => {
+      termFrequencies(index, term);
+      return { term, df: index.documentFrequency.get(term) || 0 };
+    })
+    .filter(({ df }) => df > 0)
+    .sort((left, right) => left.df - right.df)[0]?.term;
+  if (!specificSubject) return relatedImageSources;
+
+  const result = [...relatedImageSources];
+  const seen = new Set(result.map((source) => String(source.id)));
+  for (const candidate of candidates) {
+    if (result.length >= maxImages) break;
+    if (candidate?.metadata?.content_type !== "image_description") continue;
+    if (seen.has(String(candidate.id))) continue;
+    if (!evidencePages.has(evidencePageKey(candidate))) continue;
+    if (matchedSubjectTerms(candidate.text, [specificSubject]) === 0) continue;
+    seen.add(String(candidate.id));
+    result.push({
+      ...candidate.metadata,
+      id: candidate.id,
+      text: candidate.text,
+    });
+  }
+  return result;
+}
+
 module.exports = {
+  addSamePageImageCandidates,
   tokenize,
   queryTokens,
+  coverageTerms,
+  COVERAGE_REQUEST_WORDS,
+  isImageRequest,
+  subjectTerms,
+  matchedSubjectTerms,
+  compactText,
   detectQuestionIntent,
   evidenceResultLimit,
   trailingIntentHeading,

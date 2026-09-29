@@ -4,6 +4,7 @@ import {
   detailKey,
   isInformationalItem,
   isNoteDetail,
+  isCheckableDetail,
   parentState,
   toggleDetail,
   toggleParent,
@@ -98,4 +99,31 @@ test("※ remarks and parenthesised-only lines are notes, not checkboxes", () =>
   const all = toggleParent(scope, item, {});
   assert.equal(parentState(scope, item, all), "checked");
   assert.equal(all[detailKey(scope, "prep", 1)], undefined);
+});
+
+test("administrator per-line checkbox settings override the automatic rule", () => {
+  const scope = { checklistId: "c", sectionId: "s" };
+  const item = {
+    id: "consent",
+    type: "checkable",
+    label: "동의서",
+    details: ["① 가상 동의서", "② 가상 확인(EMR)", "※ 가상 참고"],
+  };
+  // no setting: automatic rule (※ line is a note)
+  assert.deepEqual(
+    item.details.map((_, index) => isCheckableDetail(item, index)),
+    [true, true, false]
+  );
+  // administrator setting: second line off, note line on
+  const set = { ...item, detailCheckable: [true, false, true] };
+  assert.deepEqual(
+    set.details.map((_, index) => isCheckableDetail(set, index)),
+    [true, false, true]
+  );
+  // the parent checkbox covers only the lines that have a checkbox
+  const all = toggleParent(scope, set, {});
+  assert.equal(all[detailKey(scope, "consent", 0)], true);
+  assert.equal(all[detailKey(scope, "consent", 1)], undefined);
+  assert.equal(all[detailKey(scope, "consent", 2)], true);
+  assert.equal(parentState(scope, set, all), "checked");
 });

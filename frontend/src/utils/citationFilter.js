@@ -68,6 +68,26 @@ function hasQuestionFocus(question, source) {
   return matches.length >= Math.min(2, questionTokens.length);
 }
 
+// Same picture-request words as the server (schatBm25.isImageRequest).
+const IMAGE_REQUEST_PATTERN = /사진|그림|이미지|도식|도표|그래프/u;
+const IMAGE_REQUEST_WORD = /^(?:사진|그림|이미지|도식|도표|그래프|보여)/u;
+
+/**
+ * Picture questions only: a source that carries a guideline picture stays
+ * visible when it mentions at least one subject word of the question, even
+ * if the answer text does not repeat the picture description.
+ */
+function isRequestedImageSource(question, source) {
+  if (!IMAGE_REQUEST_PATTERN.test(String(question).normalize("NFKC")))
+    return false;
+  if (!Array.isArray(source?.relatedImages) || !source.relatedImages.length)
+    return false;
+  const haystack = compact(sourceText(source));
+  return meaningfulTokens(question)
+    .filter((token) => !IMAGE_REQUEST_WORD.test(token))
+    .some((token) => haystack.includes(token));
+}
+
 function answerEvidenceStrength(answer, source) {
   const answerTokens = meaningfulTokens(answer);
   const sourceTokens = meaningfulTokens(sourceText(source));
@@ -112,7 +132,8 @@ export function filterDirectCitationSources({
     );
     return (
       (focused && (phraseMatches >= 1 || tokenMatches >= 2)) ||
-      phraseMatches >= 1
+      phraseMatches >= 1 ||
+      isRequestedImageSource(question, source)
     );
   });
 

@@ -16,6 +16,18 @@ const SchatAdmin = {
         return null;
       });
   },
+  // 사용 통계 (admin only). period: today | 7d | 30d | 90d
+  usageStats: async (period = "7d") => {
+    return await fetch(
+      `${API_BASE}/schat-admin/usage-stats?period=${encodeURIComponent(period)}`,
+      { method: "GET", headers: baseHeaders() }
+    )
+      .then((res) => {
+        if (!res.ok) throw new Error("통계를 불러오지 못했습니다.");
+        return res.json();
+      })
+      .catch(() => null);
+  },
   storageReport: async ({ refresh = false } = {}) => {
     const query = refresh ? "?refresh=1" : "";
     return await fetch(`${API_BASE}/schat-admin/storage-cleanup${query}`, {

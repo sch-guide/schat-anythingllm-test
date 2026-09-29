@@ -42,6 +42,9 @@ export default function ChecklistList({
             >
               <p className="m-0 truncate font-medium">
                 p.{checklist.source?.page || "-"} · {checklist.title}
+                {checklist.status === "hidden" && (
+                  <span className="ml-1 rounded bg-zinc-500/20 px-1">숨김</span>
+                )}
                 {checklist.status === "needs_review" && (
                   <span className="ml-1 rounded bg-amber-500/20 px-1 text-amber-700 light:text-amber-800">
                     검토 필요
