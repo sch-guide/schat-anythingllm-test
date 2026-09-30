@@ -48,6 +48,18 @@ docker compose -f docker/docker-compose.yml down
 
 `down -v`는 저장 데이터를 삭제할 수 있으므로 사용하지 않습니다.
 
+### 로컬에서 처음 실행할 때
+
+저장소 최상위에서 `docker compose -f docker/docker-compose.yml up -d --build`를 사용함. 운영 서버 업데이트는 [서버 배포 및 업데이트 안내](서버_배포_및_업데이트_안내.md)를 따름.
+
+Docker는 다음 경로를 직접 사용하므로 이름이나 위치를 바꾸지 않음.
+
+- `frontend`: 직원·관리자 화면을 빌드함.
+- `server`: 로그인, 검색, 답변과 관리자 API를 실행함.
+- `collector`: PDF와 등록 파일을 처리함.
+- `schat-core`: safety evaluator가 필요한 공통 코드를 읽음.
+- `server` 안의 `storage` 폴더: DB, 등록 문서와 원본 PDF를 보관함.
+
 ## 문서 등록과 답변 흐름
 
 1. 관리자가 승인된 PDF를 문서 관리 화면에서 등록합니다.
@@ -57,6 +69,8 @@ docker compose -f docker/docker-compose.yml down
 5. 질문과 직접 관련된 근거만 Gemini에 전달합니다.
 6. Gemini가 검색 근거를 바탕으로 자유형 답변을 작성합니다.
 7. 직원 화면에 답변, 출처와 공개 가능한 근거 원문을 표시합니다.
+
+서비스 골격은 AnythingLLM을 사용하고, SCHAT이 BM25, Hybrid 75:25, 병원 질문 감지, 근거 선택, 원본 PDF, 체크리스트와 병원용 관리 기능을 추가한 혼합 구조임.
 
 근거가 0건이면 Gemini를 호출하지 않습니다. 외부 웹검색이나 일반 의학지식으로 내용을 채우지 않습니다.
 
