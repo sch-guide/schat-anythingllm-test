@@ -250,13 +250,13 @@ test("processing uses the generic engine for template pages and never throws", a
         location === "c.json"
           ? {
               document_id: "doc-2",
-              title: "가상.pdf",
+              title: "가상 검사 및 시술.pdf",
               page: 1,
               pageContent: "일반 설명",
             }
           : {
               document_id: "doc-1",
-              title: "가상.pdf",
+              title: "가상 검사 및 시술.pdf",
               page: location === "a.json" ? 7 : 8,
               pageContent: text,
             },
@@ -271,7 +271,14 @@ test("processing uses the generic engine for template pages and never throws", a
       logger: null,
     }
   );
-  assert.deepEqual(result, { created: 2, skipped: 1, errors: 0, review: 0 });
+  assert.deepEqual(result, {
+    created: 2,
+    skipped: 1,
+    errors: 0,
+    review: 0,
+    autoPublished: 0,
+    failures: [],
+  });
   assert.deepEqual(
     saved.map((c) => c.page),
     [7, 8]
@@ -280,7 +287,7 @@ test("processing uses the generic engine for template pages and never throws", a
   const failing = await processDocumentChecklists([{ location: "a.json" }], {
     loadDocument: async () => ({
       document_id: "doc-1",
-      title: "가상.pdf",
+      title: "가상 검사 및 시술.pdf",
       page: 7,
       pageContent: text,
     }),
@@ -290,7 +297,14 @@ test("processing uses the generic engine for template pages and never throws", a
     repository: { saveAutoChecklist: () => assert.fail("must not save") },
     logger: null,
   });
-  assert.deepEqual(failing, { created: 0, skipped: 0, errors: 1, review: 0 });
+  assert.deepEqual(failing, {
+    created: 0,
+    skipped: 0,
+    errors: 1,
+    review: 0,
+    autoPublished: 0,
+    failures: [{ page: 7, reason: "pdf-layout-unavailable" }],
+  });
 });
 
 test("review checklists are stored inactive and hidden from employee listings", () => {

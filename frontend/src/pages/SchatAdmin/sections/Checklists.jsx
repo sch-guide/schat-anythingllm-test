@@ -25,7 +25,26 @@ const REASON_TEXT = {
   "alias-not-in-source": "찾는 이름이 원문과 다릅니다.",
   "label-order-or-missing": "항목 이름이나 순서가 원문과 다릅니다.",
   "detail-order-or-missing": "세부 내용이나 순서가 원문과 다릅니다.",
+  "version-changed":
+    "새 문서에서 내용이 바뀌었습니다. (숫자·문구·항목 변경) 이전 공개본과 비교해 주세요.",
+  "version-new": "새 문서에서 새로 생긴 체크리스트입니다.",
+  "version-ambiguous":
+    "같은 이름의 체크리스트가 여러 개라 이전 버전과 같은지 자동으로 판단하지 못했습니다.",
+  "version-previous-not-public":
+    "이전 버전의 체크리스트가 공개 상태가 아니어서 자동으로 공개하지 않았습니다.",
+  "version-previous-unverifiable":
+    "이전 버전이 관리자가 고친 체크리스트라 원문이 같은지 확인할 수 없습니다.",
 };
+
+// Label shown next to the status for a new edition's checklist.
+export function versionBadge(checklist = {}) {
+  if (checklist.autoPublished) return { text: "자동 공개", tone: "ok" };
+  if (checklist.status !== "needs_review") return null;
+  if (checklist.versionMatch === "new")
+    return { text: "신규", tone: "neutral" };
+  if (checklist.versionMatch) return { text: "변경됨", tone: "warning" };
+  return null;
+}
 
 export function reviewReasonText(code = "") {
   return REASON_TEXT[code] || "자동 대조에서 확인이 필요한 부분이 있습니다.";
@@ -170,6 +189,13 @@ export default function ChecklistsSection({ slug }) {
                       <p className="m-0 text-sm font-semibold text-theme-text-primary">
                         p.{checklist.source?.page || "-"} · {checklist.title}{" "}
                         <Badge tone={label.tone}>{label.text}</Badge>
+                        {versionBadge(checklist) && (
+                          <span className="ml-1">
+                            <Badge tone={versionBadge(checklist).tone}>
+                              {versionBadge(checklist).text}
+                            </Badge>
+                          </span>
+                        )}
                         {checklist.draft && (
                           <span className="ml-1">
                             <Badge tone="neutral">초안</Badge>

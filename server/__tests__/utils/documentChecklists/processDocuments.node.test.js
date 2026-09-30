@@ -32,7 +32,14 @@ test("processed p.56 is saved without invoking retrieval or vector code", async 
     }
   );
 
-  assert.deepEqual(result, { created: 1, skipped: 0, errors: 0, review: 0 });
+  assert.deepEqual(result, {
+    created: 1,
+    skipped: 0,
+    errors: 0,
+    review: 0,
+    autoPublished: 0,
+    failures: [],
+  });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].source.page, 56);
 });
@@ -52,7 +59,14 @@ test("non-candidate pages are skipped", async () => {
     },
   });
 
-  assert.deepEqual(result, { created: 0, skipped: 1, errors: 0, review: 0 });
+  assert.deepEqual(result, {
+    created: 0,
+    skipped: 1,
+    errors: 0,
+    review: 0,
+    autoPublished: 0,
+    failures: [],
+  });
 });
 
 test("checklist failures never reject the PDF upload caller", async () => {
@@ -68,5 +82,12 @@ test("checklist failures never reject the PDF upload caller", async () => {
     }
   );
 
-  assert.deepEqual(result, { created: 0, skipped: 1, errors: 1, review: 0 });
+  assert.deepEqual(result, {
+    created: 0,
+    skipped: 1,
+    errors: 1,
+    review: 0,
+    autoPublished: 0,
+    failures: [{ page: null, reason: "read-failed" }],
+  });
 });

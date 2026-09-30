@@ -152,7 +152,12 @@ function extractRenalBiopsyChecklist({
   page,
   text,
 } = {}) {
-  if (!documentId || Number(page) !== 56) return null;
+  // The page is recognised by its content (title + every template label) in
+  // the "검사 및 시술" handbook, not by its page number, so a new edition whose
+  // pages moved still yields the same Renal biopsy checklist.
+  const pageNumber = Number(page);
+  if (!documentId || !Number.isInteger(pageNumber) || pageNumber < 1)
+    return null;
   if (!/검사\s*및\s*시술.*\.pdf$/iu.test(String(filename || ""))) return null;
   if (!isRenalBiopsyChecklistCandidate(text)) return null;
 
@@ -198,13 +203,13 @@ function extractRenalBiopsyChecklist({
     version: 1,
     id: stableId(documentId, page, "renal-biopsy"),
     documentId: String(documentId),
-    page: 56,
+    page: pageNumber,
     title: "신장조직검사 Renal biopsy",
     aliases: [...RENAL_BIOPSY_ALIASES],
     sections: [before, after],
     source: {
       filename: String(filename),
-      page: 56,
+      page: pageNumber,
     },
     status: "active",
     active: true,

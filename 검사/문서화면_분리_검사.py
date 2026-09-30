@@ -114,7 +114,8 @@ class DocsViewIsolationTest(unittest.TestCase):
 
         self.assertIn("SCHAT 병원 실무지침 AI 시스템", html)
         self.assertIn("SCHAT 한눈에 보기", html)
-        self.assertIn("현재 상태와 안전장치", html)
+        self.assertIn("현재 상태와 검증 결과", html)
+        self.assertIn("백업과 안전장치", html)
         self.assertIn("변경 이력 보기", html)
         self.assertIn("인수인계 안내", html)
         self.assertIn("schat-overview-data", html)
@@ -129,15 +130,38 @@ class DocsViewIsolationTest(unittest.TestCase):
         )
         # Only the server deployment guide may name the server storage path
         # (its backup command needs it); the rest of the page may not.
-        guide_pattern = r'<div class="guide-block" id="guide-\d+">.*?<!--/guide-->'
+        guide_pattern = r'<(?:div|details) class="[^"]*guide-block[^"]*" id="guide-\d+">.*?<!--/guide-->'
         guides = re.findall(guide_pattern, html, re.S)
         outside_guides = re.sub(guide_pattern, "", html, flags=re.S)
         self.assertNotIn("server/storage", outside_guides)
         self.assertTrue(any("서버 배포 및 업데이트 안내" in g for g in guides))
-        # shown inside the 인수인계 section, not as a separate menu item
+        # the deployment guide is shown inside the 인수인계 section, not as a
+        # separate menu item
         handover = re.search(r'<section id="handover">.*?</section>', html, re.S).group(0)
-        self.assertIn('id="guide-0"', handover)
+        self.assertIn("서버 배포 및 업데이트 안내", handover)
         self.assertNotIn('href="#guide-', html)
+
+    def test_five_menus_and_every_in_page_link_has_a_target(self):
+        builder = load_builder()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "docs_view"
+            builder.build_docs_view(ROOT, output)
+            html = (output / "index.html").read_text(encoding="utf-8")
+
+        menus = re.findall(r'<nav id="site-nav"[^>]*>(.*?)</nav>', html, re.S)[0]
+        self.assertEqual(
+            re.findall(r'href="#([a-z]+)"', menus),
+            ["intro", "how", "state", "journey", "ops"],
+        )
+        pages = re.findall(r'<div class="page" id="([a-z]+)"', html)
+        self.assertEqual(pages, ["intro", "how", "state", "journey", "ops"])
+        ids = set(re.findall(r'\sid="([^"]+)"', html))
+        broken = sorted({target for target in re.findall(r'href="#([^"]*)"', html) if target not in ids})
+        self.assertEqual(broken, [])
+        # long documents are folded, and the current menu is marked
+        self.assertIn('class="doc-panel', html)
+        self.assertIn("aria-current", html)
+        self.assertIn('class="menu-toggle"', html)
 
     def test_saved_view_matches_fresh_generation(self):
         builder = load_builder()

@@ -68,3 +68,23 @@ test("the admin section never offers employees non-public checklists", () => {
   assert.match(source, /직원 화면에는 <b>공개<\/b> 상태만/);
   assert.match(source, /window\.confirm/);
 });
+
+test("new-edition badges: 자동 공개 / 신규 / 변경됨, with plain reasons", async () => {
+  const { versionBadge, reviewReasonText } = await loadHelpers();
+  assert.equal(
+    versionBadge({ status: "active", autoPublished: true }).text,
+    "자동 공개"
+  );
+  assert.equal(
+    versionBadge({ status: "needs_review", versionMatch: "new" }).text,
+    "신규"
+  );
+  assert.equal(
+    versionBadge({ status: "needs_review", versionMatch: "changed" }).text,
+    "변경됨"
+  );
+  assert.equal(versionBadge({ status: "active" }), null);
+  assert.equal(versionBadge({ status: "needs_review" }), null);
+  assert.match(reviewReasonText("version-changed"), /바뀌었습니다/);
+  assert.match(reviewReasonText("version-new"), /새로 생긴/);
+});

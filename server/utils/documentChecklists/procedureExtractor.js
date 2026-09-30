@@ -38,6 +38,65 @@ const STANDARD_TEMPLATE = Object.freeze([
   },
 ]);
 
+// Surgery form of the same handbook (e.g. chest tube, thrombectomy, chemoport
+// in the operating room): "수술 전 / 수술 후" (or "시술 전 / 시술 후") with the
+// operating-room rows 수술부위 표시, 피부준비 and 적정성 and no 검사목적 row.
+// Labels are the page's own wording; the longer variant is tried first.
+// 수술부위 표시 · 피부준비 · 적정성 share one table row side by side, so the
+// second and third labels sit in the content area like "IV line" (inline).
+const SURGERY_TEMPLATE = Object.freeze([
+  {
+    title: "수술 전",
+    marker: "수술전",
+    alternativeMarkers: { 시술전: "시술 전" },
+    items: [
+      { label: "동의서", type: "checkable" },
+      { label: "금식여부", type: "checkable" },
+      { label: "IV line", type: "checkable", inline: true },
+      { label: "수술부위 표시", type: "checkable" },
+      {
+        label: "피부준비 (면도)",
+        type: "checkable",
+        inline: true,
+        alternatives: ["피부준비"],
+      },
+      {
+        label: "적정성 (CI, 예방적항생제)",
+        type: "checkable",
+        inline: true,
+        alternatives: ["적정성"],
+      },
+      {
+        label: "검사 전 준비",
+        type: "checkable",
+        alternatives: ["시술 전 준비", "수술 전 준비"],
+      },
+      { label: "Prepare", type: "checkable" },
+      {
+        label: "검사장소/이동수단",
+        type: "informational",
+        alternatives: ["시술장소/이동수단"],
+      },
+    ],
+  },
+  {
+    title: "수술 후",
+    marker: "수술후",
+    alternativeMarkers: { 시술후: "시술 후" },
+    items: [
+      { label: "식이", type: "checkable" },
+      { label: "자세", type: "checkable" },
+      { label: "X-ray 및 Lab", type: "checkable" },
+      { label: "관찰사항", type: "checkable" },
+    ],
+  },
+]);
+
+const TEMPLATES = Object.freeze([
+  { kind: "procedure", sections: STANDARD_TEMPLATE },
+  { kind: "surgery", sections: SURGERY_TEMPLATE },
+]);
+
 const CIRCLED = /[①②③④⑤⑥⑦⑧⑨⑩]/u;
 const LIST_START = /^(?:[①②③④⑤⑥⑦⑧⑨⑩]|[-·•*※<]|\d+[.)])/u;
 const EMPTY_DETAIL = new Set(["-", "–", "—"]);
@@ -83,28 +142,50 @@ function hasBranchMarker(text = "") {
   );
 }
 
-/** Cheap text-only gate before any PDF layout work. */
-function isStandardProcedurePage(text = "") {
-  const normalized = compact(text);
-  if (!normalized || hasBranchMarker(text)) return false;
+function sectionMarkers(section) {
+  return [section.marker, ...Object.keys(section.alternativeMarkers || {})];
+}
+
+function sectionTitleFor(section, marker) {
+  return section.alternativeMarkers?.[marker] || section.title;
+}
+
+function firstHit(normalized, candidates, cursor) {
+  return candidates
+    .map((value) => ({ at: normalized.indexOf(compact(value), cursor), value }))
+    .filter((hit) => hit.at >= 0)
+    .sort((a, b) => a.at - b.at)[0];
+}
+
+function matchesTemplate(normalized, sections) {
   let cursor = 0;
-  for (const section of STANDARD_TEMPLATE) {
-    const marker = normalized.indexOf(section.marker, cursor);
-    if (marker < 0) return false;
-    cursor = marker + section.marker.length;
+  for (const section of sections) {
+    const marker = firstHit(normalized, sectionMarkers(section), cursor);
+    if (!marker) return false;
+    cursor = marker.at + compact(marker.value).length;
     for (const item of section.items) {
-      const hits = labelVariants(item)
-        .map((label) => ({
-          at: normalized.indexOf(compact(label), cursor),
-          label,
-        }))
-        .filter((hit) => hit.at >= 0)
-        .sort((a, b) => a.at - b.at);
-      if (!hits.length) return false;
-      cursor = hits[0].at + compact(hits[0].label).length;
+      const hit = firstHit(normalized, labelVariants(item), cursor);
+      if (!hit) return false;
+      cursor = hit.at + compact(hit.value).length;
     }
   }
   return true;
+}
+
+/** The checklist template (검사·시술 or 수술 form) a page follows, or null. */
+function procedureTemplateFor(text = "") {
+  const normalized = compact(text);
+  if (!normalized || hasBranchMarker(text)) return null;
+  return (
+    TEMPLATES.find((template) =>
+      matchesTemplate(normalized, template.sections)
+    ) || null
+  );
+}
+
+/** Cheap text-only gate before any PDF layout work. */
+function isStandardProcedurePage(text = "") {
+  return procedureTemplateFor(text) !== null;
 }
 
 function joinItems(items = []) {
@@ -183,8 +264,8 @@ function splitCircled(line = "") {
   return [leading, ...parts].map((part) => part.trim()).filter(Boolean);
 }
 
-function flatTemplate() {
-  return STANDARD_TEMPLATE.flatMap((section, sectionIndex) =>
+function flatTemplate(sections = STANDARD_TEMPLATE) {
+  return sections.flatMap((section, sectionIndex) =>
     section.items.map((item) => ({ ...item, sectionIndex }))
   );
 }
@@ -347,15 +428,17 @@ function extractProcedureChecklist({
   layout,
 } = {}) {
   if (!documentId || !Number.isInteger(Number(page))) return null;
-  if (!isStandardProcedurePage(text)) return null;
+  const template = procedureTemplateFor(text);
+  if (!template) return null;
   if (!layout?.items?.length) return null;
 
   const height = Number(layout.height) || 842;
   const items = layout.items.filter(
     (item) => item.y <= height * 0.925 && item.y >= height * 0.075
   );
-  const expected = flatTemplate();
-  const markers = STANDARD_TEMPLATE.map((section) => section.marker);
+  const expected = flatTemplate(template.sections);
+  const markers = template.sections.map(sectionMarkers);
+  const sectionTitles = template.sections.map((section) => section.title);
   const titleItems = [];
   const owned = expected.map(() => []);
   const labelPositions = [];
@@ -366,8 +449,14 @@ function extractProcedureChecklist({
 
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
-    const nextMarker = markers[seenMarkers];
-    if (nextMarker && isMarkerAt(items, index, nextMarker)) {
+    const nextMarker = (markers[seenMarkers] || []).find((marker) =>
+      isMarkerAt(items, index, marker)
+    );
+    if (nextMarker) {
+      sectionTitles[seenMarkers] = sectionTitleFor(
+        template.sections[seenMarkers],
+        nextMarker
+      );
       seenMarkers += 1;
       index += [...nextMarker].length - 1;
       continue;
@@ -416,9 +505,9 @@ function extractProcedureChecklist({
   const { titleLines, subtitleLines } = titleFromItems(titleItems);
   const title = titleLines.join(" / ");
 
-  const sections = STANDARD_TEMPLATE.map((section, sectionIndex) => ({
-    id: stableId(checklistId, section.title),
-    title: section.title,
+  const sections = sectionTitles.map((sectionTitle) => ({
+    id: stableId(checklistId, sectionTitle),
+    title: sectionTitle,
     items: [],
   }));
 
@@ -475,6 +564,7 @@ function extractProcedureChecklist({
     id: checklistId,
     documentId: String(documentId),
     page: Number(page),
+    templateKind: template.kind,
     title,
     aliases: aliasesFromTitle(titleLines, subtitleLines),
     sections,
@@ -499,7 +589,9 @@ function extractProcedureChecklist({
 
 module.exports = {
   STANDARD_TEMPLATE,
+  SURGERY_TEMPLATE,
   isStandardProcedurePage,
+  procedureTemplateFor,
   extractProcedureChecklist,
   aliasesFromTitle,
   logicalLines,

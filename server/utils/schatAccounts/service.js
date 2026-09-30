@@ -90,6 +90,46 @@ async function saveDepartment({ id = null, name, active, sortOrder }) {
   }
 }
 
+/**
+ * Deletes a department that has no accounts (e.g. a test department).
+ * The "no accounts" condition is part of the delete statement itself, so an
+ * account added in the meantime still blocks the deletion. Accounts, reports
+ * (they keep their own department name) and other departments are untouched.
+ */
+async function deleteDepartment(adminId, id, { db = prisma, log } = {}) {
+  const departmentId = Number(id);
+  if (!Number.isInteger(departmentId) || departmentId <= 0)
+    throw userError("부서를 찾을 수 없습니다.");
+  const department = await db.schat_departments.findUnique({
+    where: { id: departmentId },
+    include: { _count: { select: { users: true } } },
+  });
+  if (!department) throw userError("부서를 찾을 수 없습니다.");
+  if (department._count.users > 0)
+    throw userError(
+      `직원 ${department._count.users}명이 소속된 부서는 삭제할 수 없습니다. 사용중지를 이용해 주세요.`
+    );
+  const { count } = await db.schat_departments.deleteMany({
+    where: { id: departmentId, users: { none: {} } },
+  });
+  if (count !== 1)
+    throw userError(
+      "직원이 소속되어 있어 삭제하지 않았습니다. 목록을 새로 고친 뒤 확인해 주세요."
+    );
+  const logEvent =
+    log ||
+    ((...args) =>
+      require("../../models/eventLogs").EventLogs.logEvent(...args));
+  await Promise.resolve(
+    logEvent(
+      "schat_department_deleted",
+      { departmentId, name: department.name },
+      adminId
+    )
+  ).catch(() => null);
+  return { id: departmentId, name: department.name };
+}
+
 // ---- accounts ----------------------------------------------------------------
 
 function userError(message) {
@@ -1003,6 +1043,7 @@ module.exports = {
   presentUser,
   listDepartments,
   saveDepartment,
+  deleteDepartment,
   legacyLoginAvailable,
   employeeLogin,
   firstLoginCheck,

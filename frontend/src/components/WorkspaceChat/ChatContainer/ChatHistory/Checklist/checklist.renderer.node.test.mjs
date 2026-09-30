@@ -6,14 +6,17 @@ function source(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }
 
-test("administrator modal still distinguishes informational content from real checkboxes", () => {
-  const modal = source("./ChecklistModal.jsx");
-  assert.match(modal, /item\.type === "checkable"/);
-  assert.match(modal, /type="checkbox"/);
-  assert.match(modal, /item\.details\.map/);
-  assert.match(modal, /aria-expanded/);
-  assert.match(modal, /max-h-\[70vh\]/);
-  assert.match(modal, /max-w-\[640px\]|size="lg"/);
+test("administrator view and edit share the employee tree in one screen", () => {
+  const editor = source(
+    "../../../../Modals/ManageWorkspace/Documents/WorkspaceDirectory/OriginalPdfRow/ChecklistEditor.jsx"
+  );
+  assert.match(editor, /<ChecklistTree/);
+  assert.match(editor, /edit=\{editing \? edit : null\}/);
+  assert.match(editor, /체크리스트 보기/);
+  assert.match(editor, /체크리스트 수정/);
+  assert.match(editor, /원본 보기 p\.\{source\.page\}/);
+  assert.match(editor, /max-h-\[70vh\]/);
+  assert.match(editor, /size="lg"/);
 });
 
 test("employee launcher delegates opening to the persistent chat-history panel", () => {
@@ -96,13 +99,11 @@ test("employee panel keeps fold and check state in the panel and uses the hierar
   assert.match(panel, /onPopOut/);
 });
 
-test("administrator modal keeps its original flat checklist body", () => {
-  const modal = source("./ChecklistModal.jsx");
-  assert.doesNotMatch(modal, /ChecklistTree|controlledSections/);
-  assert.match(
-    modal,
-    /const \[expandedSections, setExpandedSections\] = useState/
+test("the old flat administrator body is gone so there is one checklist layout", () => {
+  const controls = source(
+    "../../../../Modals/ManageWorkspace/Documents/WorkspaceDirectory/OriginalPdfRow/ChecklistControls.jsx"
   );
+  assert.doesNotMatch(controls, /ChecklistModal|ChecklistBody/);
 });
 
 test("employee tree renders read-only rows, parent/child checkboxes, indeterminate and strike-through", () => {

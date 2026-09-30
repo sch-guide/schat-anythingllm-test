@@ -25,6 +25,7 @@ const {
   classifyStorage,
   buildCleanupPreview,
   executeStorageCleanup,
+  executeOriginalPdfCleanup,
   publicReport,
   loadStorageCleanupInputs,
 } = require("../utils/schatAdmin/storageCleanup");
@@ -251,6 +252,67 @@ function schatAdminEndpoints(app) {
         });
       } catch (e) {
         console.error("[schat-admin] storage cleanup failed:", e.message);
+        response.status(500).json({
+          ok: false,
+          message: "삭제하지 못했습니다. 다시 확인해 주세요.",
+        });
+      } finally {
+        cleanupRunning = false;
+      }
+    }
+  );
+
+  // 연결 정보가 없는 원본 PDF 삭제: admin only, explicit confirmation. Each
+  // file is judged again on a fresh scan; unused ones are deleted and every
+  // other selection comes back with its own reason (no partial trust of the
+  // browser's "삭제 가능" label).
+  app.post(
+    "/schat-admin/storage-cleanup/originals/delete",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      const { keys = [], confirm } = reqBody(request);
+      const userId = response.locals?.user?.id ?? null;
+      if (!Array.isArray(keys) || keys.length === 0 || keys.length > 100)
+        return response
+          .status(400)
+          .json({ ok: false, message: "삭제할 원본 PDF를 선택해 주세요." });
+      if (confirm !== true)
+        return response
+          .status(400)
+          .json({ ok: false, message: "삭제 확인이 필요합니다." });
+      if (cleanupRunning)
+        return response
+          .status(409)
+          .json({ ok: false, message: "이미 정리 작업이 진행 중입니다." });
+      cleanupRunning = true;
+      try {
+        const result = await executeOriginalPdfCleanup(keys.map(String));
+        storageReportCache = {
+          at: Date.now(),
+          body: publicReport(result.report),
+        };
+        await EventLogs.logEvent(
+          "schat_original_pdf_cleanup",
+          {
+            deleted: result.deleted,
+            refused: result.refused,
+            freedBytes: result.freedBytes,
+            verified: result.changed.length === 0,
+          },
+          userId
+        ).catch(() => null);
+        const { report: _report, ...rest } = result;
+        response.status(200).json({
+          ...rest,
+          message:
+            result.changed.length > 0
+              ? "삭제 후 확인에서 차이가 발견되었습니다. 관리자 확인이 필요합니다."
+              : result.deleted > 0
+                ? `연결되지 않은 원본 PDF ${result.deleted}개를 삭제했습니다.`
+                : "삭제한 파일이 없습니다.",
+        });
+      } catch (e) {
+        console.error("[schat-admin] original pdf cleanup failed:", e.message);
         response.status(500).json({
           ok: false,
           message: "삭제하지 못했습니다. 다시 확인해 주세요.",

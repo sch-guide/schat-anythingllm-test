@@ -1,7 +1,7 @@
-# SCHAT 1.0 후속 작업 구현 계획
+# SCHAT 버전 3 후속 작업 구현 계획
 
 > **작업 기준:** `13_SCHAT_1.0_후속작업_설계.md`
-> **목표:** 현재 검색·답변 품질을 보존하면서 1.0 검수, 문서 버전, prompt 기준본, docs_view와 평가 산출물을 완성한다.
+> **목표:** 현재 검색·답변 품질을 보존하면서 버전 3 검수, 문서 버전, prompt 기준본, docs_view와 평가 산출물을 완성한다.
 > **기술:** Node.js, Prisma/SQLite, React, YAML, Python 문서 생성기, Excel
 > **Git:** commit·push·tag를 하지 않는다.
 

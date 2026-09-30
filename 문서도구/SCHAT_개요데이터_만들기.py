@@ -254,6 +254,7 @@ def _mentoring(repository_root: Path) -> list[dict[str, str]]:
                 "summary": _first_summary(markdown),
                 "html": markdown_to_safe_html(markdown),
                 "document": f"docs/02_멘토링/{path.name}",
+                "anchor": anchors[path.name].lstrip("#"),
             }
         )
     return records
@@ -348,6 +349,64 @@ def _table_status(markdown: str, limit: int = 10) -> list[str]:
     return items
 
 
+def _section_markdown(markdown: str, heading: str) -> str:
+    """Body of the first heading that starts with `heading`, up to the next
+    heading of the same or a higher level."""
+    level = None
+    out: list[str] = []
+    for line in _without_frontmatter(markdown).splitlines():
+        match = re.match(r"^(#{1,6})\s+(.*)$", line)
+        if level is None:
+            if match and match.group(2).strip().startswith(heading):
+                level = len(match.group(1))
+            continue
+        if match and len(match.group(1)) <= level:
+            break
+        out.append(line)
+    return "\n".join(out).strip()
+
+
+def _table_rows(markdown: str) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    lines = [line for line in markdown.splitlines() if line.strip().startswith("|")]
+    for line in lines[1:]:
+        if TABLE_DIVIDER.match(line.strip()):
+            continue
+        cells = [cell.strip(" `") for cell in _table_cells(line)]
+        if len(cells) >= 2 and cells[0]:
+            rows.append({"name": cells[0], "description": cells[1]})
+    return rows
+
+
+def _safe_section_html(markdown: str) -> str:
+    # The page shows the server storage path only inside the deployment guide.
+    if not markdown or "server/storage" in markdown:
+        return ""
+    return markdown_to_safe_html(markdown)
+
+
+def _state_document(repository_root: Path) -> dict:
+    """Pieces of the official current-state document, placed in the docs
+    view menus (the document itself stays the single source)."""
+    text = _read(repository_root / "docs/00_현재상태/현재_프로젝트_상태.md")
+    version_state = _section_markdown(text, "5.")
+    verification = re.split(r"^###\s", version_state, maxsplit=1, flags=re.MULTILINE)[0]
+    next_steps = [
+        re.sub(r"^(?:[-*]|\d+[.)])\s+", "", line.strip())
+        for line in _section_markdown(text, "버전 4").splitlines()
+        if re.match(r"^\s*(?:[-*]|\d+[.)])\s+", line)
+    ]
+    return {
+        "searchMethods": _table_rows(_section_markdown(text, "질문 처리")),
+        "registrationHtml": _safe_section_html(_section_markdown(text, "문서 등록")),
+        "features": _table_rows(_section_markdown(text, "3.")),
+        "verificationHtml": _safe_section_html(verification.strip()),
+        "nextSteps": next_steps,
+        "environmentsHtml": _safe_section_html(_section_markdown(text, "6.")),
+        "safetyHtml": _safe_section_html(_section_markdown(text, "8.")),
+    }
+
+
 def _status(repository_root: Path) -> dict:
     text = _read(repository_root / "docs/00_현재상태/현재_프로젝트_상태.md")
     completed = _section_items(text, "완료") or _table_status(text)
@@ -436,6 +495,16 @@ def collect_overview(repository_root: Path) -> dict:
             {"title": "Gemini 답변", "description": "선택된 병원 근거 안에서만 답변을 구성합니다."},
             {"title": "출처 확인", "description": "문서명, 페이지, 항목과 공개 가능한 근거 원문을 보여줍니다."},
         ],
+        "versionSystem": {
+            "current": "SCHAT 버전 3",
+            "document": "docs/00_현재상태/SCHAT_버전_체계.md",
+            "stages": [
+                {"version": "버전 1", "title": "초기 병원 문서 챗봇", "description": "병원 문서를 검색하고 답변하는 기본 구조를 직접 개발함."},
+                {"version": "버전 2", "title": "직접 개발 RAG 고도화", "description": "ChromaDB·Embedding·BM25·Hybrid 검색을 적용하고 성능을 검증함."},
+                {"version": "버전 3", "title": "현재 SCHAT", "description": "검증한 검색 기술과 AnythingLLM의 로그인·권한·문서관리·채팅 기반을 결합함."},
+                {"version": "버전 4", "title": "다음 개선 단계", "description": "문서 버전 관리·Citation 정밀 개선·추가 품질검증을 진행함."},
+            ],
+        },
         "folders": folders,
         "technology": {
             "answerModel": {"label": "답변 모델", "value": answer_model, "status": "사용 중" if answer_model != "확인 필요" else "확인 필요"},
@@ -452,6 +521,13 @@ def collect_overview(repository_root: Path) -> dict:
             "employee": ["질문 입력", "근거 기반 답변 확인", "출처 확인", "필요하면 근거 원문 확인"],
         },
         "status": _status(root),
+        "stateDocument": _state_document(root),
+        "versionDocument": {
+            "html": _safe_section_html(
+                _without_frontmatter(_read(root / "docs/00_현재상태/SCHAT_버전_체계.md"))
+            ),
+            "document": "docs/00_현재상태/SCHAT_버전_체계.md",
+        },
         "tests": _test_files(root),
         "safeguards": [
             "등록된 병원 문서 근거 안에서만 답변함.",

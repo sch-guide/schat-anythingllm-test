@@ -1,18 +1,17 @@
 import { useState } from "react";
 import Modal, { ModalBody, ModalHeader } from "@/components/lib/Modal";
-import ChecklistModal from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Checklist/ChecklistModal";
 import PdfPageViewer from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Citation/PdfPageViewer";
 import ChecklistEditor from "./ChecklistEditor";
 
+// "체크리스트 보기" and "수정" open the same screen (ChecklistEditor) in view
+// or edit mode, so the administrator sees one layout for both.
 export default function ChecklistControls({
   checklist,
   workspaceSlug,
   onUpdated,
 }) {
-  const [viewing, setViewing] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [openMode, setOpenMode] = useState(null);
   const [viewingPdf, setViewingPdf] = useState(false);
-  const [checkedItems, setCheckedItems] = useState({});
   if (!checklist) return null;
 
   return (
@@ -22,7 +21,7 @@ export default function ChecklistControls({
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            setViewing(true);
+            setOpenMode("view");
           }}
           className="rounded border border-theme-modal-border px-2 py-1 hover:bg-theme-file-picker-hover"
         >
@@ -32,7 +31,7 @@ export default function ChecklistControls({
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            setEditing(true);
+            setOpenMode("edit");
           }}
           className="rounded border border-theme-modal-border px-2 py-1 hover:bg-theme-file-picker-hover"
         >
@@ -51,45 +50,37 @@ export default function ChecklistControls({
           </button>
         )}
       </div>
-      <ChecklistModal
-        checklist={checklist}
-        isOpen={viewing}
-        onClose={() => setViewing(false)}
-        checkedItems={checkedItems}
-        onToggleItem={(itemId) =>
-          setCheckedItems((current) => ({
-            ...current,
-            [itemId]: !current[itemId],
-          }))
-        }
-      />
       <ChecklistEditor
         checklist={checklist}
         workspaceSlug={workspaceSlug}
-        isOpen={editing}
-        onClose={() => setEditing(false)}
+        isOpen={openMode !== null}
+        initialMode={openMode || "view"}
+        onClose={() => setOpenMode(null)}
         onSaved={onUpdated}
+        onOpenSource={() => setViewingPdf(true)}
       />
-      <Modal
-        isOpen={viewingPdf}
-        onClose={() => setViewingPdf(false)}
-        size="xl"
-        className="z-[120]"
-      >
-        <ModalHeader
-          title={`${checklist.source.filename} · p.${checklist.source.page}`}
+      {checklist.source?.pdfRef && (
+        <Modal
+          isOpen={viewingPdf}
           onClose={() => setViewingPdf(false)}
-        />
-        <ModalBody>
-          <PdfPageViewer
-            workspaceSlug={workspaceSlug}
-            pdfRef={checklist.source.pdfRef}
-            page={checklist.source.page}
-            documentName={checklist.source.filename}
-            onUnavailable={() => setViewingPdf(false)}
+          size="xl"
+          className="z-[130]"
+        >
+          <ModalHeader
+            title={`${checklist.source.filename} · p.${checklist.source.page}`}
+            onClose={() => setViewingPdf(false)}
           />
-        </ModalBody>
-      </Modal>
+          <ModalBody>
+            <PdfPageViewer
+              workspaceSlug={workspaceSlug}
+              pdfRef={checklist.source.pdfRef}
+              page={checklist.source.page}
+              documentName={checklist.source.filename}
+              onUnavailable={() => setViewingPdf(false)}
+            />
+          </ModalBody>
+        </Modal>
+      )}
     </>
   );
 }

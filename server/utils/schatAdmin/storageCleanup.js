@@ -105,7 +105,20 @@ function classifyStorage(input) {
     originals = [],
     descriptionCache = { files: 0, bytes: 0 },
     vectorCounts = { body: 0, image: 0 },
+    knownDocumentIds = null,
   } = input;
+  // Original PDFs are stored as sha256(document_id). Every document id still
+  // mentioned anywhere (pages, workspace, search data, checklists, images,
+  // chats, quizzes) is hashed the same way; an original matching none of them
+  // is unused. Without a complete scan nothing is judged unused.
+  const referencedOriginalKeys =
+    knownDocumentIds instanceof Set
+      ? new Set(
+          [...knownDocumentIds, ...pageRecords.map((r) => r.documentId)]
+            .filter(Boolean)
+            .map((id) => originalStorageKey(String(id).trim()))
+        )
+      : null;
 
   const workspaceByDocpath = new Map(
     workspaceDocs.map((doc) => [doc.docpath, doc])
@@ -232,13 +245,19 @@ function classifyStorage(input) {
     });
   }
 
-  // Original PDFs whose upload is unknown: the source file itself, so never
-  // offered for deletion automatically.
+  // Original PDFs whose upload has no page records. Only an original that no
+  // known document id points to is "연결되지 않은 파일"; anything else, or an
+  // incomplete reference scan, stays "검토 필요".
   for (const original of originals) {
     if (claimedOriginals.has(original.storageKey)) continue;
+    const scanned = referencedOriginalKeys !== null;
+    const referenced =
+      scanned && referencedOriginalKeys.has(original.storageKey);
+    const unused = scanned && !referenced;
     groups.push({
       key: groupKey("original", original.storageKey),
       documentId: null,
+      originalKey: original.storageKey, // internal only
       kind: "original",
       title: "연결 정보가 없는 원본 PDF",
       uploadedAt: original.modifiedAt || null,
@@ -250,8 +269,16 @@ function classifyStorage(input) {
       imageBytes: 0,
       original: { exists: true, bytes: original.bytes, inUse: false },
       usage: { ...EMPTY_USAGE },
-      status: STATUS.REVIEW,
-      reasons: ["어느 업로드의 원본인지 확인할 수 없습니다."],
+      status: unused ? STATUS.UNLINKED : STATUS.REVIEW,
+      reasons: unused
+        ? [
+            "작업 공간·페이지 기록·검색 데이터·체크리스트·대화 출처·퀴즈 어디에서도 쓰지 않는 원본입니다.",
+          ]
+        : referenced
+          ? [
+              "대화 기록·퀴즈 등 다른 자료에서 이 문서를 가리키고 있어 확인이 필요합니다.",
+            ]
+          : ["어느 업로드의 원본인지 확인할 수 없습니다."],
     });
   }
 
@@ -335,6 +362,15 @@ function buildCleanupPreview(report, keys = []) {
       blocked.push({
         key,
         reason: "항목을 찾을 수 없습니다. 목록을 새로 고쳐 주세요.",
+      });
+      continue;
+    }
+    // Original PDFs have their own per-file deletion (executeOriginalPdfCleanup).
+    if (group.kind === "original") {
+      blocked.push({
+        key,
+        title: group.title,
+        reason: "원본 PDF는 '연결 정보가 없는 원본 PDF'에서 따로 삭제합니다.",
       });
       continue;
     }
@@ -605,9 +641,78 @@ async function executeStorageCleanup(
   };
 }
 
+/**
+ * 연결 정보가 없는 원본 PDF 삭제. Each selected original is judged again on a
+ * fresh scan right before deletion; only one still "unlinked" is removed (its
+ * .pdf and metadata .json in original-documents, nothing else). Every other
+ * selection is refused with its own reason, and the operational counts must be
+ * unchanged afterwards.
+ */
+async function executeOriginalPdfCleanup(
+  keys = [],
+  { loadInputs = loadStorageCleanupInputs, root = storageRoot() } = {}
+) {
+  const before = classifyStorage(await loadInputs());
+  const byKey = new Map(before.groups.map((g) => [g.key, g]));
+  const dir = path.join(root, "original-documents");
+  const results = [];
+  let freedBytes = 0;
+  for (const key of [...new Set(keys.map(String))]) {
+    const group = byKey.get(key);
+    const refuse = (reason) => results.push({ key, deleted: false, reason });
+    if (!group) {
+      refuse("항목을 찾을 수 없습니다. 목록을 새로 고쳐 주세요.");
+      continue;
+    }
+    if (group.kind !== "original") {
+      refuse("원본 PDF 항목이 아닙니다.");
+      continue;
+    }
+    if (
+      group.status !== STATUS.UNLINKED ||
+      !/^[a-f0-9]{64}$/.test(group.originalKey || "")
+    ) {
+      refuse(
+        group.reasons?.[0] ||
+          "현재 자료와 연결되어 있을 수 있어 삭제하지 않았습니다."
+      );
+      continue;
+    }
+    const targets = [`${group.originalKey}.pdf`, `${group.originalKey}.json`]
+      .map((name) => path.join(dir, name))
+      .filter((target) => isInside(dir, target));
+    const outcome = removeTargets({ files: targets, folders: [] });
+    if (outcome.failed.length) {
+      refuse("파일을 지우지 못했습니다.");
+      continue;
+    }
+    freedBytes += outcome.bytes;
+    results.push({ key, deleted: true, bytes: outcome.bytes });
+  }
+
+  const after = classifyStorage(await loadInputs());
+  const comparison = compareOperationalSnapshots(
+    before.summary.current,
+    after.summary.current
+  );
+  const deleted = results.filter((r) => r.deleted).length;
+  return {
+    ok: comparison.ok && deleted > 0 && deleted === results.length,
+    deleted,
+    refused: results.length - deleted,
+    freedBytes,
+    results,
+    before: before.summary.current,
+    after: after.summary.current,
+    changed: comparison.changed,
+    report: after,
+  };
+}
+
 function publicGroup(group) {
   const {
     documentId: _hidden,
+    originalKey: _originalKey,
     pageFiles: _pages,
     cacheFileNames: _cache,
     ...rest
@@ -736,6 +841,9 @@ async function loadStorageCleanupInputs() {
   const imageVectorsByDocument = new Map();
   const referencedImageKeys = new Set();
   const vectorCounts = { body: 0, image: 0 };
+  // A collection that fails to load (other than "does not exist") makes the
+  // reference scan incomplete: then no original PDF is judged unused.
+  let chromaIncomplete = false;
   const VectorDb = getVectorDbClass();
   const workspaces = await prisma.workspaces.findMany({
     select: { slug: true },
@@ -747,7 +855,11 @@ async function loadStorageCleanupInputs() {
         .getCollection({
           name: VectorDb.normalize ? VectorDb.normalize(slug) : slug,
         })
-        .catch(() => null);
+        .catch((error) => {
+          if (!/does not exist|not found|not exist/i.test(error?.message || ""))
+            chromaIncomplete = true;
+          return null;
+        });
       if (!collection) continue;
       const total = await collection.count();
       for (let offset = 0; offset < total; offset += 500) {
@@ -827,7 +939,47 @@ async function loadStorageCleanupInputs() {
       .filter(Boolean)
   );
 
+  // Every document id still mentioned anywhere, for the original PDF check:
+  // live workspace, search data, checklists, image folders, quizzes and the
+  // sources saved with past answers (Citation). Any failure -> null (no
+  // original is then judged unused).
+  let knownDocumentIds = null;
+  if (!chromaIncomplete) {
+    try {
+      const ids = new Set([
+        ...workspaceDocumentIds,
+        ...chromaDocumentIds,
+        ...checklistDocumentIds.keys(),
+        ...imageFolders.map((folder) => folder.name),
+      ]);
+      for (const table of [
+        "schat_quiz_sets",
+        "schat_quiz_questions",
+        "schat_quiz_generation_logs",
+      ]) {
+        const rows = await prisma[table].findMany({
+          select: { document_id: true },
+          distinct: ["document_id"],
+        });
+        for (const row of rows)
+          if (row.document_id) ids.add(String(row.document_id).trim());
+      }
+      const chats = await prisma.workspace_chats.findMany({
+        select: { response: true },
+      });
+      for (const chat of chats)
+        for (const match of String(chat.response || "").matchAll(
+          /"document_id"\s*:\s*"([^"]{1,200})"/g
+        ))
+          ids.add(match[1].trim());
+      knownDocumentIds = ids;
+    } catch {
+      knownDocumentIds = null;
+    }
+  }
+
   return {
+    knownDocumentIds,
     pageRecords: readPageRecords(
       path.join(root, "documents"),
       path.join(root, "vector-cache")
@@ -853,6 +1005,7 @@ module.exports = {
   buildCleanupManifest,
   compareOperationalSnapshots,
   executeStorageCleanup,
+  executeOriginalPdfCleanup,
   deletionTargets,
   publicReport,
   loadStorageCleanupInputs,

@@ -478,6 +478,20 @@ function schatAccountEndpoints(app) {
     })
   );
 
+  // Only a department without any account can be deleted (checked again by
+  // the service inside the delete itself).
+  app.delete(
+    "/schat-admin/departments/:id",
+    adminOnly,
+    handle(async (request, response) => {
+      const department = await service.deleteDepartment(
+        response.locals.user.id,
+        request.params.id
+      );
+      response.status(200).json({ success: true, department });
+    })
+  );
+
   // ---- admin: bulk registration ----------------------------------------------
   app.get(
     "/schat-admin/accounts/bulk/template",

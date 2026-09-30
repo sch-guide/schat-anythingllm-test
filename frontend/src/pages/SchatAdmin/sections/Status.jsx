@@ -10,6 +10,7 @@ export const EVENT_LABELS = {
   failed_login_invalid_username: "로그인 실패 (없는 아이디)",
   sent_chat: "질문 전송",
   document_uploaded: "문서 업로드",
+  checklist_extraction_issue: "체크리스트 자동 추출 실패",
   document_uploaded_to_chat: "대화에 파일 첨부",
   workspace_file_uploaded: "작업 공간에 문서 업로드",
   workspace_documents_added: "검색 문서 추가",
@@ -34,7 +35,34 @@ export const EVENT_LABELS = {
   users_bulk_created: "직원 일괄등록",
   user_password_reset: "비밀번호 초기화",
   user_password_changed: "비밀번호 변경",
+  schat_department_deleted: "부서 삭제",
+  schat_storage_cleanup: "저장공간 정리",
+  schat_original_pdf_cleanup: "연결되지 않은 원본 PDF 삭제",
 };
+
+const CHECKLIST_ISSUE_TEXT = {
+  "pdf-layout-unavailable": "원본 PDF를 읽지 못함",
+  "layout-not-recognised": "표 모양을 읽지 못함",
+  "extract-failed": "추출 오류",
+  "read-failed": "쪽 기록을 읽지 못함",
+  "save-failed": "저장 오류",
+};
+
+// Which pages failed checklist extraction and why (no page text).
+export function checklistIssueLabel(metadata) {
+  try {
+    const m = JSON.parse(metadata || "{}");
+    const reasons = Object.keys(JSON.parse(m.reasons || "{}"))
+      .map((code) => CHECKLIST_ISSUE_TEXT[code] || code)
+      .join(", ");
+    const pages = m.failedPages ? `p.${m.failedPages}` : "";
+    return [pages, reasons].filter(Boolean).length
+      ? ` · ${[pages, reasons].filter(Boolean).join(" · ")}`
+      : "";
+  } catch {
+    return "";
+  }
+}
 
 // Audit detail for account deletion (name, department, number only).
 function deletedLabel(metadata) {
@@ -45,6 +73,20 @@ function deletedLabel(metadata) {
   } catch {
     return "";
   }
+}
+
+// Department name, or how many original PDFs were removed and the space freed.
+export function cleanupLabel(event, metadata) {
+  try {
+    const m = JSON.parse(metadata || "{}");
+    if (event === "schat_department_deleted")
+      return m.name ? ` · ${m.name}` : "";
+    if (event === "schat_original_pdf_cleanup") {
+      const mb = Math.round(Number(m.freedBytes || 0) / 1024 ** 2);
+      return ` · ${Number(m.deleted || 0)}개 삭제 · 확보 공간 ${mb}MB`;
+    }
+  } catch {}
+  return "";
 }
 
 export function eventLabel(event = "") {
@@ -154,6 +196,9 @@ function RecentEvents() {
                 <span className="text-sm text-theme-text-primary">
                   {eventLabel(log.event)}
                   {log.event === "user_deleted" && deletedLabel(log.metadata)}
+                  {log.event === "checklist_extraction_issue" &&
+                    checklistIssueLabel(log.metadata)}
+                  {cleanupLabel(log.event, log.metadata)}
                 </span>
                 <span className="text-xs text-theme-text-secondary">
                   {log.user?.username && log.user.username !== "unknown user"

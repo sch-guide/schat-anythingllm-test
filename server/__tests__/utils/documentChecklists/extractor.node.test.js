@@ -104,15 +104,32 @@ test("every automatic label and detail is present in normalized source", () => {
   }
 });
 
-test("non-checklist pages and wrong pages do not create a checklist", () => {
+test("non-checklist pages and other documents do not create a checklist", () => {
   assert.equal(isRenalBiopsyChecklistCandidate("일반 검사 설명 페이지"), false);
   assert.equal(
     extractRenalBiopsyChecklist({
       documentId: "renal-document",
-      filename: "검사 및 시술(26.04.07).pdf",
-      page: 87,
+      filename: "2026실무지침서 (26.7).pdf",
+      page: 56,
       text: sourceText,
     }),
     null
   );
+});
+
+test("a new edition is recognised by content even when the page moved", () => {
+  const checklist = extractRenalBiopsyChecklist({
+    documentId: "renal-document-v2",
+    filename: "검사 및 시술(26.10.01).pdf",
+    page: 58,
+    text: sourceText,
+  });
+  assert.equal(checklist.page, 58);
+  assert.equal(checklist.source.page, 58);
+  assert.deepEqual(checklist.aliases, [
+    "renal biopsy",
+    "renal bx",
+    "신장 조직검사",
+    "신생검",
+  ]);
 });

@@ -27,6 +27,20 @@ export function isSelectable(group) {
   return group.status === "old_upload" || group.status === "unlinked";
 }
 
+// Original PDFs are listed and deleted on their own (one result per file).
+export function isOriginalPdf(group) {
+  return group.kind === "original";
+}
+
+export function originalDeleteSummary(result = {}) {
+  const deleted = Number(result.deleted || 0);
+  const refused = Number(result.refused || 0);
+  const parts = [`연결되지 않은 원본 PDF ${deleted}개 삭제`];
+  if (deleted > 0) parts.push(`확보 공간: ${formatBytes(result.freedBytes)}`);
+  if (refused > 0) parts.push(`삭제하지 않음 ${refused}개`);
+  return parts.join(" · ");
+}
+
 export function formatBytes(bytes = 0) {
   if (bytes >= 1024 ** 3) return `약 ${(bytes / 1024 ** 3).toFixed(1)}GB`;
   if (bytes >= 1024 ** 2) return `약 ${Math.round(bytes / 1024 ** 2)}MB`;
@@ -101,10 +115,18 @@ export default function StorageSection() {
     oldUploadIndex[group.title] = (oldUploadIndex[group.title] || 0) + 1;
     return `${group.title} 예전 업로드 ${oldUploadIndex[group.title]}`;
   };
-  const rows = report.groups.map((group) => ({
-    ...group,
-    label: titleOf(group),
-  }));
+  const rows = report.groups
+    .filter((group) => !isOriginalPdf(group))
+    .map((group) => ({
+      ...group,
+      label: titleOf(group),
+    }));
+  const originalRows = report.groups
+    .filter(isOriginalPdf)
+    .map((group, index) => ({
+      ...group,
+      label: `${group.title} ${index + 1}`,
+    }));
 
   return (
     <div className="flex flex-col gap-y-5">
@@ -204,6 +226,9 @@ export default function StorageSection() {
             </Button>
           </div>
         </Card>
+      )}
+      {showList && originalRows.length > 0 && (
+        <OriginalPdfCard groups={originalRows} onDone={() => load(false)} />
       )}
       {preview && (
         <Preview
@@ -462,6 +487,142 @@ function Preview({ preview, rows, onDelete }) {
             </Button>
           </div>
         </Notice>
+      )}
+    </Card>
+  );
+}
+
+function OriginalPdfCard({ groups, onDone }) {
+  const [selected, setSelected] = useState([]);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [outcome, setOutcome] = useState(null);
+  const labelOf = (key) => groups.find((g) => g.key === key)?.label || "항목";
+
+  async function remove() {
+    setDeleting(true);
+    const result = await SchatAdmin.storageDeleteOriginals(selected);
+    setDeleting(false);
+    setConfirming(false);
+    setOutcome(result);
+    setSelected([]);
+    if (result?.deleted > 0)
+      showToast(originalDeleteSummary(result), "success");
+    else showToast(result?.message || "삭제하지 못했습니다.", "error");
+    onDone?.();
+  }
+
+  return (
+    <Card
+      title="연결 정보가 없는 원본 PDF"
+      description="작업 공간·검색 데이터·체크리스트·대화 출처·퀴즈 어디에서도 쓰지 않는 원본 PDF만 삭제할 수 있습니다. 조금이라도 연결이 남아 있으면 검토 필요로 둡니다."
+    >
+      {outcome && (
+        <Notice tone={outcome.deleted > 0 ? "info" : "warning"}>
+          <p className="font-medium" data-testid="original-delete-result">
+            {outcome.message || originalDeleteSummary(outcome)}
+          </p>
+          {outcome.deleted > 0 && <p>{originalDeleteSummary(outcome)}</p>}
+          {(outcome.results || [])
+            .filter((item) => !item.deleted)
+            .map((item) => (
+              <p key={item.key}>
+                · {labelOf(item.key)}: {item.reason}
+              </p>
+            ))}
+        </Notice>
+      )}
+      <ul className="flex flex-col" data-testid="original-pdf-list">
+        {groups.map((group) => {
+          const selectable = group.status === "unlinked";
+          const status = STATUS_LABELS[group.status] || STATUS_LABELS.review;
+          return (
+            <li
+              key={group.key}
+              className="flex items-start gap-3 py-2 border-b border-theme-sidebar-border last:border-b-0"
+            >
+              <input
+                type="checkbox"
+                aria-label={`${group.label} 선택`}
+                className="mt-1 h-4 w-4 accent-sky-600 disabled:opacity-40"
+                disabled={!selectable}
+                checked={selected.includes(group.key)}
+                onChange={(e) =>
+                  setSelected((prev) =>
+                    e.target.checked
+                      ? [...prev, group.key]
+                      : prev.filter((k) => k !== group.key)
+                  )
+                }
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-theme-text-primary">
+                  {group.label} · {formatBytes(group.totalBytes)}
+                </p>
+                <p className="text-xs text-theme-text-secondary">
+                  올린 시각 {when(group.uploadedAt)}
+                </p>
+                {group.reasons?.map((reason) => (
+                  <p key={reason} className="text-xs text-theme-text-secondary">
+                    {reason}
+                  </p>
+                ))}
+              </div>
+              <Badge tone={status.tone}>{status.text}</Badge>
+            </li>
+          );
+        })}
+      </ul>
+      <div>
+        <Button
+          variant="danger"
+          disabled={selected.length === 0 || deleting}
+          onClick={() => setConfirming(true)}
+        >
+          선택한 파일 삭제
+        </Button>
+      </div>
+      {confirming && (
+        <Modal
+          isOpen
+          onClose={() => !deleting && setConfirming(false)}
+          size="md"
+        >
+          <ModalHeader
+            title={`선택한 원본 PDF ${selected.length}개를 삭제하시겠습니까?`}
+            onClose={() => !deleting && setConfirming(false)}
+          />
+          <ModalBody>
+            <div
+              className="flex flex-col gap-y-3 text-sm"
+              data-testid="original-delete-confirm"
+            >
+              <ul className="text-theme-text-primary font-medium">
+                {selected.map((key) => (
+                  <li key={key}>{labelOf(key)}</li>
+                ))}
+              </ul>
+              <p className="text-theme-text-secondary">
+                현재 작업 공간, 검색 데이터, 체크리스트, 원본 문서 연결에서
+                사용되지 않는 파일만 삭제됩니다. 삭제 직전에 서버가 파일마다
+                다시 확인합니다.
+              </p>
+              <Notice tone="warning">삭제 후 복구할 수 없습니다.</Notice>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => setConfirming(false)}
+                  disabled={deleting}
+                >
+                  취소
+                </Button>
+                <Button variant="danger" onClick={remove} disabled={deleting}>
+                  {deleting ? "삭제 중..." : "삭제"}
+                </Button>
+              </div>
+            </div>
+          </ModalBody>
+        </Modal>
       )}
     </Card>
   );

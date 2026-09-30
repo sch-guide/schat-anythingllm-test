@@ -61,6 +61,19 @@ const SchatAdmin = {
       .then((res) => res.json())
       .catch(() => ({ ok: false, message: "서버에 연결하지 못했습니다." }));
   },
+  // 연결 정보가 없는 원본 PDF 삭제: each file is judged again by the server.
+  storageDeleteOriginals: async (keys = []) => {
+    return await fetch(
+      `${API_BASE}/schat-admin/storage-cleanup/originals/delete`,
+      {
+        method: "POST",
+        headers: baseHeaders(),
+        body: JSON.stringify({ keys, confirm: true }),
+      }
+    )
+      .then((res) => res.json())
+      .catch(() => ({ ok: false, message: "서버에 연결하지 못했습니다." }));
+  },
   connectionTest: async (target) => {
     return await fetch(`${API_BASE}/schat-admin/connection-test`, {
       method: "POST",

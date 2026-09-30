@@ -39,6 +39,14 @@ def _steps(items: list[dict]) -> str:
     )
 
 
+def _version_cards(items: list[dict]) -> str:
+    return "".join(
+        f'<article class="tech-card"><span>{_e(item["version"])}</span>'
+        f'<strong>{_e(item["title"])}</strong><small>{_e(item["description"])}</small></article>'
+        for item in items
+    )
+
+
 def _simple_list(items: list[str]) -> str:
     return "".join(f"<li>{_e(item)}</li>" for item in items)
 
@@ -66,12 +74,26 @@ def _history(items: list[dict]) -> str:
     return rows or '<p class="muted">등록된 작업일지가 없습니다.</p>'
 
 
-def _guide_sections(guides: list[dict]) -> str:
-    # Other 05_인수인계 guides continue inside the 인수인계 section.
+# Each 05_인수인계 guide is shown in the menu it belongs to; the deployment
+# guide (and any other operations guide) stays inside 인수인계.
+GUIDE_MENUS = (("검색_점수", "how"), ("개발_복기", "journey"))
+
+
+def _guide_menu(guide: dict) -> str:
+    document = guide.get("document", "")
+    for marker, menu in GUIDE_MENUS:
+        if marker in document:
+            return menu
+    return "ops"
+
+
+def _guide_sections(guides: list[dict], menu: str) -> str:
     return "".join(
-        f'<div class="guide-block" id="guide-{index}"><h3 class="guide-title">{_e(guide["title"])}</h3>'
-        f'<article class="handover">{guide["html"]}</article></div><!--/guide-->'
+        f'<details class="doc-panel guide-block" id="guide-{index}"><summary>{_e(guide["title"])}'
+        f'<small>{_e(guide.get("summary", "").lstrip("> "))}</small></summary>'
+        f'<article class="handover">{guide["html"]}</article></details><!--/guide-->'
         for index, guide in enumerate(guides)
+        if _guide_menu(guide) == menu
     )
 
 
@@ -105,22 +127,26 @@ def _status_badges(fragment: str) -> str:
     return re.sub("(\d+)", lambda m: cells[int(m.group(1))], fragment)
 
 
+def _mentoring_anchor(record: dict, index: int) -> str:
+    return _e(record.get("anchor") or f"mentoring-{index}")
+
+
 def _mentoring_sections(records: list[dict]) -> str:
     if not records:
         return '<p class="muted">등록된 멘토링 기록이 없습니다.</p>'
     overviews = [record for record in records if "한눈에_보기" in record.get("document", "")]
     evidence = [record for record in records if record not in overviews]
     primary = "".join(
-        f'<div class="guide-block" id="mentoring-{index}"><h3 class="guide-title">{_e(record["title"])}</h3>'
+        f'<div class="guide-block" id="{_mentoring_anchor(record, index)}"><h3 class="guide-title">{_e(record["title"])}</h3>'
         f'<article class="handover">{_status_badges(record["html"])}</article></div><!--/mentoring-->'
         for index, record in enumerate(overviews)
     )
     if not evidence:
         return primary
     details = "".join(
-        f'<div class="mentoring-evidence-item"><h3 class="guide-title">{_e(record["title"])}</h3>'
+        f'<div class="mentoring-evidence-item" id="{_mentoring_anchor(record, index + len(overviews))}"><h3 class="guide-title">{_e(record["title"])}</h3>'
         f'<article class="handover">{_status_badges(record["html"])}</article></div>'
-        for record in evidence
+        for index, record in enumerate(evidence)
     )
     return (
         primary
@@ -147,52 +173,277 @@ def _mentoring_diagrams() -> str:
     return '<div class="mentoring-diagrams">' + cards + "</div>"
 
 
+MENUS = (
+    ("intro", "1. 프로젝트 소개", "SCHAT이 무엇이고 지금 어떤 버전인지"),
+    ("how", "2. 동작 방식", "질문이 답변과 출처가 되기까지"),
+    ("state", "3. 기능과 상태", "지금 쓸 수 있는 기능과 검증 결과"),
+    ("journey", "4. 개발 과정", "버전 1부터 지금까지의 변화"),
+    ("ops", "5. 운영·인수인계", "서버·백업·안전장치와 멘토링"),
+)
+
+
+def _named_cards(items: list[dict]) -> str:
+    return "".join(
+        f'<article class="info-card"><strong>{_e(item["name"])}</strong><p>{_e(item["description"])}</p></article>'
+        for item in items
+    )
+
+
+def _subnav(items: list[tuple[str, str]]) -> str:
+    links = "".join(f'<a href="#{anchor}">{_e(label)}</a>' for anchor, label in items)
+    return f'<nav class="subnav" aria-label="이 메뉴 안의 내용">{links}</nav>'
+
+
+def _pager(menu: str) -> str:
+    ids = [item[0] for item in MENUS]
+    index = ids.index(menu)
+    previous = (
+        f'<a href="#{MENUS[index - 1][0]}">← {_e(MENUS[index - 1][1])}</a>'
+        if index > 0
+        else "<span></span>"
+    )
+    following = (
+        f'<a href="#{MENUS[index + 1][0]}">{_e(MENUS[index + 1][1])} →</a>'
+        if index < len(MENUS) - 1
+        else "<span></span>"
+    )
+    return f'<div class="pager">{previous}{following}</div>'
+
+
+def _page(menu: str, lead: str, subnav: list[tuple[str, str]], body: str) -> str:
+    title = next(item[1] for item in MENUS if item[0] == menu)
+    return (
+        f'<div class="page" id="{menu}" role="region" aria-labelledby="{menu}-title">'
+        f'<header class="page-head"><h2 id="{menu}-title">{_e(title)}</h2><p class="lead">{_e(lead)}</p>'
+        f"{_subnav(subnav)}</header>{body}{_pager(menu)}</div>"
+    )
+
+
+def _panel(summary: str, html_body: str, open_: bool = False) -> str:
+    if not html_body:
+        return ""
+    attribute = " open" if open_ else ""
+    return (
+        f'<details class="doc-panel"{attribute}><summary>{_e(summary)}</summary>'
+        f'<article class="handover">{html_body}</article></details>'
+    )
+
+
+# Shows one menu at a time (the others stay in the page for search and print).
+# Without JavaScript every menu is simply shown one after another.
+PAGE_SCRIPT = """(function(){var d=document,root=d.documentElement;root.classList.add('js');
+var pages=[].slice.call(d.querySelectorAll('.page')),links=[].slice.call(d.querySelectorAll('#site-nav a')),
+toggle=d.querySelector('.menu-toggle'),nav=d.getElementById('site-nav');
+function pageOf(el){while(el&&!(el.classList&&el.classList.contains('page')))el=el.parentElement;return el}
+function show(hash,scroll){var id=decodeURIComponent((hash||'').replace(/^#/,'')),target=id?d.getElementById(id):null,page=pageOf(target)||pages[0];
+pages.forEach(function(p){p.hidden=p!==page});
+links.forEach(function(a){var on=a.getAttribute('href')==='#'+page.id;a.classList.toggle('active',on);if(on){a.setAttribute('aria-current','page');if(toggle)toggle.querySelector('span').textContent=a.querySelector('strong').textContent}else a.removeAttribute('aria-current')});
+for(var el=target;el;el=el.parentElement){if(el.tagName==='DETAILS')el.open=true}
+if(toggle){toggle.setAttribute('aria-expanded','false');nav.classList.remove('open')}
+if(scroll){if(target&&target!==page)target.scrollIntoView();else window.scrollTo(0,0)}}
+window.addEventListener('hashchange',function(){show(location.hash,true)});
+if(toggle)toggle.addEventListener('click',function(){var open=nav.classList.toggle('open');toggle.setAttribute('aria-expanded',String(open))});
+show(location.hash,!!location.hash)})();"""
+
+
 def render_page(data: dict) -> str:
     project = data["project"]
     guides = data.get("guides", [])
-    guide_sections = _guide_sections(guides)
-    guide_documents = "".join(f" · {_e(g['document'])}" for g in guides)
+    state = data.get("stateDocument", {})
+    version_doc = data.get("versionDocument", {})
     tech_cards = _cards(list(data["technology"].values()))
     docker_services = " · ".join(data["dockerServices"]) or "확인 필요"
     test_areas = "".join(
-        f'<li><span>{_e(label)}</span><strong>{count}개</strong></li>'
+        f"<li><span>{_e(label)}</span><strong>{count}개</strong></li>"
         for label, count in data["tests"]["byArea"].items()
     )
+    stages = data["versionSystem"]["stages"]
+    current_version = data["versionSystem"]["current"]
+    current_stage = next(
+        (stage for stage in stages if stage["version"] in current_version),
+        stages[0] if stages else {},
+    )
+    next_stage = next((stage for stage in stages if stage["version"] == "버전 4"), None)
+    features = state.get("features", [])
+    guide_documents = "".join(f" · {_e(g['document'])}" for g in guides)
     public = _load_overview_generator().public_data(data)
     embedded = json.dumps(public, ensure_ascii=False).replace("<", "\\u003c")
-    return f'''<!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SCHAT 프로젝트 안내</title><style>
-:root{{--navy:#102a43;--teal:#087f8c;--teal-soft:#e8f5f6;--bg:#f4f7fa;--paper:#fff;--line:#d8e2ea;--muted:#627d98;--green:#247a52;--amber:#a76500}}
-*{{box-sizing:border-box}}html{{scroll-behavior:smooth}}body{{margin:0;background:var(--bg);color:var(--navy);font-family:Pretendard,"Noto Sans KR","Segoe UI",sans-serif;line-height:1.65}}
-a{{color:inherit}}.layout{{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:100vh}}aside{{position:sticky;top:0;height:100vh;padding:28px 20px;background:#fff;border-right:1px solid var(--line)}}
-aside h1{{font-size:20px;margin:0 0 4px}}aside p,.muted{{color:var(--muted)}}nav{{display:grid;gap:5px;margin-top:28px}}nav a{{padding:9px 11px;border-radius:9px;text-decoration:none;font-size:14px}}nav a:hover{{background:var(--teal-soft);color:var(--teal)}}
-main{{width:min(100% - 40px,1080px);margin:0 auto;padding:42px 0 90px}}section{{scroll-margin-top:24px;margin-top:58px}}.hero{{margin-top:0;padding:42px;border-radius:24px;background:linear-gradient(135deg,#087f8c,#102a43);color:#fff;box-shadow:0 18px 50px rgba(16,42,67,.16)}}
-.eyebrow{{display:block;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.78}}.hero h2{{margin:8px 0 12px;font-size:clamp(30px,5vw,48px);line-height:1.15}}.hero p{{max-width:760px;margin:8px 0;line-height:1.75}}h2{{font-size:28px;margin:0 0 8px}}.lead{{margin:0 0 22px;color:var(--muted)}}
-.tech-grid{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:26px}}.tech-card{{display:grid;gap:5px;padding:18px;background:var(--paper);border:1px solid var(--line);border-radius:14px}}.tech-card span,.tech-card small{{font-size:12px;color:var(--muted)}}.tech-card strong{{font-size:17px;overflow-wrap:anywhere}}.tech-card small{{color:var(--green);font-weight:700}}
-.workflow{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:0;list-style:none}}.workflow li{{display:flex;gap:11px;padding:16px;background:#fff;border:1px solid var(--line);border-radius:14px}}.workflow li>span{{display:grid;place-items:center;flex:0 0 28px;height:28px;border-radius:50%;background:var(--teal);color:#fff;font-weight:800}}.workflow strong{{font-size:14px}}.workflow p{{margin:5px 0 0;color:var(--muted);font-size:13px}}
-.flow-pair,.safety-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:20px}}.status-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:20px}}.plain-card,.status-card{{padding:22px;background:#fff;border:1px solid var(--line);border-radius:16px}}.plain-card h3,.status-card h3{{margin:0 0 12px}}.plain-card li,.status-card li{{margin:7px 0}}.service-line{{margin-top:18px;padding:13px 16px;border-radius:10px;background:var(--teal-soft);font-size:14px}}
-.folder-list{{display:grid;gap:10px}}details{{background:#fff;border:1px solid var(--line);border-radius:13px}}summary{{cursor:pointer;font-weight:700}}.folder summary{{display:flex;align-items:center;gap:14px;padding:16px}}.folder code{{min-width:120px;color:var(--teal);font-weight:800}}.folder p{{margin:0;padding:0 16px 8px}}.folder small{{display:block;padding:0 16px 16px;color:var(--muted)}}
-.status-card h3{{font-size:17px}}.status-card.done{{border-top:4px solid var(--green)}}.status-card.working{{border-top:4px solid var(--amber)}}.status-card.next{{border-top:4px solid var(--teal)}}.status-card ul{{padding-left:20px;max-height:320px;overflow:auto}}.safety-grid .plain-card ul{{padding-left:20px}}.test-list{{list-style:none;padding:0!important}}.test-list li{{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:7px 0}}
-.history-panel>summary{{padding:18px 20px}}.history-list{{display:grid;gap:0;padding:0 20px 20px}}.history-item{{display:grid;grid-template-columns:100px 1fr;gap:18px;padding:17px 0;border-top:1px solid var(--line)}}.history-item time{{color:var(--teal);font-size:13px;font-weight:800}}.history-item p{{margin:4px 0;color:var(--muted)}}.history-item small{{color:var(--muted)}}
-.handover{{padding:28px;background:#fff;border:1px solid var(--line);border-radius:18px}}.handover h2:first-child{{display:none}}.handover h3{{margin-top:30px;border-bottom:1px solid var(--line);padding-bottom:7px}}.handover h4{{margin-top:24px}}.handover pre{{overflow:auto;padding:15px;border-radius:10px;background:#102a43;color:#eaf7f8;line-height:1.55}}.handover code{{font-family:"Cascadia Code",Consolas,monospace}}.handover li{{margin:6px 0}}.handover :not(pre)>code{{padding:1px 6px;border-radius:6px;background:var(--teal-soft);color:var(--navy);font-size:.92em;word-break:break-all}}.handover .table-wrap{{overflow-x:auto;margin:14px 0}}.handover table{{width:100%;border-collapse:collapse;font-size:14px}}.handover th,.handover td{{padding:9px 12px;border:1px solid var(--line);text-align:left;vertical-align:top}}.handover th{{background:var(--teal-soft)}}.handover blockquote{{margin:14px 0;padding:10px 16px;border-left:4px solid var(--amber);background:#fff8ec;border-radius:0 10px 10px 0}}.handover blockquote p{{margin:4px 0}}.handover hr{{border:0;border-top:1px solid var(--line);margin:26px 0}}.handover a{{color:var(--teal)}}.guide-block{{margin-top:34px}}.status-badge{{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:700;font-size:13px;white-space:nowrap;border:1px solid transparent}}.status-done{{background:#e3f5ea;color:#1d6b43;border-color:#b7e2c8}}.status-working{{background:#fff1d6;color:#8a5300;border-color:#f3d49a}}.status-todo{{background:#fde8e8;color:#a3261f;border-color:#f5bdb9}}.status-decide{{background:#e8eefc;color:#2446a3;border-color:#bccbf2}}.status-na{{background:#eef1f4;color:#4b5563;border-color:#d5dbe1}}.handover th .status-badge{{font-size:14px}}.guide-title{{font-size:22px;margin:0 0 12px;padding-top:6px}}.footer-note{{margin-top:30px;color:var(--muted);font-size:12px}}
-.mentoring-evidence{{margin-top:24px}}.mentoring-evidence>summary{{padding:18px 20px;color:var(--teal)}}.mentoring-evidence-item{{padding:20px}}.mentoring-evidence-item+.mentoring-evidence-item{{border-top:1px solid var(--line)}}
-.mentoring-diagrams{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:24px 0}}.mentoring-diagram{{margin:0;padding:16px;background:#fff;border:1px solid var(--line);border-radius:16px}}.mentoring-diagram figcaption{{display:grid;gap:3px;margin-bottom:12px}}.mentoring-diagram figcaption span{{color:var(--muted);font-size:13px}}.mentoring-diagram img{{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff}}
-@media(max-width:900px){{.tech-grid,.workflow{{grid-template-columns:repeat(2,minmax(0,1fr))}}.status-grid{{grid-template-columns:1fr}}}}
-@media(max-width:760px){{.layout{{display:block}}aside{{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}}nav{{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:18px}}main{{width:min(100% - 24px,1080px);padding-top:24px}}.hero{{padding:28px 22px}}section{{margin-top:42px}}.tech-grid,.workflow,.flow-pair,.status-grid,.safety-grid,.mentoring-diagrams{{grid-template-columns:1fr}}.folder summary{{align-items:flex-start;flex-direction:column;gap:4px}}.folder code{{min-width:0}}.history-item{{grid-template-columns:1fr;gap:4px}}.handover{{padding:20px 16px}}}}
-</style></head><body><div class="layout">
-<aside><h1>SCHAT 안내</h1><p>비개발자도 이해할 수 있는 현재 프로젝트 설명</p><nav><a href="#overview">1. 한눈에 보기</a><a href="#flow">2. 동작 방식</a><a href="#structure">3. 프로젝트 구성</a><a href="#status">4. 상태와 안전장치</a><a href="#history">5. 변경 이력</a><a href="#handover">6. 인수인계</a><a href="#mentoring">7. 멘토링</a></nav></aside>
-<main>
-<section id="overview" class="hero"><span class="eyebrow">SCHAT 한눈에 보기</span><h2>{_e(project["name"])}</h2><p>{_e(project["relationship"])}</p><p>{_e(project["audience"])}</p><p>{_e(project["purpose"])}</p></section>
-<section aria-labelledby="tech-title"><h2 id="tech-title">핵심 기술 구성</h2><p class="lead">표시된 값은 실제 Compose 설정과 코드에서 확인 가능한 정보만 사용합니다.</p><div class="tech-grid">{tech_cards}</div><p class="service-line"><strong>Docker 서비스</strong> · {_e(docker_services)}</p></section>
-<section id="flow"><h2>어떻게 동작하나요?</h2><p class="lead">문서를 등록한 뒤 직원이 근거와 함께 답변을 확인하기까지의 흐름입니다.</p><ol class="workflow">{_steps(data["workflow"])}</ol><div class="flow-pair"><article class="plain-card"><h3>관리자</h3><ol>{_simple_list(data["userFlows"]["administrator"])}</ol></article><article class="plain-card"><h3>직원</h3><ol>{_simple_list(data["userFlows"]["employee"])}</ol></article></div></section>
-<section id="structure"><h2>프로젝트 구성</h2><p class="lead">VS Code에서 자주 보는 주요 폴더만 표시합니다. 폴더를 누르면 역할과 대표 위치가 펼쳐집니다.</p><div class="folder-list">{_folder_details(data["folders"])}</div></section>
-<section id="status"><h2>현재 상태와 안전장치</h2><p class="lead">공식 현재 상태 문서와 저장소에 실제 존재하는 검사 기준입니다.</p><div class="status-grid">{_status_column("완료", "done", data["status"]["completed"])}{_status_column("진행 중", "working", data["status"]["inProgress"])}{_status_column("예정", "next", data["status"]["planned"])}</div><div class="safety-grid"><article class="plain-card"><h3>안전장치</h3><ul>{_simple_list(data["safeguards"])}</ul></article><article class="plain-card"><h3>자동 검사 파일</h3><p>현재 확인된 테스트·검사 파일은 총 <strong>{data["tests"]["totalFiles"]}개</strong>입니다.</p><ul class="test-list">{test_areas}</ul></article></div></section>
-<section id="history"><h2>변경 이력</h2><p class="lead">날짜별 작업일지는 삭제하지 않고 간단한 설명으로 접어 두었습니다.</p><details class="history-panel"><summary>변경 이력 보기 · {len(data["history"])}건</summary><div class="history-list">{_history(data["history"])}</div></details></section>
-<section id="handover"><h2>인수인계 안내</h2><p class="lead">새 담당자는 이 화면에서 실행, 문서 등록, 주의사항과 문제 확인 순서를 대부분 확인할 수 있습니다.</p><article class="handover">{data["handover"]["html"]}</article>{guide_sections}<p class="footer-note">공식 정본: {_e(data["handover"]["document"])}{guide_documents} · 데이터 생성일: {_e(data["generatedOn"])}</p></section>
-<section id="mentoring"><h2>멘토링 기록</h2><p class="lead">멘토 조언과 그 조언을 어디까지 반영했는지 근거와 함께 정리합니다. 새 기록이 위에 옵니다.</p>{_mentoring_diagrams()}{_mentoring_sections(data.get("mentoring", []))}<p class="footer-note">공식 정본: docs/02_멘토링</p></section>
-<script type="application/json" id="schat-overview-data">{embedded}</script>
-</main></div></body></html>'''
+    menu_links = "".join(
+        f'<a href="#{menu}"><strong>{_e(title)}</strong><small>{_e(hint)}</small></a>'
+        for menu, title, hint in MENUS
+    )
+    reading_order = "".join(
+        f'<li><a href="#{menu}"><strong>{_e(title)}</strong><span>{_e(hint)}</span></a></li>'
+        for menu, title, hint in MENUS
+    )
+    feature_chips = "".join(f"<li>{_e(item['name'])}</li>" for item in features)
+    status_lists = (
+        '<details class="doc-panel"><summary>현재 상태 문서의 완료·진행 중·예정 목록</summary><div class="status-grid">'
+        + _status_column("완료", "done", data["status"]["completed"])
+        + _status_column("진행 중", "working", data["status"]["inProgress"])
+        + _status_column("예정", "next", data["status"]["planned"])
+        + "</div></details>"
+    )
+    next_steps = state.get("nextSteps") or data["status"]["planned"]
+    next_intro = (
+        f'<p><strong>{_e(next_stage["version"])} · {_e(next_stage["title"])}</strong> — {_e(next_stage["description"])}</p>'
+        if next_stage
+        else ""
+    )
+    safety_card = (
+        f'<article class="plain-card handover-lite">{state["safetyHtml"]}</article>'
+        if state.get("safetyHtml")
+        else ""
+    )
+    lessons = _guide_sections(guides, "journey") or '<p class="muted">복기 문서가 없습니다.</p>'
+    verification = (
+        f'<article class="handover">{_status_badges(state["verificationHtml"])}</article>'
+        if state.get("verificationHtml")
+        else ""
+    )
+
+    intro = _page(
+        "intro",
+        "처음 보는 분은 이 메뉴부터 읽고, 아래 순서대로 다음 메뉴로 넘어가면 됩니다.",
+        [
+            ("overview", "한눈에 보기"),
+            ("reading-order", "읽는 순서"),
+            ("current-version", "현재 버전"),
+            ("key-features", "핵심 기능"),
+        ],
+        f'<section id="overview" class="hero"><span class="eyebrow">SCHAT 한눈에 보기</span>'
+        f'<h2>{_e(project["name"])}</h2><p>{_e(project["relationship"])}</p><p>{_e(project["audience"])}</p>'
+        f'<p>{_e(project["purpose"])}</p><p class="hero-version">현재 버전 · <strong>{_e(current_version)}</strong></p></section>'
+        f'<section id="reading-order"><h3>처음 보는 분은 이 순서로 보세요</h3><ol class="reading-order">{reading_order}</ol></section>'
+        f'<section id="current-version"><h3>현재 버전</h3><article class="plain-card">'
+        f'<strong class="card-title">{_e(current_version)} · {_e(current_stage.get("title", ""))}</strong>'
+        f'<p>{_e(current_stage.get("description", ""))}</p>'
+        f'<p class="muted">버전 1부터 4까지의 흐름은 <a href="#versions">4. 개발 과정 › 버전 체계</a>에서 볼 수 있습니다.</p></article></section>'
+        f'<section id="key-features"><h3>핵심 기능</h3><ul class="chips">{feature_chips}</ul>'
+        f'<p class="muted">기능별 설명은 <a href="#features">3. 기능과 상태 › 주요 기능</a>에 있습니다.</p></section>',
+    )
+
+    how = _page(
+        "how",
+        "문서를 등록한 뒤 직원이 근거와 함께 답변을 확인하기까지의 흐름입니다.",
+        [
+            ("flow", "질문 처리 흐름"),
+            ("search-methods", "검색 방식"),
+            ("tech", "기술 구성"),
+            ("relationship", "AnythingLLM과의 관계"),
+            ("diagrams", "구조도"),
+        ],
+        f'<section id="flow"><h3>어떻게 동작하나요?</h3><ol class="workflow">{_steps(data["workflow"])}</ol>'
+        f'<div class="flow-pair"><article class="plain-card"><h4>관리자</h4><ol>{_simple_list(data["userFlows"]["administrator"])}</ol></article>'
+        f'<article class="plain-card"><h4>직원</h4><ol>{_simple_list(data["userFlows"]["employee"])}</ol></article></div></section>'
+        f'<section id="search-methods"><h3>검색 방식 쉽게 보기 (RAG · BM25 · Vector · Hybrid)</h3>'
+        f'<p class="muted">질문과 관련된 지침서 조각을 먼저 찾고(RAG), 그 근거 안에서만 답변합니다.</p>'
+        f'<div class="card-grid">{_named_cards(state.get("searchMethods", []))}</div>'
+        f'{_panel("문서를 등록하면 무엇이 저장되나요?", state.get("registrationHtml", ""))}'
+        f'{_guide_sections(guides, "how")}</section>'
+        f'<section id="tech" aria-labelledby="tech-title"><h3 id="tech-title">핵심 기술 구성</h3>'
+        f'<p class="muted">표시된 값은 실제 Compose 설정과 코드에서 확인 가능한 정보만 사용합니다.</p>'
+        f'<div class="tech-grid">{tech_cards}</div><p class="service-line"><strong>Docker 서비스</strong> · {_e(docker_services)}</p></section>'
+        f'<section id="relationship"><h3>AnythingLLM과 SCHAT의 관계</h3><article class="plain-card">'
+        f'<p>{_e(project["relationship"])}</p><p>{_e(current_stage.get("description", ""))}</p></article></section>'
+        f'<section id="diagrams"><h3>구조도</h3>{_mentoring_diagrams()}</section>',
+    )
+
+    state_page = _page(
+        "state",
+        "지금 직원과 관리자가 쓸 수 있는 기능과, 현재 버전의 검증 결과입니다.",
+        [("features", "주요 기능"), ("status", "현재 상태"), ("tests", "자동 검사")],
+        f'<section id="features"><h3>주요 기능</h3><div class="card-grid">{_named_cards(features)}</div></section>'
+        f'<section id="status"><h3>현재 상태와 검증 결과</h3>{verification}{status_lists}'
+        f'{_panel("개발·테스트·운영 환경", state.get("environmentsHtml", ""))}</section>'
+        f'<section id="tests"><h3>자동 검사</h3><article class="plain-card"><p>현재 확인된 테스트·검사 파일은 총 '
+        f'<strong>{data["tests"]["totalFiles"]}개</strong>입니다.</p><ul class="test-list">{test_areas}</ul></article></section>',
+    )
+
+    journey = _page(
+        "journey",
+        "SCHAT이 버전 1부터 지금까지 어떻게 바뀌었는지, 무엇을 시도하고 결정했는지 봅니다.",
+        [("versions", "버전 체계"), ("history", "변경 이력"), ("lessons", "시행착오와 의사결정")],
+        f'<section id="versions"><h3>SCHAT 버전 체계</h3><p class="muted">현재 운영 버전은 <strong>{_e(current_version)}</strong>임. '
+        f"버전 번호는 개발 구조가 크게 달라진 단계를 기준으로 구분함.</p>"
+        f'<div class="tech-grid">{_version_cards(stages)}</div>'
+        f'{_panel("버전 체계 자세히 보기", version_doc.get("html", ""))}'
+        f'<p class="service-line"><strong>공식 기준 문서</strong> · {_e(data["versionSystem"]["document"])}</p></section>'
+        f'<section id="history"><h3>변경 이력</h3><p class="muted">날짜별 작업일지는 삭제하지 않고 간단한 설명으로 접어 두었습니다.</p>'
+        f'<details class="history-panel"><summary>변경 이력 보기 · {len(data["history"])}건</summary>'
+        f'<div class="history-list">{_history(data["history"])}</div></details></section>'
+        f'<section id="lessons"><h3>검색 성능 개선과 시행착오</h3>'
+        f'<p class="muted">문제를 만났을 때 어떤 원인을 의심했고 무엇을 결정했는지 남긴 복기 문서입니다.</p>'
+        f"{lessons}</section>",
+    )
+
+    ops = _page(
+        "ops",
+        "서버를 운영하고 다음 담당자에게 넘길 때 필요한 내용입니다.",
+        [
+            ("handover", "인수인계"),
+            ("safety", "백업과 안전장치"),
+            ("structure", "주요 파일 위치"),
+            ("mentoring", "멘토링 결과"),
+            ("next", "다음 개선사항"),
+        ],
+        f'<section id="handover"><h3>인수인계 안내</h3><p class="muted">새 담당자는 실행, 문서 등록, 주의사항과 문제 확인 순서를 여기서 확인합니다. '
+        f"제목을 누르면 펼쳐지거나 접힙니다.</p>"
+        f'{_panel(data["handover"]["title"], data["handover"]["html"], open_=True)}'
+        f'{_guide_sections(guides, "ops")}'
+        f'<p class="service-line"><strong>배포 구조</strong> · Google Cloud 서버의 Docker에서 {_e(docker_services)}를 실행함.</p></section>'
+        f'<section id="safety"><h3>백업과 안전장치</h3><div class="safety-grid"><article class="plain-card"><h4>안전장치</h4>'
+        f'<ul>{_simple_list(data["safeguards"])}</ul></article>{safety_card}</div></section>'
+        f'<section id="structure"><h3>프로젝트 구성 · 주요 파일 위치</h3>'
+        f'<p class="muted">VS Code에서 자주 보는 주요 폴더만 표시합니다. 폴더를 누르면 역할과 대표 위치가 펼쳐집니다.</p>'
+        f'<div class="folder-list">{_folder_details(data["folders"])}</div></section>'
+        f'<section id="mentoring"><h3>멘토링 결과</h3><p class="muted">멘토 조언과 그 조언을 어디까지 반영했는지 근거와 함께 정리합니다. 새 기록이 위에 옵니다.</p>'
+        f'{_mentoring_sections(data.get("mentoring", []))}<p class="footer-note">공식 정본: docs/02_멘토링</p></section>'
+        f'<section id="next"><h3>다음 개선사항</h3><article class="plain-card">{next_intro}<ul>{_simple_list(next_steps)}</ul></article>'
+        f'<p class="footer-note">공식 정본: {_e(data["handover"]["document"])}{guide_documents} · 데이터 생성일: {_e(data["generatedOn"])}</p></section>',
+    )
+
+    return (
+        '<!doctype html>\n<html lang="ko"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        "<title>SCHAT 프로젝트 안내</title><style>\n"
+        + PAGE_STYLE
+        + '</style></head><body><div class="layout">\n'
+        '<aside><h1>SCHAT 안내</h1><p>처음이면 1번부터 차례로 보세요.</p>'
+        '<button type="button" class="menu-toggle" aria-expanded="false" aria-controls="site-nav">'
+        "<span>1. 프로젝트 소개</span><small>메뉴 ▾</small></button>"
+        f'<nav id="site-nav" aria-label="문서 메뉴">{menu_links}</nav></aside>\n<main>\n'
+        + "\n".join((intro, how, state_page, journey, ops))
+        + f'\n<script type="application/json" id="schat-overview-data">{embedded}</script>\n'
+        + f"<script>{PAGE_SCRIPT}</script>\n</main></div></body></html>"
+    )
+
+
+PAGE_STYLE = """:root{--navy:#102a43;--teal:#087f8c;--teal-soft:#e8f5f6;--bg:#f4f7fa;--paper:#fff;--line:#d8e2ea;--muted:#627d98;--green:#247a52;--amber:#a76500}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--navy);font-family:Pretendard,"Noto Sans KR","Segoe UI",sans-serif;line-height:1.65}
+a{color:inherit}.layout{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:100vh}aside{position:sticky;top:0;height:100vh;overflow:auto;padding:28px 18px;background:#fff;border-right:1px solid var(--line)}
+aside h1{font-size:20px;margin:0 0 4px}aside p,.muted{color:var(--muted)}#site-nav{display:grid;gap:6px;margin-top:26px}#site-nav a{display:grid;gap:2px;padding:11px 12px;border-radius:11px;text-decoration:none;border:1px solid transparent}#site-nav a strong{font-size:15px}#site-nav a small{font-size:12px;color:var(--muted)}#site-nav a:hover{background:var(--teal-soft);color:var(--teal)}#site-nav a.active{background:var(--teal);border-color:var(--teal);color:#fff}#site-nav a.active small{color:#d9f1f3}.menu-toggle{display:none}
+main{width:min(100% - 40px,1080px);margin:0 auto;padding:36px 0 90px}.page+.page{margin-top:70px;padding-top:40px;border-top:1px solid var(--line)}.js .page+.page{margin-top:0;padding-top:0;border-top:0}.page-head h2{font-size:30px;margin:0 0 6px}section{scroll-margin-top:24px;margin-top:40px}section h3{font-size:21px;margin:0 0 10px}section h4{margin:0 0 10px}.lead{margin:0 0 14px;color:var(--muted)}
+.subnav{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}.subnav a{padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:13px;text-decoration:none;color:var(--teal)}.subnav a:hover{background:var(--teal-soft)}
+.hero{margin-top:24px;padding:40px;border-radius:24px;background:linear-gradient(135deg,#087f8c,#102a43);color:#fff;box-shadow:0 18px 50px rgba(16,42,67,.16)}.eyebrow{display:block;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.78}.hero h2{margin:8px 0 12px;font-size:clamp(28px,5vw,44px);line-height:1.15}.hero p{max-width:760px;margin:8px 0;line-height:1.75}.hero .hero-version{display:inline-block;margin-top:14px;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.16)}
+.reading-order{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:0;list-style:none}.reading-order a{display:grid;gap:4px;height:100%;padding:16px;background:#fff;border:1px solid var(--line);border-radius:14px;text-decoration:none}.reading-order a:hover{border-color:var(--teal)}.reading-order span{font-size:13px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;padding:0;list-style:none}.chips li{padding:7px 14px;border-radius:999px;background:var(--teal-soft);color:var(--teal);font-weight:700;font-size:14px}
+.card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}.info-card{padding:16px 18px;background:#fff;border:1px solid var(--line);border-radius:14px}.info-card p{margin:6px 0 0;color:var(--muted);font-size:14px}.card-title{display:block;font-size:17px;margin-bottom:6px}
+.tech-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}.tech-card{display:grid;gap:5px;padding:18px;background:var(--paper);border:1px solid var(--line);border-radius:14px}.tech-card span,.tech-card small{font-size:12px;color:var(--muted)}.tech-card strong{font-size:17px;overflow-wrap:anywhere}.tech-card small{color:var(--green);font-weight:700}
+.workflow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:0;list-style:none}.workflow li{display:flex;gap:11px;padding:16px;background:#fff;border:1px solid var(--line);border-radius:14px}.workflow li>span{display:grid;place-items:center;flex:0 0 28px;height:28px;border-radius:50%;background:var(--teal);color:#fff;font-weight:800}.workflow strong{font-size:14px}.workflow p{margin:5px 0 0;color:var(--muted);font-size:13px}
+.flow-pair,.safety-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:16px}.status-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:16px}.plain-card,.status-card{padding:22px;background:#fff;border:1px solid var(--line);border-radius:16px}.plain-card h3,.status-card h3{margin:0 0 12px}.plain-card li,.status-card li{margin:7px 0}.plain-card>p:first-child{margin-top:0}.service-line{margin-top:16px;padding:13px 16px;border-radius:10px;background:var(--teal-soft);font-size:14px}
+.folder-list{display:grid;gap:10px}details{background:#fff;border:1px solid var(--line);border-radius:13px}summary{cursor:pointer;font-weight:700}.folder summary{display:flex;align-items:center;gap:14px;padding:16px}.folder code{min-width:120px;color:var(--teal);font-weight:800}.folder p{margin:0;padding:0 16px 8px}.folder small{display:block;padding:0 16px 16px;color:var(--muted)}
+.doc-panel{margin-top:14px}.doc-panel>summary{display:grid;gap:3px;padding:16px 20px;color:var(--navy)}.doc-panel>summary small{font-weight:400;color:var(--muted);font-size:13px}.doc-panel[open]>summary{border-bottom:1px solid var(--line)}.doc-panel>.handover{border:0;border-radius:0 0 13px 13px}
+.status-card h3{font-size:17px}.status-card.done{border-top:4px solid var(--green)}.status-card.working{border-top:4px solid var(--amber)}.status-card.next{border-top:4px solid var(--teal)}.status-card ul{padding-left:20px;max-height:320px;overflow:auto}.safety-grid .plain-card ul{padding-left:20px}.test-list{list-style:none;padding:0!important}.test-list li{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:7px 0}.handover-lite h3,.handover-lite h4{margin-top:0}
+.history-panel>summary{padding:18px 20px}.history-list{display:grid;gap:0;padding:0 20px 20px}.history-item{display:grid;grid-template-columns:100px 1fr;gap:18px;padding:17px 0;border-top:1px solid var(--line)}.history-item time{color:var(--teal);font-size:13px;font-weight:800}.history-item p{margin:4px 0;color:var(--muted)}.history-item small{color:var(--muted)}
+.handover{padding:28px;background:#fff;border:1px solid var(--line);border-radius:18px}.handover h2:first-child{display:none}.handover h3{margin-top:30px;border-bottom:1px solid var(--line);padding-bottom:7px}.handover h4{margin-top:24px}.handover pre{overflow:auto;padding:15px;border-radius:10px;background:#102a43;color:#eaf7f8;line-height:1.55}.handover code{font-family:"Cascadia Code",Consolas,monospace}.handover li{margin:6px 0}.handover :not(pre)>code{padding:1px 6px;border-radius:6px;background:var(--teal-soft);color:var(--navy);font-size:.92em;word-break:break-all}.handover .table-wrap{overflow-x:auto;margin:14px 0}.handover table{width:100%;border-collapse:collapse;font-size:14px}.handover th,.handover td{padding:9px 12px;border:1px solid var(--line);text-align:left;vertical-align:top}.handover th{background:var(--teal-soft)}.handover blockquote{margin:14px 0;padding:10px 16px;border-left:4px solid var(--amber);background:#fff8ec;border-radius:0 10px 10px 0}.handover blockquote p{margin:4px 0}.handover hr{border:0;border-top:1px solid var(--line);margin:26px 0}.handover a{color:var(--teal)}.guide-block{margin-top:14px}.status-badge{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:700;font-size:13px;white-space:nowrap;border:1px solid transparent}.status-done{background:#e3f5ea;color:#1d6b43;border-color:#b7e2c8}.status-working{background:#fff1d6;color:#8a5300;border-color:#f3d49a}.status-todo{background:#fde8e8;color:#a3261f;border-color:#f5bdb9}.status-decide{background:#e8eefc;color:#2446a3;border-color:#bccbf2}.status-na{background:#eef1f4;color:#4b5563;border-color:#d5dbe1}.handover th .status-badge{font-size:14px}.guide-title{font-size:22px;margin:0 0 12px;padding-top:6px}.footer-note{margin-top:30px;color:var(--muted);font-size:12px}
+.mentoring-evidence{margin-top:24px}.mentoring-evidence>summary{padding:18px 20px;color:var(--teal)}.mentoring-evidence-item{padding:20px}.mentoring-evidence-item+.mentoring-evidence-item{border-top:1px solid var(--line)}
+.mentoring-diagrams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:16px 0}.mentoring-diagram{margin:0;padding:16px;background:#fff;border:1px solid var(--line);border-radius:16px}.mentoring-diagram figcaption{display:grid;gap:3px;margin-bottom:12px}.mentoring-diagram figcaption span{color:var(--muted);font-size:13px}.mentoring-diagram img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:46px;padding-top:20px;border-top:1px solid var(--line)}.pager a{padding:10px 16px;border:1px solid var(--line);border-radius:10px;background:#fff;text-decoration:none;color:var(--teal);font-weight:700}.pager a:hover{background:var(--teal-soft)}
+@media(max-width:1100px){.reading-order{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:900px){.tech-grid,.workflow,.card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.status-grid{grid-template-columns:1fr}}
+@media(max-width:760px){.layout{display:block}aside{position:sticky;z-index:10;height:auto;padding:14px 16px;border-right:0;border-bottom:1px solid var(--line)}aside>p{display:none}.menu-toggle{display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:10px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--teal-soft);color:var(--navy);font:inherit;font-weight:700}#site-nav{margin-top:10px}.js #site-nav:not(.open){display:none}main{width:min(100% - 24px,1080px);padding-top:20px}.hero{padding:26px 20px}section{margin-top:32px}.tech-grid,.workflow,.flow-pair,.status-grid,.safety-grid,.mentoring-diagrams,.card-grid,.reading-order{grid-template-columns:1fr}.folder summary{align-items:flex-start;flex-direction:column;gap:4px}.folder code{min-width:0}.history-item{grid-template-columns:1fr;gap:4px}.handover{padding:20px 16px}.pager{flex-direction:column}}
+"""
 
 
 def build_docs_view(repository_root: Path, output_dir: Path) -> None:

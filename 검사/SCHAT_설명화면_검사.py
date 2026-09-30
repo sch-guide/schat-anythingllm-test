@@ -34,7 +34,8 @@ class SchatOverviewPageTest(unittest.TestCase):
             "SCHAT 한눈에 보기",
             "어떻게 동작하나요?",
             "프로젝트 구성",
-            "현재 상태와 안전장치",
+            "현재 상태와 검증 결과",
+            "백업과 안전장치",
             "변경 이력",
             "인수인계 안내",
         ):
@@ -61,7 +62,7 @@ class SchatOverviewPageTest(unittest.TestCase):
         # the server data folder in its commands. Anywhere else on the page
         # the storage path must still never appear.
         outside_guides = re.sub(
-            r'<div class="guide-block".*?<!--/guide-->', "", page, flags=re.S
+            r'<(?:div|details) class="[^"]*guide-block[^"]*".*?<!--/guide-->', "", page, flags=re.S
         )
         self.assertNotIn("server/storage", outside_guides + public_json)
 

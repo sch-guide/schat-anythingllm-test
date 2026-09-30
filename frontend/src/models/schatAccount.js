@@ -93,6 +93,8 @@ const SchatAccount = {
     call("/schat-admin/departments", { method: "POST", body: form }),
   updateDepartment: (id, changes) =>
     call(`/schat-admin/departments/${id}`, { method: "PATCH", body: changes }),
+  deleteDepartment: (id) =>
+    call(`/schat-admin/departments/${id}`, { method: "DELETE" }),
   downloadTemplate: async () => {
     const res = await fetch(`${API_BASE}/schat-admin/accounts/bulk/template`, {
       headers: baseHeaders(),

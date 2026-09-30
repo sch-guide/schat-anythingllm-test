@@ -55,6 +55,7 @@ const {
 } = require("../utils/originalDocuments");
 const {
   processDocumentChecklists,
+  logChecklistIssues,
 } = require("../utils/documentChecklists/processDocuments");
 const {
   ChecklistRepository,
@@ -209,7 +210,10 @@ function workspaceEndpoints(app) {
         }
         collectorSucceeded = true;
 
-        await processDocumentChecklists(documents);
+        await processDocumentChecklists(documents, {
+          onIssues: (result) =>
+            logChecklistIssues(result, response.locals?.user?.id),
+        });
 
         // When the upload is part of a folder upload, move the processed
         // documents from their default location into the target folder.
@@ -1160,7 +1164,10 @@ function workspaceEndpoints(app) {
         }
         collectorSucceeded = true;
 
-        await processDocumentChecklists(documents);
+        await processDocumentChecklists(documents, {
+          onIssues: (result) =>
+            logChecklistIssues(result, response.locals?.user?.id),
+        });
 
         Collector.log(
           `Document ${originalname} uploaded processed and successfully. It is now available in documents.`
