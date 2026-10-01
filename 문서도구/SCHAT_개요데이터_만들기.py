@@ -54,6 +54,7 @@ def _first_summary(markdown: str) -> str:
             continue
         stripped = re.sub(r"^[-*\d.]+\s*", "", stripped)
         stripped = re.sub(r"\[([^]]+)]\([^)]+\)", r"\1", stripped)
+        stripped = stripped.rstrip("\\").rstrip()
         if stripped:
             return stripped[:180]
     return "자세한 내용은 변경 이력에서 확인할 수 있습니다."
@@ -161,6 +162,10 @@ def markdown_to_safe_html(markdown: str) -> str:
         if not line:
             close_blocks()
             continue
+        # A Markdown hard line break ("text\\" at the end of a line) is shown
+        # as a normal line end, not as a stray backslash.
+        if line.endswith("\\") and not line.endswith("\\\\"):
+            line = line[:-1].rstrip()
         if line.startswith("|"):
             close_list()
             close_quote()
