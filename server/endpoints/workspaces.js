@@ -60,6 +60,7 @@ const {
 const {
   ChecklistRepository,
   CHECKLIST_STATUSES,
+  ADMIN_KINDS,
 } = require("../utils/documentChecklists/repository");
 const {
   getActiveGroups: getActiveSynonymGroups,
@@ -623,6 +624,50 @@ function workspaceEndpoints(app) {
         return response
           .status(500)
           .json({ success: false, error: "Could not change the status." });
+      }
+    }
+  );
+
+  // Administrator 자료 분류 override: "procedure" (검사 및 시술) / "surgery"
+  // (수술) / "other" (기타), or "auto" to use the automatic classification.
+  // Only the classification changes; content, aliases and status stay.
+  app.put(
+    "/workspace/:slug/checklists/:checklistId/kind",
+    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    async (request, response) => {
+      try {
+        const { slug, checklistId } = request.params;
+        const user = await userFromSession(request, response);
+        const workspace = multiUserMode(response)
+          ? await Workspace.getWithUser(user, { slug })
+          : await Workspace.get({ slug });
+        if (!workspace) return response.sendStatus(404);
+
+        const checklist = ChecklistRepository.getById(checklistId);
+        if (!checklist) return response.sendStatus(404);
+        const documents = await Document.forWorkspace(workspace.id);
+        const allowedDocumentIds = new Set(workspaceDocumentIds(documents));
+        if (!allowedDocumentIds.has(checklist.documentId))
+          return response.sendStatus(404);
+
+        const { kind } = reqBody(request) || {};
+        if (kind !== "auto" && !ADMIN_KINDS.includes(kind))
+          return response
+            .status(400)
+            .json({ success: false, error: "Invalid checklist kind." });
+        const updated = ChecklistRepository.setKind(
+          checklistId,
+          kind === "auto" ? null : kind
+        );
+        return response.status(200).json({
+          success: true,
+          checklist: toPublicChecklist(updated),
+        });
+      } catch (error) {
+        console.error("Checklist kind error:", error.message);
+        return response
+          .status(500)
+          .json({ success: false, error: "Could not change the kind." });
       }
     }
   );

@@ -10,17 +10,17 @@ export function buildRelatedImagesModel(images = []) {
     const imageKey = String(image?.imageKey || "");
     if (!IMAGE_KEY_PATTERN.test(imageKey) || seen.has(imageKey)) continue;
     seen.add(imageKey);
-    const page = Number.isInteger(image.page) && image.page > 0 ? image.page : null;
-    const section = typeof image.section === "string" ? image.section.trim() : "";
+    const section =
+      typeof image.section === "string" ? image.section.trim() : "";
     const documentName =
       typeof image.documentName === "string" ? image.documentName.trim() : "";
-    const label = [page ? `p.${page}` : null, section || null]
+    const label = [documentName || null, section || null]
       .filter(Boolean)
       .join(" · ");
     model.push({
       imageKey,
       label: label || documentName || "관련 이미지",
-      alt: [documentName, page ? `p.${page}` : null, section || null, "관련 이미지"]
+      alt: [documentName, section || null, "관련 이미지"]
         .filter(Boolean)
         .join(" "),
     });

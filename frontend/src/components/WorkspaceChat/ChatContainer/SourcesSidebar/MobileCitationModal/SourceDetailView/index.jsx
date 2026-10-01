@@ -4,6 +4,7 @@ import truncate from "truncate";
 import { useTranslation } from "react-i18next";
 import { toPercentString } from "@/utils/numbers";
 import SourceExcerpt from "../../SourceExcerpt";
+import { employeeDocumentName } from "@/utils/schatSourceDisplay";
 
 export default function SourceDetailView({ source, onBack, onClose }) {
   const { t } = useTranslation();
@@ -18,7 +19,7 @@ export default function SourceDetailView({ source, onBack, onClose }) {
           <CaretLeft size={20} weight="bold" />
         </button>
         <p className="font-semibold text-base leading-6 text-white light:text-slate-900 truncate px-2">
-          {truncate(source.title, 30)}
+          {truncate(employeeDocumentName(source), 30)}
         </p>
         <button
           onClick={onClose}

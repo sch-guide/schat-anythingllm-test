@@ -183,9 +183,75 @@ function procedureTemplateFor(text = "") {
   );
 }
 
+/**
+ * Classifies an extracted checklist by its stored form structure. This also
+ * supports checklists saved before `templateKind` existed, without changing
+ * their stored JSON.
+ */
+function checklistTemplateKind(checklist = {}) {
+  if (checklist.templateKind === "surgery") return "surgery";
+
+  const sections = Array.isArray(checklist.sections) ? checklist.sections : [];
+  const sectionTitles = new Set(
+    sections.map((section) => compact(section?.title || ""))
+  );
+  const labels = new Set(
+    sections.flatMap((section) =>
+      (section?.items || []).map((item) => compact(item?.label || ""))
+    )
+  );
+  const standardLabels = new Set(
+    STANDARD_TEMPLATE.flatMap((section) =>
+      section.items.flatMap(labelVariants).map(compact)
+    )
+  );
+  const surgeryOnlyLabels = new Set(
+    SURGERY_TEMPLATE.flatMap((section) =>
+      section.items.flatMap(labelVariants).map(compact)
+    ).filter((label) => !standardLabels.has(label))
+  );
+  const surgeryLabelHits = [...surgeryOnlyLabels].filter((label) =>
+    labels.has(label)
+  ).length;
+  const hasSurgerySections =
+    sectionTitles.has(compact("수술 전")) &&
+    sectionTitles.has(compact("수술 후"));
+
+  if (hasSurgerySections || surgeryLabelHits >= 2) return "surgery";
+  if (checklist.templateKind === "procedure") return "procedure";
+
+  const hasProcedureSections =
+    sectionTitles.has(compact("검사 전")) &&
+    sectionTitles.has(compact("검사 후"));
+  return hasProcedureSections ? "procedure" : null;
+}
+
 /** Cheap text-only gate before any PDF layout work. */
 function isStandardProcedurePage(text = "") {
   return procedureTemplateFor(text) !== null;
+}
+
+/**
+ * Wider upload gate for pages whose two side-by-side tables are interleaved
+ * by the PDF text reader. The coordinate extractor still has to validate the
+ * complete structure before anything is saved.
+ */
+function isProcedureChecklistCandidate(text = "") {
+  if (!String(text).trim() || hasBranchMarker(text)) return false;
+  const normalized = compact(text);
+  return TEMPLATES.some((template) =>
+    template.sections.every(
+      (section) =>
+        sectionMarkers(section).some((marker) =>
+          normalized.includes(compact(marker))
+        ) &&
+        section.items.every((item) =>
+          labelVariants(item).some((label) =>
+            normalized.includes(compact(label))
+          )
+        )
+    )
+  );
 }
 
 function joinItems(items = []) {
@@ -426,6 +492,7 @@ function extractProcedureChecklist({
   page,
   text,
   layout,
+  identitySuffix = "",
 } = {}) {
   if (!documentId || !Number.isInteger(Number(page))) return null;
   const template = procedureTemplateFor(text);
@@ -501,7 +568,9 @@ function extractProcedureChecklist({
   const contentItems = owned.flat();
   const contentLeft = labelColumnMax + 1;
   const tableRight = Math.max(...contentItems.map((item) => item.x + item.w));
-  const checklistId = stableId(documentId, page, "procedure-checklist");
+  const checklistId = identitySuffix
+    ? stableId(documentId, page, "procedure-checklist", identitySuffix)
+    : stableId(documentId, page, "procedure-checklist");
   const { titleLines, subtitleLines } = titleFromItems(titleItems);
   const title = titleLines.join(" / ");
 
@@ -587,12 +656,98 @@ function extractProcedureChecklist({
   };
 }
 
+function firstSectionMarkerHits(layout, template) {
+  const items = layout?.items || [];
+  const candidates = sectionMarkers(template.sections[0]);
+  const hits = [];
+  for (let index = 0; index < items.length; index += 1) {
+    const marker = candidates.find((value) => isMarkerAt(items, index, value));
+    if (!marker) continue;
+    hits.push({ index, x: items[index].x, y: items[index].y });
+    index += [...marker].length - 1;
+  }
+  return hits;
+}
+
+function splitChecklistRegions(layout, hits) {
+  const width = Number(layout.width) || 595;
+  const height = Number(layout.height) || 842;
+  const xSpread =
+    Math.max(...hits.map((hit) => hit.x)) -
+    Math.min(...hits.map((hit) => hit.x));
+  const ySpread =
+    Math.max(...hits.map((hit) => hit.y)) -
+    Math.min(...hits.map((hit) => hit.y));
+  const axis = xSpread / width >= ySpread / height ? "x" : "y";
+  const ordered = [...hits].sort((a, b) => a[axis] - b[axis]);
+  return ordered.map((hit, index) => {
+    const before = ordered[index - 1];
+    const after = ordered[index + 1];
+    // In side-by-side forms the first-section marker sits near the left edge
+    // of each table. The next marker is therefore the safest column boundary;
+    // a midpoint can cut off the wide content cells of the left table.
+    const minimum =
+      axis === "x"
+        ? before
+          ? hit.x
+          : -Infinity
+        : before
+          ? (before.y + hit.y) / 2
+          : -Infinity;
+    const maximum =
+      axis === "x"
+        ? after
+          ? after.x
+          : Infinity
+        : after
+          ? (hit.y + after.y) / 2
+          : Infinity;
+    const items = layout.items.filter((item) => {
+      const center = axis === "x" ? item.x + (Number(item.w) || 0) / 2 : item.y;
+      return center >= minimum && center < maximum;
+    });
+    return { ...layout, items, identitySuffix: `${axis}-${index + 1}` };
+  });
+}
+
+/**
+ * Extracts every independent checklist table on a PDF page. A normal page
+ * still returns one item; side-by-side or stacked forms return one item per
+ * region so they cannot be merged accidentally.
+ */
+function extractProcedureChecklists(input = {}) {
+  if (!input.layout?.items?.length) return [];
+  const candidates = TEMPLATES.map((template) => ({
+    template,
+    hits: firstSectionMarkerHits(input.layout, template),
+  })).sort((a, b) => b.hits.length - a.hits.length);
+  const selected = candidates[0];
+  if (!selected || selected.hits.length <= 1) {
+    const checklist = extractProcedureChecklist(input);
+    return checklist ? [checklist] : [];
+  }
+
+  return splitChecklistRegions(input.layout, selected.hits)
+    .map((region) =>
+      extractProcedureChecklist({
+        ...input,
+        text: region.items.map((item) => item.str).join("\n"),
+        layout: region,
+        identitySuffix: region.identitySuffix,
+      })
+    )
+    .filter(Boolean);
+}
+
 module.exports = {
   STANDARD_TEMPLATE,
   SURGERY_TEMPLATE,
   isStandardProcedurePage,
+  isProcedureChecklistCandidate,
   procedureTemplateFor,
+  checklistTemplateKind,
   extractProcedureChecklist,
+  extractProcedureChecklists,
   aliasesFromTitle,
   logicalLines,
   splitCircled,

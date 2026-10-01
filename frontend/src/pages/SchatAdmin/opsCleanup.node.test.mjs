@@ -47,7 +47,7 @@ test("mobile citations open a full-screen PDF/텍스트 source view", () => {
   // PC keeps the inline viewer; mobile opens the dedicated screen instead
   assert.match(row, /!isMobile && isOpen && \(excerpt \|\| source\?\.pdfRef\)/);
   assert.match(row, /isMobile && mobileOpen && \(\s*<MobileSourceScreen/);
-  // header: back to chat, source name/page, both tabs always visible
+  // header: back to chat, source name, both tabs always visible
   assert.match(screen, /채팅으로/);
   assert.match(screen, /PDF 원문/);
   assert.match(screen, /텍스트 원문/);
@@ -64,6 +64,11 @@ test("mobile citations open a full-screen PDF/텍스트 source view", () => {
   assert.doesNotMatch(screen, /새 창에서 열기|텍스트 원문으로 보기/);
   // the PDF still comes from the authenticated original-PDF endpoint
   assert.match(canvas, /StorageFiles\.originalPdf\(workspaceSlug, pdfRef\)/);
+  assert.match(canvas, /getPage\(pageNumber\)/);
+  assert.doesNotMatch(
+    canvas,
+    /aria-label=\{`\$\{documentName.*p\.\$\{pageNumber\}/
+  );
   assert.match(canvas, /isEvalSupported: false/);
   assert.match(screen, /lazy\(\(\) => import\("\.\/PdfPageCanvas"\)\)/);
 });
@@ -85,6 +90,10 @@ test("PC citation: text view is a toggle and the PDF can be shown again", () => 
   assert.match(viewer, /onShowText \? onShowText\(\) : onUnavailable\?\.\(\)/);
   assert.match(row, /onShowText=\{\(\) => setTextMode\(true\)\}/);
   assert.match(row, /const showPdf = pdfAvailable && !textMode;/);
+  // The number stays inside the PDF URL so the correct page opens, while the
+  // employee-facing title and accessibility label omit it.
+  assert.match(viewer, /#page=\$\{normalizedPdfPage\(page\)\}/);
+  assert.match(viewer, /aria-label="PDF 원본"/);
   // the text view offers the way back whenever the PDF exists
   assert.match(
     row,

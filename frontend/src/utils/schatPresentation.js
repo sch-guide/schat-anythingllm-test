@@ -1,3 +1,8 @@
+import {
+  employeeDocumentName,
+  hideEmployeeSourcePages,
+} from "./schatSourceDisplay.js";
+
 export const PROCEDURE_LAYOUT_CLASSES =
   "w-full max-w-[780px] leading-[1.7]";
 
@@ -13,7 +18,7 @@ function normalizedSourceIndexes(sourceIndexes, sources) {
       const source = sources[index - 1];
       return {
         index,
-        title: source?.title || `출처 ${index}`,
+        title: employeeDocumentName(source) || `출처 ${index}`,
         source,
       };
     });
@@ -44,7 +49,7 @@ export function buildProcedurePresentationModel(presentation, sources = []) {
       if (typeof item?.text !== "string" || !item.text.trim()) return null;
 
       return {
-        text: item.text.trim(),
+        text: hideEmployeeSourcePages(item.text.trim()),
         badges: normalizedSourceIndexes(item.sourceIndexes, sources),
       };
     });
@@ -54,5 +59,8 @@ export function buildProcedurePresentationModel(presentation, sources = []) {
   });
 
   if (sections.some((section) => section === null)) return null;
-  return { summary: presentation.summary.trim(), sections };
+  return {
+    summary: hideEmployeeSourcePages(presentation.summary.trim()),
+    sections,
+  };
 }

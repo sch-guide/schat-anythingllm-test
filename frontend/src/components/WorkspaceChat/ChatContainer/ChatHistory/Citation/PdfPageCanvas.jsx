@@ -115,7 +115,7 @@ export default function PdfPageCanvas({
         <canvas
           ref={canvasRef}
           role="img"
-          aria-label={`${documentName || "원본 PDF"} p.${pageNumber}`}
+          aria-label={documentName || "원본 PDF"}
           className="block bg-white"
         />
       </div>

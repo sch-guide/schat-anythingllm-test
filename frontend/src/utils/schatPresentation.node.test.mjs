@@ -44,8 +44,8 @@ test("procedure presentation builds multiple sections, bullets, and source badge
   assert.deepEqual(model.sections[0].items[1], {
     text: "필요한 검사를 처방합니다.",
     badges: [
-      { index: 1, title: "수혈지침 · p.117", source: sources[0] },
-      { index: 2, title: "수혈지침 · p.124", source: sources[1] },
+      { index: 1, title: "수혈지침", source: sources[0] },
+      { index: 2, title: "수혈지침", source: sources[1] },
     ],
   });
   assert.equal(model.sections[0].items[1].badges[0].source.excerpt, "첫 번째 근거");

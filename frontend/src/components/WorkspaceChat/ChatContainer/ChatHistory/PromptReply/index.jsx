@@ -13,6 +13,7 @@ import ProcedurePresentation from "../ProcedurePresentation";
 import { buildProcedurePresentationModel } from "@/utils/schatPresentation";
 import RelatedImages from "../RelatedImages";
 import ChecklistLauncher from "../Checklist/ChecklistLauncher";
+import { hideEmployeeSourcePages } from "@/utils/schatSourceDisplay";
 
 const PromptReply = ({
   uuid,
@@ -99,7 +100,9 @@ function RenderAssistantChatContent({ message }) {
   // them out) - this only renders the visible remainder of the reply.
   if (message.match(THOUGHT_REGEX_OPEN) && !message.match(THOUGHT_REGEX_CLOSE))
     return null;
-  const msgToRender = message.replace(THOUGHT_REGEX_COMPLETE, "");
+  const msgToRender = hideEmployeeSourcePages(
+    message.replace(THOUGHT_REGEX_COMPLETE, "")
+  );
   if (!msgToRender.trim().length) return null;
 
   return (

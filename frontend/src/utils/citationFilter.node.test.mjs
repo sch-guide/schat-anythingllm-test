@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { filterDirectCitationSources } from "./citationFilter.js";
+import * as citationFilter from "./citationFilter.js";
+const { filterDirectCitationSources, buildCitationDisplay } = citationFilter;
 
 function source(page, excerpt) {
   return {
@@ -55,14 +56,65 @@ test("multiple pages remain when each contains a concrete phrase used by the ans
   );
 });
 
-test("zero confident matches falls back to every stored citation", () => {
+test("zero confident matches never presents all retrieved sources as direct evidence", () => {
   const sources = [source(8, "별도 자료"), source(14, "다른 자료")];
   const result = filterDirectCitationSources({
     question: "알 수 없는 질문",
     answer: "답변 내용",
     sources,
   });
-  assert.equal(result, sources);
+  assert.deepEqual(result, []);
+});
+
+test("CT and MRI each keep their own fasting evidence, not another procedure's NPO", () => {
+  const sources = [source(2, "컴퓨터단층촬영CT\n금식여부\n조영제검사8시간금식"),
+    source(3, "자기공명검사MRI\n금식여부\n복부검사6시간금식"),
+    source(56, "신장조직검사Renalbiopsy\n금식여부 MN NPO"),
+    source(6, "방광결석 수술\n금식여부 MN NPO\n수술후 CT 확인")];
+  const snapshot = JSON.stringify(sources);
+  const result = buildCitationDisplay({ question: "조영제 CT 전 금식 몇 시간? MRI는?",
+    answer: "CT 조영제 검사는 8시간 금식, MRI 복부 검사는 6시간 금식입니다.", sources,
+    aliases: ["CT", "컴퓨터단층촬영"] });
+  assert.deepEqual(result.sources.map(s => s.page), [2, 3]);
+  assert.deepEqual(result.missingTopics, []);
+  assert.equal(JSON.stringify(sources), snapshot);
+});
+
+test("a missing MRI source is disclosed without discarding the available CT source", () => {
+  const result = buildCitationDisplay({ question: "CT 금식? MRI는?", answer: "CT 금식은 8시간입니다. MRI도 확인하세요.",
+    sources: [source(2, "컴퓨터단층촬영CT\n금식 8시간")] });
+  assert.deepEqual(result.sources.map(s=>s.page), [2]);
+  assert.deepEqual(result.missingTopics, ["MRI"]);
+});
+
+test("RI refusal hides every source including insulin background material", () => {
+  const result = buildCitationDisplay({question:"혈당 280일 때 RI 몇 단위?",
+    answer:"등록된 문서에서 확인되지 않습니다. 담당자에게 확인해 주세요.",
+    sources:[source(167,"혈당 RI 인슐린 관리") ]});
+  assert.equal(result.mode,"no-evidence");
+  assert.deepEqual(result.sources,[]);
+  assert.deepEqual(result.references,[]);
+});
+
+test("substantive answer without direct evidence only offers clearly separated references", () => {
+  const sources=[source(8,"다른 자료")];
+  const result=buildCitationDisplay({question:"알 수 없는 질문",answer:"구체적인 답변 내용",sources});
+  assert.equal(result.mode,"unverified");
+  assert.deepEqual(result.sources,[]);
+  assert.deepEqual(result.references,sources);
+});
+
+test("incidental CT mention in another checklist does not qualify as CT fasting evidence", () => {
+  const result=buildCitationDisplay({question:"CT 금식 시간?",answer:"CT 검사 전 금식 시간 확인이 필요합니다.",
+    sources:[source(56,"신장조직검사Renalbiopsy\n검사 전 준비 CT 결과 확인\n금식여부 MN NPO")]});
+  assert.deepEqual(result.sources,[]);
+  assert.deepEqual(result.missingTopics,["CT"]);
+});
+
+test("a generic fasting phrase is not enough even when repeated verbatim in the answer", () => {
+  const result=buildCitationDisplay({question:"CT 금식?", answer:"CT 검사 준비: 금식여부 MN NPO 확인.",
+    sources:[source(6,"방광결석\n금식여부 MN NPO 확인.")]});
+  assert.deepEqual(result.sources,[]);
 });
 
 test("generic words alone never make a source directly relevant", () => {

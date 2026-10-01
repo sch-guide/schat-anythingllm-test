@@ -18,6 +18,7 @@ function sampleChecklist() {
     id: "opaque-checklist",
     documentId: "internal-document-id",
     page: 56,
+    templateKind: "procedure",
     title: "신장조직검사 Renal biopsy",
     aliases: ["renal biopsy", "신생검"],
     sections: [
@@ -45,7 +46,9 @@ function sampleChecklist() {
 }
 
 test("automatic checklist is persisted as one opaque JSON file and is idempotent", () => {
-  const storageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "schat-checklist-"));
+  const storageRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "schat-checklist-")
+  );
   const repository = createChecklistRepository({ storageRoot });
   const checklist = sampleChecklist();
 
@@ -54,23 +57,52 @@ test("automatic checklist is persisted as one opaque JSON file and is idempotent
     ...checklist,
     updatedAt: "2026-09-26T01:00:00.000Z",
   });
-  const files = fs.readdirSync(storageRoot).filter((name) => name.endsWith(".json"));
+  const files = fs
+    .readdirSync(storageRoot)
+    .filter((name) => name.endsWith(".json"));
 
   assert.equal(first.created, true);
   assert.equal(second.created, false);
   assert.equal(files.length, 1);
   assert.doesNotMatch(files[0], /internal-document-id/);
   // automatic checklists wait for review: listed for administrators only
-  assert.equal(repository.findByDocumentIds(["internal-document-id"]).length, 0);
   assert.equal(
-    repository.findByDocumentIds(["internal-document-id"], { includeReview: true })
-      .length,
+    repository.findByDocumentIds(["internal-document-id"]).length,
+    0
+  );
+  assert.equal(
+    repository.findByDocumentIds(["internal-document-id"], {
+      includeReview: true,
+    }).length,
     1
   );
 });
 
+test("two checklists from the same document page are stored without overwriting", () => {
+  const storageRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "schat-checklist-")
+  );
+  const repository = createChecklistRepository({ storageRoot });
+  const first = sampleChecklist();
+  const second = {
+    ...sampleChecklist(),
+    id: "second-checklist",
+    title: "두 번째 수술",
+    aliases: ["두 번째 수술"],
+  };
+
+  repository.saveAutoChecklist(first);
+  repository.saveAutoChecklist(second);
+
+  assert.equal(repository.listAll().length, 2);
+  assert.equal(repository.getById(first.id).title, first.title);
+  assert.equal(repository.getById(second.id).title, second.title);
+});
+
 test("administrator edits change only checklist JSON and are not overwritten automatically", () => {
-  const storageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "schat-checklist-"));
+  const storageRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "schat-checklist-")
+  );
   const repository = createChecklistRepository({ storageRoot });
   const checklist = sampleChecklist();
   repository.saveAutoChecklist(checklist);
@@ -97,14 +129,71 @@ test("public checklist omits internal identifiers and paths while exposing pdfRe
 
   assert.equal(output.id, checklist.id);
   assert.equal(output.source.page, 56);
+  assert.equal(output.source.kind, "procedure");
   assert.equal(typeof output.source.pdfRef, "string");
   assert.equal(output.source.pdfRef.length, 43);
   assert.doesNotMatch(serialized, /internal-document-id/);
   assert.doesNotMatch(serialized, /storage|path/i);
 });
 
+test("administrator category follows checklist structure before a mixed handbook filename", () => {
+  const surgery = {
+    ...sampleChecklist(),
+    title: "흉관 삽입술 Thoracostomy",
+    templateKind: undefined,
+    sections: [
+      {
+        title: "수술 전",
+        items: [
+          { label: "수술부위 표시", type: "checkable", details: ["O"] },
+          { label: "피부준비", type: "checkable", details: ["-"] },
+        ],
+      },
+      {
+        title: "수술 후",
+        items: [
+          { label: "관찰사항", type: "checkable", details: ["배액 확인"] },
+        ],
+      },
+    ],
+  };
+
+  assert.equal(toPublicChecklist(surgery).source.kind, "surgery");
+});
+
+test("administrator category keeps ordinary procedure forms and uncertain forms separate", () => {
+  const procedure = {
+    ...sampleChecklist(),
+    title: "기관지내시경 BFS",
+    templateKind: "procedure",
+  };
+  const uncertain = {
+    ...sampleChecklist(),
+    title: "분류 확인 필요",
+    templateKind: undefined,
+    source: { filename: "검사 및 시술(260326).pdf", page: 3 },
+    sections: [{ title: "준비", items: [] }],
+  };
+
+  assert.equal(toPublicChecklist(procedure).source.kind, "procedure");
+  assert.equal(toPublicChecklist(uncertain).source.kind, "other");
+});
+
+test("a checklist from the surgery handbook stays surgery even with a procedure-shaped form", () => {
+  const surgeryHandbookForm = {
+    ...sampleChecklist(),
+    title: "골조직검사 Bone Biopsy · 신경외과",
+    templateKind: "procedure",
+    source: { filename: "수술(260306).pdf", page: 18 },
+  };
+
+  assert.equal(toPublicChecklist(surgeryHandbookForm).source.kind, "surgery");
+});
+
 test("invalid administrator item types are rejected", () => {
-  const storageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "schat-checklist-"));
+  const storageRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "schat-checklist-")
+  );
   const repository = createChecklistRepository({ storageRoot });
   const checklist = sampleChecklist();
   repository.saveAutoChecklist(checklist);
@@ -173,7 +262,12 @@ test("per-line checkbox settings are optional, validated and kept only when give
     sections: [{ id: "before", title: "검사 전", items: [item] }],
   });
   const plain = validateEditableDefinition(
-    definition({ id: "c", type: "checkable", label: "동의서", details: ["①", "②"] })
+    definition({
+      id: "c",
+      type: "checkable",
+      label: "동의서",
+      details: ["①", "②"],
+    })
   );
   assert.equal("detailCheckable" in plain.sections[0].items[0], false);
   const set = validateEditableDefinition(
@@ -201,21 +295,32 @@ test("per-line checkbox settings are optional, validated and kept only when give
 });
 
 test("new automatic checklists always wait for review; unchanged re-runs keep their status", () => {
-  const storageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "schat-checklist-"));
+  const storageRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "schat-checklist-")
+  );
   const repository = createChecklistRepository({ storageRoot });
   const docs = [sampleChecklist().documentId];
 
   // a verified automatic result is saved as "검토 필요" (hidden from employees)
-  const first = repository.saveAutoChecklist({ ...sampleChecklist(), status: "active" });
+  const first = repository.saveAutoChecklist({
+    ...sampleChecklist(),
+    status: "active",
+  });
   assert.equal(first.checklist.status, "needs_review");
   assert.equal(first.checklist.active, false);
   assert.equal(first.checklist.autoVerified, true);
-  assert.deepEqual(toPublicChecklist(first.checklist).reviewReasons, ["auto-generated"]);
+  assert.deepEqual(toPublicChecklist(first.checklist).reviewReasons, [
+    "auto-generated",
+  ]);
   assert.equal(repository.findByDocumentIds(docs).length, 0);
 
   // an already public legacy checklist stays public when the content is unchanged
   const filePath = path.join(storageRoot, fs.readdirSync(storageRoot)[0]);
-  const legacy = { ...JSON.parse(fs.readFileSync(filePath, "utf8")), status: "active", active: true };
+  const legacy = {
+    ...JSON.parse(fs.readFileSync(filePath, "utf8")),
+    status: "active",
+    active: true,
+  };
   fs.writeFileSync(filePath, JSON.stringify(legacy));
   repository.saveAutoChecklist({ ...sampleChecklist(), status: "active" });
   assert.equal(repository.findByDocumentIds(docs).length, 1);

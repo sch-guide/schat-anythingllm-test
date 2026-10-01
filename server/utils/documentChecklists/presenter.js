@@ -1,6 +1,44 @@
 const { pdfRefForDocumentId } = require("../originalDocuments");
 const { searchAliasesFor } = require("./commonNames");
 const { synonymNameVariants } = require("../synonyms");
+const { checklistDocumentKind } = require("./versionMatch");
+const { checklistTemplateKind } = require("./procedureExtractor");
+
+// 자료 분류(검사 및 시술 / 수술 / 기타). The automatic classification below
+// is kept for every new checklist; an administrator can override it per
+// checklist (adminKind), and that choice wins on the administrator screen.
+const CHECKLIST_KINDS = Object.freeze(["procedure", "surgery", "other"]);
+
+function validAdminKind(value) {
+  return CHECKLIST_KINDS.includes(value) ? value : null;
+}
+
+function checklistDisplayKind(checklist = {}) {
+  return validAdminKind(checklist.adminKind) || checklistAutoKind(checklist);
+}
+
+function checklistAutoKind(checklist = {}) {
+  const formKind = checklistTemplateKind(checklist);
+  if (formKind === "surgery") return "surgery";
+
+  // Some pages in the surgery handbook use the ordinary 검사 전/후 form.
+  // The handbook type is only a fallback for those pages; a surgery-shaped
+  // form above always wins even inside a mixed 검사 및 시술 handbook.
+  const handbookKind = checklistDocumentKind(checklist.source?.filename || "");
+  if (handbookKind === "surgery") return "surgery";
+  const names = [
+    checklist.title,
+    ...(Array.isArray(checklist.aliases) ? checklist.aliases : []),
+  ];
+  if (
+    names.some((name) =>
+      /^(?:3|three)positionbp$/u.test(
+        String(name || "").normalize("NFKC").toLowerCase().replace(/[\s-]+/gu, "")
+      )
+    )
+  ) return "procedure";
+  return formKind || "other";
+}
 
 function searchNames(checklist, synonymGroups = []) {
   const aliases = Array.isArray(checklist.aliases) ? checklist.aliases : [];
@@ -75,6 +113,10 @@ function toPublicChecklist(
     source: {
       filename: checklist.source?.filename || "",
       page: Number(checklist.source?.page || checklist.page || 0) || null,
+      kind: checklistDisplayKind(checklist),
+      // What the program decided, and the administrator's choice (or null).
+      autoKind: checklistAutoKind(checklist),
+      adminKind: validAdminKind(checklist.adminKind),
       pdfRef: pdfRefForDocumentId(String(checklist.documentId || ""), {
         storageRoot: originalStorageRoot,
       }),
@@ -82,4 +124,10 @@ function toPublicChecklist(
   };
 }
 
-module.exports = { toPublicChecklist };
+module.exports = {
+  CHECKLIST_KINDS,
+  validAdminKind,
+  checklistAutoKind,
+  checklistDisplayKind,
+  toPublicChecklist,
+};

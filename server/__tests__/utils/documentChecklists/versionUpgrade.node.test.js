@@ -15,6 +15,7 @@ const {
 } = require("../../../utils/documentChecklists/repository");
 const {
   extractProcedureChecklist,
+  extractProcedureChecklists,
   procedureTemplateFor,
 } = require("../../../utils/documentChecklists/procedureExtractor");
 const {
@@ -230,6 +231,7 @@ test("[1][2] new edition with a new file name: identical checklist is published 
 });
 
 test("[3] a checklist that moved to another page is still the same checklist", async () => {
+  // Page movement remains independent of the administrator display category.
   const repository = tempRepository();
   await publishedFirstEdition(repository, [{ page: 7, ...procedurePage() }]);
   await upload(repository, {
@@ -240,6 +242,33 @@ test("[3] a checklist that moved to another page is still the same checklist", a
   const [checklist] = repository.findByDocumentIds(["doc-v2"]);
   assert.equal(checklist.page, 12);
   assert.equal(checklist.status, "active");
+});
+
+test("administrator category follows a genuinely matched identical source through the upload pipeline", async () => {
+  const repository = tempRepository();
+  await publishedFirstEdition(repository, [{page:7,...procedurePage()}]);
+  const [previous] = repository.findByDocumentIds(["doc-v1"]);
+  repository.setKind(previous.id,"other");
+  await upload(repository,{documentId:"doc-v2",filename:PROCEDURE_V2,pages:[{page:12,...procedurePage()}]});
+  const [next] = repository.findByDocumentIds(["doc-v2"]);
+  assert.equal(next.versionMatch.result,"same");
+  assert.equal(next.adminKind,"other");
+  assert.equal(next.status,"active");
+  assert.equal(toPublicChecklist(next).source.autoKind,"procedure");
+  assert.equal(toPublicChecklist(next).source.kind,"other");
+});
+
+test("upload pipeline does not inherit administrator category when source content changes", async () => {
+  const repository = tempRepository();
+  await publishedFirstEdition(repository, [{page:7,...procedurePage()}]);
+  const [previous] = repository.findByDocumentIds(["doc-v1"]);
+  repository.setKind(previous.id,"other");
+  await upload(repository,{documentId:"doc-v2",filename:PROCEDURE_V2,pages:[{page:7,...procedurePage({fasting:["금식","8시간"]})}]});
+  const [next] = repository.findByDocumentIds(["doc-v2"],{includeReview:true});
+  assert.equal(next.versionMatch.result,"changed");
+  assert.equal(next.adminKind,undefined);
+  assert.equal(next.status,"needs_review");
+  assert.equal(toPublicChecklist(next).source.kind,"procedure");
 });
 
 test("[4] a changed number (금식 6시간 → 8시간) waits for review", async () => {
@@ -351,6 +380,49 @@ test("[8] a surgery form page is extracted from the page itself", () => {
   );
   assert.deepEqual(checklist.sections[0].items[1].details, ["금식 8시간"]);
   assert.deepEqual(checklist.sections[1].items[3].details, ["가상 관찰 하나"]);
+});
+
+test("[8-1] two surgery tables on one page become two independent checklists", () => {
+  const left = surgeryPage({ title: ["가상수술", "LEFT"] });
+  const right = surgeryPage({ title: ["다른수술", "RIGHT"] });
+  const fitColumn = (items, offset) =>
+    items.map((item) => ({
+      ...item,
+      x: item.x * 0.45 + offset,
+      w: item.w * 0.45,
+    }));
+  const layout = {
+    width: 595,
+    height: 842,
+    items: [
+      ...fitColumn(left.layout.items, 0),
+      ...fitColumn(right.layout.items, 300),
+    ],
+  };
+  const text = layout.items.map((item) => item.str).join("\n");
+
+  const checklists = extractProcedureChecklists({
+    documentId: "surgery-multi",
+    filename: SURGERY_V1,
+    page: 13,
+    text,
+    layout,
+  });
+
+  assert.equal(checklists.length, 2);
+  assert.deepEqual(
+    checklists.map((checklist) => checklist.title),
+    ["가상수술 LEFT", "다른수술 RIGHT"]
+  );
+  assert.equal(new Set(checklists.map((checklist) => checklist.id)).size, 2);
+  assert.ok(
+    checklists.every((checklist) => checklist.templateKind === "surgery")
+  );
+  assert.ok(
+    checklists[0].sections
+      .flatMap((section) => section.items)
+      .every((item) => !item.details.join(" ").includes("RIGHT"))
+  );
 });
 
 test("[9] the same surgery in a new edition is published again", async () => {
@@ -649,7 +721,12 @@ test("an unreadable original PDF is reported, not skipped silently", async () =>
   );
   assert.equal(result.errors, 1);
   assert.deepEqual(result.failures, [
-    { page: 7, reason: "pdf-layout-unavailable" },
+    {
+      document: PROCEDURE_V2,
+      page: 7,
+      title: null,
+      reason: "pdf-layout-unavailable",
+    },
   ]);
   assert.equal(reported.length, 1);
   assert.equal(repository.listAll().length, 0);

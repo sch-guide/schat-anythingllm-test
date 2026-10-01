@@ -51,7 +51,7 @@ export default function PdfPageViewer({
   if (!viewerUrl) {
     return (
       <div
-        aria-label={`PDF 원본 p.${normalizedPdfPage(page)}`}
+        aria-label="PDF 원본"
         className="flex min-h-[260px] w-full items-center justify-center rounded-lg bg-zinc-950 text-sm text-zinc-400 light:bg-slate-200 light:text-slate-600 sm:min-h-[420px]"
       >
         원본 PDF 페이지를 불러오는 중입니다.
@@ -67,8 +67,8 @@ export default function PdfPageViewer({
         </p>
       )}
       <iframe
-        title={`${documentName || "원본 PDF"} p.${normalizedPdfPage(page)}`}
-        aria-label={`PDF 원본 p.${normalizedPdfPage(page)}`}
+        title={documentName || "원본 PDF"}
+        aria-label="PDF 원본"
         src={viewerUrl}
         className="h-[70vh] min-h-[420px] w-full rounded-lg border border-zinc-700 bg-white light:border-slate-300 max-sm:h-[62vh] max-sm:min-h-[320px]"
         onLoad={() => setLoaded(true)}

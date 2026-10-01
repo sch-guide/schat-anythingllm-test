@@ -52,11 +52,15 @@ export function reviewReasonText(code = "") {
 
 export function filterChecklists(
   checklists = [],
-  { status = "all", query = "" } = {}
+  { status = "all", documentKind = "all", query = "" } = {}
 ) {
   const needle = String(query).trim().toLocaleLowerCase().replace(/\s+/g, "");
   return checklists
     .filter((checklist) => status === "all" || checklist.status === status)
+    .filter(
+      (checklist) =>
+        documentKind === "all" || checklist.source?.kind === documentKind
+    )
     .filter((checklist) => {
       if (!needle) return true;
       const haystack = [checklist.title, ...(checklist.aliases || [])]
@@ -70,8 +74,31 @@ export function filterChecklists(
     .sort(
       (a, b) =>
         String(a.source?.filename).localeCompare(String(b.source?.filename)) ||
-        Number(a.source?.page || 0) - Number(b.source?.page || 0)
+        Number(a.source?.page || 0) - Number(b.source?.page || 0) ||
+        String(a.id || "").localeCompare(String(b.id || ""))
     );
+}
+
+const DOCUMENT_KIND_LABELS = {
+  procedure: "검사 및 시술",
+  surgery: "수술",
+  other: "기타",
+};
+
+export function checklistDocumentFilters(checklists = []) {
+  const present = new Set(
+    checklists.map((checklist) => checklist.source?.kind || "other")
+  );
+  return [
+    { key: "all", label: "전체" },
+    ...Object.entries(DOCUMENT_KIND_LABELS)
+      .filter(([key]) => present.has(key))
+      .map(([key, label]) => ({ key, label })),
+  ];
+}
+
+export function checklistDocumentLabel(checklist = {}) {
+  return DOCUMENT_KIND_LABELS[checklist.source?.kind || "other"] || "기타";
 }
 
 const FILTERS = [
@@ -84,6 +111,7 @@ const FILTERS = [
 export default function ChecklistsSection({ slug }) {
   const [checklists, setChecklists] = useState(null);
   const [status, setStatus] = useState("needs_review");
+  const [documentKind, setDocumentKind] = useState("all");
   const [query, setQuery] = useState("");
   const [changing, setChanging] = useState(null);
 
@@ -104,6 +132,10 @@ export default function ChecklistsSection({ slug }) {
     }
     return result;
   }, [checklists]);
+  const documentFilters = useMemo(
+    () => checklistDocumentFilters(checklists || []),
+    [checklists]
+  );
 
   async function changeStatus(checklist, next) {
     if (next === checklist.status) return;
@@ -136,7 +168,7 @@ export default function ChecklistsSection({ slug }) {
 
   if (!slug) return <Loading />;
   if (checklists === null) return <Loading />;
-  const shown = filterChecklists(checklists, { status, query });
+  const shown = filterChecklists(checklists, { status, documentKind, query });
 
   return (
     <div className="flex flex-col gap-y-5">
@@ -145,6 +177,8 @@ export default function ChecklistsSection({ slug }) {
         <b>숨김</b>은 관리자만 볼 수 있습니다. 원본 쪽을 열어 내용을 확인한 뒤
         공개해 주세요. 수정한 내용과 상태는 문서를 다시 올려도 덮어쓰지
         않습니다.
+        자료 필터는 파일명이 아닌 체크리스트 종류입니다. 문서의 모든 쪽을
+        보려면 상태와 자료를 모두 ‘전체’로 선택해 주세요.
       </Notice>
       <Card>
         <div className="flex flex-wrap items-center gap-2">
@@ -163,6 +197,24 @@ export default function ChecklistsSection({ slug }) {
               {label} {counts[key] || 0}
             </button>
           ))}
+          <span className="w-full pt-1 text-xs font-medium text-theme-text-secondary">
+            자료
+          </span>
+          {documentFilters.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={documentKind === key}
+              onClick={() => setDocumentKind(key)}
+              className={`rounded-full border px-3 py-1 text-sm ${
+                documentKind === key
+                  ? "border-violet-500 bg-violet-500/15 font-semibold text-theme-text-primary"
+                  : "border-theme-sidebar-border text-theme-text-secondary"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
           <input
             aria-label="체크리스트 검색"
             placeholder="이름 또는 p.쪽수로 찾기"
@@ -177,17 +229,26 @@ export default function ChecklistsSection({ slug }) {
           </p>
         ) : (
           <ul className="flex flex-col gap-y-2">
-            {shown.map((checklist) => {
+            {shown.map((checklist, index) => {
               const label = CHECKLIST_STATUS_LABELS[checklist.status];
               return (
                 <li
                   key={checklist.id}
                   className="schat-admin-checklist rounded-lg border border-theme-sidebar-border px-3 py-2.5"
                 >
+                  {(index === 0 ||
+                    shown[index - 1].source?.filename !== checklist.source?.filename) && (
+                    <h3 className="mb-3 border-b border-theme-sidebar-border pb-2 text-sm font-semibold text-theme-text-primary break-words">
+                      {checklist.source?.filename || "문서명 없음"}
+                    </h3>
+                  )}
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="m-0 text-sm font-semibold text-theme-text-primary">
                         p.{checklist.source?.page || "-"} · {checklist.title}{" "}
+                        <Badge tone="neutral">
+                          {checklistDocumentLabel(checklist)}
+                        </Badge>{" "}
                         <Badge tone={label.tone}>{label.text}</Badge>
                         {versionBadge(checklist) && (
                           <span className="ml-1">

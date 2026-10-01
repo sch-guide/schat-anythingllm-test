@@ -15,12 +15,31 @@ const helpers = source.slice(
 const moduleUrl = `data:text/javascript,${encodeURIComponent(helpers)}`;
 const loadHelpers = () => import(moduleUrl);
 
-const item = (id, status, page, title, aliases = []) => ({
+test("document page and id ordering survives shuffled input and every filter", async () => {
+  const { filterChecklists } = await loadHelpers();
+  const rows = [
+    { id: "z", status: "needs_review", source: { filename: "B.pdf", page: 1, kind: "surgery" } },
+    { id: "b", status: "needs_review", source: { filename: "A.pdf", page: 2, kind: "surgery" } },
+    { id: "a", status: "needs_review", source: { filename: "A.pdf", page: 2, kind: "surgery" } },
+    { id: "c", status: "active", source: { filename: "A.pdf", page: 1, kind: "procedure" } },
+  ];
+  const original = JSON.stringify(rows);
+  assert.deepEqual(filterChecklists(rows).map(row => row.id), ["c", "a", "b", "z"]);
+  for (const status of ["all", "needs_review", "active", "hidden"]) {
+    for (const documentKind of ["all", "surgery", "procedure", "other"]) {
+      const options = { status, documentKind };
+      assert.deepEqual(filterChecklists(rows, options), filterChecklists([...rows].reverse(), options));
+    }
+  }
+  assert.equal(JSON.stringify(rows), original);
+});
+
+const item = (id, status, page, title, aliases = [], kind = "procedure") => ({
   id,
   status,
   title,
   aliases,
-  source: { filename: "가상.pdf", page },
+  source: { filename: "가상.pdf", page, kind },
 });
 const list = [
   item("a", "active", 15, "경피적 폐세침 조직검사 PTNB", ["PTNB"]),
@@ -55,6 +74,26 @@ test("filter by status, name (spacing ignored) or page, sorted by page", async (
   assert.deepEqual(
     filterChecklists(list, { query: "p.2" }).map((c) => c.id),
     ["c"]
+  );
+});
+
+test("document filter is generated from data and combines with status", async () => {
+  const { filterChecklists, checklistDocumentFilters } = await loadHelpers();
+  const mixed = [
+    ...list,
+    item("s", "needs_review", 13, "TUR-B", ["TUR-B"], "surgery"),
+    item("o", "active", 1, "기타", [], "other"),
+  ];
+  assert.deepEqual(
+    checklistDocumentFilters(mixed).map((option) => option.key),
+    ["all", "procedure", "surgery", "other"]
+  );
+  assert.deepEqual(
+    filterChecklists(mixed, {
+      status: "needs_review",
+      documentKind: "surgery",
+    }).map((checklist) => checklist.id),
+    ["s"]
   );
 });
 

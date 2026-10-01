@@ -24,6 +24,7 @@ import ProcedurePresentation from "../ProcedurePresentation";
 import { buildProcedurePresentationModel } from "@/utils/schatPresentation";
 import RelatedImages from "../RelatedImages";
 import ChecklistLauncher from "../Checklist/ChecklistLauncher";
+import { hideEmployeeSourcePages } from "@/utils/schatSourceDisplay";
 
 function hasVisibleContent(message) {
   if (!message) return false;
@@ -381,7 +382,9 @@ const RenderChatContent = memo(
       !message.match(THOUGHT_REGEX_CLOSE)
     )
       return null;
-    const msgToRender = message.replace(THOUGHT_REGEX_COMPLETE, "");
+    const msgToRender = hideEmployeeSourcePages(
+      message.replace(THOUGHT_REGEX_COMPLETE, "")
+    );
     if (!msgToRender.trim().length) return null;
 
     return (

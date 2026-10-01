@@ -20,39 +20,18 @@ import SourceExcerpt from "../../SourcesSidebar/SourceExcerpt";
 import RelatedImages from "../RelatedImages";
 import PdfPageViewer from "./PdfPageViewer";
 import MobileSourceScreen, { useMobileViewport } from "./MobileSourceScreen";
-import { filterDirectCitationSources } from "@/utils/citationFilter";
+import { buildCitationDisplay } from "@/utils/citationFilter";
+import { employeeDocumentName } from "@/utils/schatSourceDisplay";
 
 const LONG_EXCERPT_LENGTH = 420;
 
 function sourceDocumentName(source = {}) {
-  const publicName = source.documentName || source.document_name;
-  if (typeof publicName !== "string" || !publicName.trim()) return "";
-  return publicName
-    .replace(/^file:\/\//i, "")
-    .split(/[\\/]/)
-    .filter(Boolean)
-    .at(-1);
+  return employeeDocumentName(source);
 }
 
 function sourceSummary(source = {}) {
   const documentName = sourceDocumentName(source);
-  const normalizedPage =
-    Number.isInteger(source.page) && source.page > 0
-      ? source.page
-      : typeof source.page === "string" && /^\d+$/.test(source.page.trim())
-        ? Number(source.page)
-        : null;
-  const page = normalizedPage > 0 ? `p.${normalizedPage}` : null;
-  const parts = [documentName, page].filter(Boolean);
-
-  if (parts.length > 0) return parts.join(" · ");
-  if (typeof source.title !== "string") return "";
-  return source.title
-    .trim()
-    .replace(/^file:\/\//i, "")
-    .split(/[\\/]/)
-    .filter(Boolean)
-    .at(-1);
+  return documentName;
 }
 
 export function SourceEvidenceRow({
@@ -392,20 +371,45 @@ export default function Citations({
   answer = "",
   aliases = [],
 }) {
-  const directlyRelevantSources = filterDirectCitationSources({
+  const display = buildCitationDisplay({
     question,
     answer,
     sources,
     aliases,
   });
-  const visibleSources = dedupeCitationSources(directlyRelevantSources);
-  if (visibleSources.length === 0) return null;
+  const visibleSources = dedupeCitationSources(display.sources);
+  const referenceSources = dedupeCitationSources(display.references);
+  if (!answer.trim() && !sources.length) return null;
 
   return (
     <section
       className="mt-2 w-full max-w-[920px]"
       aria-label="출처 및 근거 원문"
     >
+      {display.mode === "no-evidence" && (
+        <p className="text-sm text-theme-text-secondary" role="status">
+          문서 근거를 확인하지 못했습니다.
+        </p>
+      )}
+      {display.mode === "unverified" && (
+        <div className="rounded-lg border border-theme-sidebar-border p-3 text-sm">
+          <p role="status">답변의 직접 근거를 특정하지 못했습니다. 원문 확인이 필요합니다.</p>
+          {referenceSources.length > 0 && (
+            <details className="mt-2">
+              <summary className="cursor-pointer font-medium">검색된 참고 자료 보기</summary>
+              <p className="my-2 text-theme-text-secondary">답변의 직접 근거로 확인되지 않은 자료입니다.</p>
+              {referenceSources.map((source, index) => (
+                <SourceEvidenceRow key={`reference-${index}`} source={source} index={index} workspaceSlug={workspaceSlug} />
+              ))}
+            </details>
+          )}
+        </div>
+      )}
+      {display.mode === "direct" && display.missingTopics.length > 0 && (
+        <p className="mb-2 text-sm text-theme-text-secondary" role="status">
+          {display.missingTopics.join("·")}의 직접 근거를 특정하지 못했습니다.
+        </p>
+      )}
       <div className="w-full">
         {visibleSources.map((source, index) => (
           <SourceEvidenceRow

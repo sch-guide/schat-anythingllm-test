@@ -19,8 +19,8 @@ test("related image presentation removes duplicates and caps display at three", 
   assert.equal(model.length, 3);
   assert.deepEqual(model[0], {
     imageKey: key("a"),
-    label: "p.1 · 절차",
-    alt: "A.pdf p.1 절차 관련 이미지",
+    label: "A.pdf · 절차",
+    alt: "A.pdf 절차 관련 이미지",
   });
 });
 

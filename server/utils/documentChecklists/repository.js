@@ -15,11 +15,17 @@ function defaultStorageRoot() {
 // active:       shown to employees
 // hidden:       deliberately hidden by an administrator
 const CHECKLIST_STATUSES = Object.freeze(["needs_review", "active", "hidden"]);
+// 자료 분류 values an administrator can choose (presenter.js uses the same).
+const ADMIN_KINDS = Object.freeze(["procedure", "surgery", "other"]);
 
-function storageKey(documentId, page) {
+function storageKey(documentId, page, checklistId = "") {
   return crypto
     .createHash("sha256")
-    .update(`${String(documentId)}\u0000${Number(page)}`)
+    .update(
+      `${String(documentId)}\u0000${Number(page)}${
+        checklistId ? `\u0000${String(checklistId)}` : ""
+      }`
+    )
     .digest("hex");
 }
 
@@ -133,10 +139,21 @@ function createChecklistRepository({
   }
 
   function filePathFor(checklist) {
-    return path.join(
+    const page = checklist.source?.page || checklist.page;
+    const exact = path.join(
       root,
-      `${storageKey(checklist.documentId, checklist.source?.page || checklist.page)}.json`
+      `${storageKey(checklist.documentId, page, checklist.id)}.json`
     );
+    if (fs.existsSync(exact)) return exact;
+    // Files created before multi-checklist pages used document+page only.
+    // Keep updating those files in place so administrator decisions survive.
+    const legacy = path.join(
+      root,
+      `${storageKey(checklist.documentId, page)}.json`
+    );
+    const legacyValue = readFile(legacy);
+    if (legacyValue?.id === checklist.id) return legacy;
+    return exact;
   }
 
   function writeAtomic(filePath, value) {
@@ -194,9 +211,15 @@ function createChecklistRepository({
       const carried = previous.editedByAdmin
         ? validateEditableDefinition(previous)
         : definition;
+      // The administrator's 자료 분류 is carried over on the same condition
+      // (identical source text of the same checklist).
+      const carriedKind = ADMIN_KINDS.includes(previous.adminKind)
+        ? { adminKind: previous.adminKind }
+        : {};
       const value = {
         ...checklist,
         ...carried,
+        ...carriedKind,
         status: "active",
         active: true,
         autoVerified,
@@ -251,7 +274,8 @@ function createChecklistRepository({
         (a, b) =>
           String(a.documentId).localeCompare(String(b.documentId)) ||
           Number(a.source?.page || a.page || 0) -
-            Number(b.source?.page || b.page || 0)
+            Number(b.source?.page || b.page || 0) ||
+          String(a.title || "").localeCompare(String(b.title || ""))
       );
   }
 
@@ -263,6 +287,24 @@ function createChecklistRepository({
       ...existing,
       ...definition,
       editedByAdmin: true,
+      updatedAt: new Date().toISOString(),
+    };
+    writeAtomic(filePathFor(existing), updated);
+    return updated;
+  }
+
+  // 자료 분류 override. kind = "procedure" | "surgery" | "other", or null to
+  // go back to the automatic classification. Title, aliases, sections and
+  // status are untouched, and the checklist is not marked as edited.
+  function setKind(id, kind) {
+    if (kind !== null && !ADMIN_KINDS.includes(kind))
+      throw new Error("Invalid checklist kind.");
+    const existing = getById(id);
+    if (!existing) return null;
+    const { adminKind: _previous, ...rest } = existing;
+    const updated = {
+      ...rest,
+      ...(kind ? { adminKind: kind } : {}),
       updatedAt: new Date().toISOString(),
     };
     writeAtomic(filePathFor(existing), updated);
@@ -288,6 +330,7 @@ function createChecklistRepository({
   return {
     storageRoot: root,
     setStatus,
+    setKind,
     saveAutoChecklist,
     updateChecklist,
     findByDocumentIds,
@@ -303,5 +346,6 @@ module.exports = {
   createChecklistRepository,
   ChecklistRepository,
   CHECKLIST_STATUSES,
+  ADMIN_KINDS,
   validateEditableDefinition,
 };

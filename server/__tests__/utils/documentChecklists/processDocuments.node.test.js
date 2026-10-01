@@ -88,6 +88,13 @@ test("checklist failures never reject the PDF upload caller", async () => {
     errors: 1,
     review: 0,
     autoPublished: 0,
-    failures: [{ page: null, reason: "read-failed" }],
+    failures: [
+      {
+        document: "broken.json",
+        page: null,
+        title: null,
+        reason: "read-failed",
+      },
+    ],
   });
 });

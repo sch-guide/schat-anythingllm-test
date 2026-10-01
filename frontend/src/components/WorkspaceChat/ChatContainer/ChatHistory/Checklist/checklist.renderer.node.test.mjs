@@ -38,6 +38,7 @@ test("floating employee panel supports portal drag resize minimize and explicit 
   assert.match(panel, /onClose/);
   assert.match(panel, /fixed/);
   assert.doesNotMatch(panel, /backdrop|bg-black\/60/);
+  assert.doesNotMatch(panel, /source\?\.page/);
 });
 
 test("floating panel resizes from the right edge, bottom edge and corner without clamping position", () => {
@@ -135,6 +136,7 @@ test("separate checklist window is a standalone route that loads its own data", 
   assert.match(main, /\/workspace\/:slug\/checklist\/:checklistId/);
   assert.match(util, /window\.open\(/);
   assert.match(util, /popup=yes/);
+  assert.doesNotMatch(popup, /source\?\.page/);
 });
 
 test("each checklist panel keeps its own position and stacking so several can be open", () => {

@@ -101,7 +101,8 @@ class DocsViewIsolationTest(unittest.TestCase):
         )
         excluded = folder_settings.get("files.exclude", {})
 
-        for name in ("frontend", "server", "collector", "docker", "open-computer"):
+        # 저장소 폴더를 그대로 연 팀원에게도 공식 문서와 문서 화면이 보여야 한다.
+        for name in ("frontend", "server", "collector", "docker", "open-computer", "docs", "docs_view"):
             self.assertFalse(excluded.get(name, False), name)
 
     def test_generated_view_contains_only_test_repository_documents(self):

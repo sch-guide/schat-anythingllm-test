@@ -303,7 +303,14 @@ test("processing uses the generic engine for template pages and never throws", a
     errors: 1,
     review: 0,
     autoPublished: 0,
-    failures: [{ page: 7, reason: "pdf-layout-unavailable" }],
+    failures: [
+      {
+        document: "가상 검사 및 시술.pdf",
+        page: 7,
+        title: null,
+        reason: "pdf-layout-unavailable",
+      },
+    ],
   });
 });
 

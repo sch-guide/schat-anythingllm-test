@@ -69,8 +69,6 @@
     "**/.git": true,
     "**/.github": true,
     "**/.vscode": true,
-    "docs": true,
-    "docs_view": true,
     "**/node_modules": true,
     "**/__pycache__": true
   }

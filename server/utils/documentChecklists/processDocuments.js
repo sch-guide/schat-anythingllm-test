@@ -2,8 +2,8 @@ const crypto = require("node:crypto");
 const path = require("node:path");
 const { extractRenalBiopsyChecklist } = require("./extractor");
 const {
-  isStandardProcedurePage,
-  extractProcedureChecklist,
+  isProcedureChecklistCandidate,
+  extractProcedureChecklists,
 } = require("./procedureExtractor");
 const { ChecklistRepository } = require("./repository");
 const {
@@ -54,7 +54,8 @@ function existingChecklists(repository) {
  * A page of a new edition that reads exactly like a public checklist of an
  * earlier edition is published again; everything else waits for review.
  * Checklist problems never reject the PDF upload: they are counted, listed in
- * result.failures (page + reason code, no page text) and passed to onIssues.
+ * result.failures (document + page + title + reason code, no page text) and
+ * passed to onIssues.
  */
 async function processDocumentChecklists(
   documents = [],
@@ -104,7 +105,10 @@ async function processDocumentChecklists(
         extracted.push(renal);
         continue;
       }
-      if (!data.document_id || !isStandardProcedurePage(data.pageContent)) {
+      if (
+        !data.document_id ||
+        !isProcedureChecklistCandidate(data.pageContent)
+      ) {
         result.skipped += 1;
         continue;
       }
@@ -112,7 +116,12 @@ async function processDocumentChecklists(
       pages.push(data);
       procedurePages.set(data.document_id, pages);
     } catch (error) {
-      fail({ page: null, reason: "read-failed" });
+      fail({
+        document: document?.location || null,
+        page: null,
+        title: null,
+        reason: "read-failed",
+      });
       logger?.warn?.(
         `[DocumentChecklists] Checklist extraction skipped: ${error.message}`
       );
@@ -128,7 +137,12 @@ async function processDocumentChecklists(
       );
     } catch (error) {
       for (const page of pages)
-        fail({ page: Number(page.page), reason: "pdf-layout-unavailable" });
+        fail({
+          document: page.title,
+          page: Number(page.page),
+          title: null,
+          reason: "pdf-layout-unavailable",
+        });
       logger?.warn?.(
         `[DocumentChecklists] PDF layout unavailable: ${error.message}`
       );
@@ -141,24 +155,39 @@ async function processDocumentChecklists(
       // preserved original PDF or pdf.js could not be read: report it instead
       // of skipping the page silently.
       if (!layout?.items?.length) {
-        fail({ page, reason: "pdf-layout-unavailable" });
+        fail({
+          document: data.title,
+          page,
+          title: null,
+          reason: "pdf-layout-unavailable",
+        });
         continue;
       }
       try {
-        const checklist = extractProcedureChecklist({
+        const checklists = extractProcedureChecklists({
           documentId,
           filename: data.title,
           page,
           text: data.pageContent,
           layout,
         });
-        if (!checklist) {
-          fail({ page, reason: "layout-not-recognised" });
+        if (!checklists.length) {
+          fail({
+            document: data.title,
+            page,
+            title: null,
+            reason: "layout-not-recognised",
+          });
           continue;
         }
-        extracted.push(checklist);
+        extracted.push(...checklists);
       } catch (error) {
-        fail({ page, reason: "extract-failed" });
+        fail({
+          document: data.title,
+          page,
+          title: null,
+          reason: "extract-failed",
+        });
         logger?.warn?.(
           `[DocumentChecklists] Checklist extraction skipped: ${error.message}`
         );
@@ -182,7 +211,12 @@ async function processDocumentChecklists(
       });
       saveResult(result, repository, checklist, versionMatch);
     } catch (error) {
-      fail({ page: Number(checklist.page) || null, reason: "save-failed" });
+      fail({
+        document: checklist.source?.filename || null,
+        page: Number(checklist.page) || null,
+        title: checklist.title || null,
+        reason: "save-failed",
+      });
       logger?.warn?.(
         `[DocumentChecklists] Checklist save failed: ${error.message}`
       );
@@ -220,6 +254,14 @@ async function logChecklistIssues(result, userId = null) {
         .slice(0, 100)
         .join(","),
       reasons: JSON.stringify(reasons),
+      failures: JSON.stringify(
+        (result.failures || []).slice(0, 100).map((failure) => ({
+          document: failure.document || null,
+          page: failure.page ?? null,
+          title: failure.title || null,
+          reason: failure.reason,
+        }))
+      ),
       created: result.created + result.review + result.autoPublished,
     },
     userId

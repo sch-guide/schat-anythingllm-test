@@ -12,7 +12,7 @@ const frontendRoot = path.resolve(
   "../../../../../.."
 );
 
-async function renderCitations(sources) {
+async function renderCitations(sources, options = {}) {
   const outputDirectory = await mkdtemp(
     path.join(tmpdir(), "schat-source-evidence-")
   );
@@ -36,7 +36,7 @@ async function renderCitations(sources) {
       return renderToStaticMarkup(
         React.createElement(I18nextProvider, { i18n },
           React.createElement(ChatSidebarProvider, null,
-            React.createElement(Citations, { sources })
+            React.createElement(Citations, { sources, ...${JSON.stringify(options)} })
           )
         )
       );
@@ -142,6 +142,7 @@ async function renderEvidenceRow(source, options = {}) {
 }
 
 test("an opened source renders only its directly linked images below the excerpt", async () => {
+  // Existing source-detail rendering remains unchanged.
   const html = await renderEvidenceRow(
     {
       documentName: "통증지침.pdf",
@@ -164,7 +165,34 @@ test("an opened source renders only its directly linked images below the excerpt
   assert.match(html, /근거 원문/);
   assert.match(html, /관련 이미지/);
   assert.match(html, /통증지침\.pdf/);
-  assert.match(html, /p\.100/);
+  assert.doesNotMatch(html, /p\.100/);
+});
+
+test("no-evidence answer renders notice only, never even a hidden reference row", async () => {
+  const html = await renderCitations([{documentName:"참고문서.pdf",page:167,excerpt:"인슐린 배경 자료"}],
+    {question:"혈당 280일 때 RI 몇 단위?",answer:"등록된 문서에서 확인되지 않습니다."});
+  assert.match(html,/문서 근거를 확인하지 못했습니다/);
+  assert.doesNotMatch(html,/참고문서|인슐린 배경 자료|검색된 참고 자료 보기/);
+});
+
+test("unverified substantive answer has a closed disclosure and explicit reference warning", async () => {
+  const html = await renderCitations([{documentName:"참고문서.pdf",page:8,excerpt:"다른 주제"}],
+    {question:"CT 금식 시간?",answer:"금식 시간을 확인하세요."});
+  assert.match(html,/직접 근거를 특정하지 못했습니다/);
+  assert.match(html,/<summary[^>]*>검색된 참고 자료 보기/);
+  assert.match(html,/답변의 직접 근거로 확인되지 않은 자료입니다/);
+  assert.doesNotMatch(html,/<details[^>]*\bopen\b/);
+});
+
+test("CT and MRI render separate directly relevant source rows", async () => {
+  const html = await renderCitations([
+    {documentName:"CT문서.pdf",page:2,excerpt:"컴퓨터단층촬영CT 금식 8시간"},
+    {documentName:"MRI문서.pdf",page:3,excerpt:"자기공명검사MRI 금식 6시간"},
+    {documentName:"다른문서.pdf",page:6,excerpt:"수술 금식 8시간"}],
+    {question:"조영제 CT 전 금식 몇 시간? MRI는?",answer:"CT와 MRI 금식 시간을 확인합니다."});
+  assert.match(html,/CT문서/);
+  assert.match(html,/MRI문서/);
+  assert.doesNotMatch(html,/다른문서|검색된 참고 자료 보기/);
 });
 
 test("a source with pdfRef opens the protected original page before excerpt fallback", async () => {
@@ -180,7 +208,8 @@ test("a source with pdfRef opens the protected original page before excerpt fall
     { initiallyOpen: true, workspaceSlug: "hospital-guide" }
   );
 
-  assert.match(html, /PDF 원본 p\.273/);
+  assert.match(html, /aria-label="PDF 원본"/);
+  assert.doesNotMatch(html, /p\.273/);
   assert.match(html, /원본 PDF 페이지를 불러오는 중/);
   assert.doesNotMatch(html, /fallback excerpt must stay hidden/);
   assert.doesNotMatch(html, /관련 이미지/);
@@ -220,7 +249,7 @@ test("validated sources render an independent collapsed evidence row", async () 
   assert.match(html, /출처 1/);
   assert.match(html, /출처 2/);
   assert.match(html, /2026실무지침서\.pdf/);
-  assert.match(html, /p\.100/);
+  assert.doesNotMatch(html, /p\.100/);
   assert.doesNotMatch(html, /통증 평가| · 준비/);
   assert.equal((html.match(/근거 원문 보기/g) || []).length, 2);
   assert.doesNotMatch(html, /NRS 점수와 통증 부위를 확인한다/);
@@ -236,7 +265,8 @@ test("the citation list is the only source entry point below an answer", async (
     },
   ]);
 
-  assert.match(html, />출처 1<\/span> · 실무지침서\.pdf · p\.273/);
+  assert.match(html, />출처 1<\/span> · 실무지침서\.pdf/);
+  assert.doesNotMatch(html, /p\.273/);
   assert.doesNotMatch(html, /환자 확인/);
   assert.doesNotMatch(html, />출처<\/span>/);
   assert.equal((html.match(/근거 원문 보기/g) || []).length, 1);
@@ -274,7 +304,7 @@ test("a past source without excerpt remains metadata-only", async () => {
   ]);
 
   assert.match(html, /과거지침\.pdf/);
-  assert.match(html, /p\.12/);
+  assert.doesNotMatch(html, /p\.12/);
   assert.doesNotMatch(html, /근거 원문 보기/);
   assert.doesNotMatch(html, /이 값은 excerpt가 아니므로/);
 });
@@ -363,7 +393,7 @@ test("same PDF page chunks render as one citation without section text", async (
   ]);
 
   assert.equal((html.match(/출처 \d+/g) || []).length, 1);
-  assert.match(html, />출처 1<\/span> · 2026실무지침서\.pdf · p\.113/);
+  assert.match(html, />출처 1<\/span> · 2026실무지침서\.pdf/);
   assert.doesNotMatch(html, /혈액의 결핍|혈액 제제의 종류/);
 });
 
