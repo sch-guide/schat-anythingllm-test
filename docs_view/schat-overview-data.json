@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedOn": "2026-10-01",
+  "generatedOn": "2026-10-02",
   "project": {
     "name": "SCHAT 병원 실무지침 AI 시스템",
     "relationship": "AnythingLLM의 서비스 기반에 직접 검증한 SCHAT 검색과 병원 전용 기능을 적용함.",
@@ -196,13 +196,18 @@
       "검색·답변: 병원 문서를 Hybrid 방식으로 검색하고 근거 기반 답변을 제공함.",
       "출처: 직원에게 문서명만 표시하고 근거 원문 또는 정확한 쪽의 원본 PDF를 제공함. 관리자는 검토를 위해 쪽 정보를 확인함.",
       "체크리스트: 검사·시술·수술 자료를 체크 가능한 작업창으로 제공함. 한 쪽의 여러 표도 각각 생성함. 문서 새 버전에서도 같은 체크리스트는 이어서 공개함.",
-      "퀴즈: 등록된 지침서를 바탕으로 퀴즈를 제공함."
+      "퀴즈: 등록된 지침서를 바탕으로 퀴즈를 제공함. 관리자는 문제 검토 화면에서 문제를 고치거나 지우고, 퀴즈 통계에서 주제별·부서별 정답률과 자주 틀리는 문항을 확인함."
     ],
     "inProgress": [
-      "현재 상태 문서에서 진행 중 항목을 확인해야 합니다."
+      "현재 상태 문서에 진행 중으로 적힌 항목이 없음."
     ],
     "planned": [
-      "현재 상태 문서에서 예정 항목을 확인해야 합니다."
+      "21문항 전체 실제 Automatic 재검증을 진행함.",
+      "Citation 추가 정밀 개선을 진행함.",
+      "문서 최신 버전과 최신 버전만 검색하는 기능을 검토함.",
+      "RAGAS 실제 적용을 후속 평가로 진행함.",
+      "표 구조 검색은 현재 버전 3 범위에서 제외함.",
+      "기타 UX 개선을 계속 진행함."
     ]
   },
   "stateDocument": {
@@ -244,15 +249,27 @@
       },
       {
         "name": "퀴즈",
-        "description": "등록된 지침서를 바탕으로 퀴즈를 제공함."
+        "description": "등록된 지침서를 바탕으로 퀴즈를 제공함. 관리자는 문제 검토 화면에서 문제를 고치거나 지우고, 퀴즈 통계에서 주제별·부서별 정답률과 자주 틀리는 문항을 확인함."
       },
       {
         "name": "직원 기능",
-        "description": "개인 계정, 채팅, 이용 가이드, 문제 신고를 제공함."
+        "description": "개인 계정, 채팅, 이용 가이드, 문제 신고를 제공함. 직원은 처음 로그인할 때 등록된 직원인지 확인한 뒤 비밀번호를 직접 만듦."
       },
       {
         "name": "관리자 기능",
         "description": "문서·사용자·체크리스트·퀴즈·동의어·FAQ·설정을 관리함. 체크리스트는 상태와 자료 종류를 함께 골라 볼 수 있음. 직원 0명인 부서는 삭제할 수 있음."
+      },
+      {
+        "name": "직원 일괄 등록",
+        "description": "부서·사번·이름·권한을 적은 양식(xlsx, csv)을 올리면 확인 결과를 먼저 보여 주고, 등록 버튼을 눌러야 계정을 만듦. 비밀번호는 양식에 넣지 않음."
+      },
+      {
+        "name": "연결 설정",
+        "description": "Gemini 답변용·검색 임베딩용 API 키의 등록 상태와 현재 모델을 보여 주고, 새 키 저장과 연결 테스트를 할 수 있음. 임베딩 모델은 바꾸면 모든 문서의 검색 데이터를 다시 만들어야 해서 이 화면에서 바꿀 수 없음."
+      },
+      {
+        "name": "브랜드",
+        "description": "서비스 이름과 작업 공간 이름을 바꿀 수 있음. 병원 로고와 로그인 화면은 미리보기만 제공하고, 화질 확인이 필요해 이 화면에서 바꾸지 않음."
       },
       {
         "name": "운영 관리",
@@ -276,12 +293,12 @@
     "document": "docs/00_현재상태/SCHAT_버전_체계.md"
   },
   "tests": {
-    "totalFiles": 159,
+    "totalFiles": 151,
     "byArea": {
-      "frontend": 28,
+      "frontend": 27,
       "server": 101,
       "collector": 8,
-      "Python 안전검사": 13,
+      "Python 안전검사": 6,
       "저장소 검사": 9
     }
   },
@@ -294,11 +311,25 @@
   ],
   "history": [
     {
+      "date": "2026-10-02",
+      "title": "문서 화면(docs_view) 최신화",
+      "summary": "문서 화면의 내용을 실제 코드와 최신 기록에 비교해 오래된 문장을 고침.",
+      "feature": "문서화면 최신화",
+      "document": "docs/01_작업일지/2026-10-02_문서화면_최신화.md"
+    },
+    {
       "date": "2026-10-01",
       "title": "체크리스트 다중 추출과 직원 출처 표시 개선",
       "summary": "한 PDF 쪽에 좌우 또는 상하로 체크리스트 표가 여러 개 있으면 영역별로 나누어 각각 생성하도록 개선함.",
       "feature": "체크리스트 다중추출과 직원출처표시",
       "document": "docs/01_작업일지/2026-10-01_체크리스트_다중추출과_직원출처표시.md"
+    },
+    {
+      "date": "2026-10-01",
+      "title": "문서 화면(docs_view) 5개 메뉴 정리",
+      "summary": "메뉴가 많아 길을 잃기 쉬운 문서 화면을 5개 메뉴로 묶음: `1. 프로젝트 소개`, `2. 동작 방식`, `3. 기능과 상태`, `4. 개발 과정`, `5. 운영·인수인계`.",
+      "feature": "문서화면 5개메뉴 정리",
+      "document": "docs/01_작업일지/2026-10-01_문서화면_5개메뉴_정리.md"
     },
     {
       "date": "2026-10-01",
@@ -387,7 +418,7 @@
     {
       "date": "2026-09-27",
       "title": "직원 개인계정·일괄등록·문제 신고",
-      "summary": "> 같은 날 뒤이어 임시비밀번호 방식을 없애고 직원이 처음 로그인할 때 비밀번호를 직접 정하는 방식으로 바꿨습니다. 아래의 임시비밀번호 관련 내용은 그 전 상태의 기록입니다. 바뀐 내용은 `2026-09-27_처음로그인_비밀번호_직접설정.md`를 보세요.",
+      "summary": "> 같은 날 뒤이어 임시비밀번호 방식을 없애고 직원이 처음 로그인할 때 비밀번호를 직접 정하는 방식으로 바꿨습니다. 아래의 임시비밀번호 관련 내용은 그 전 상태의 기록입니다. 바뀐 내용을 적은 `2026-09-27_처음로그인_비밀번호_직접설정.md`는 2026-10-01 문서 정리 때 합쳐져 지금 폴더에는 없습니다. 원본",
       "feature": "직원개인계정과 문제신고",
       "document": "docs/01_작업일지/2026-09-27_직원개인계정과_문제신고.md"
     },
@@ -485,7 +516,7 @@
   ],
   "handover": {
     "title": "SCHAT 인수인계 안내",
-    "html": "<h2>SCHAT 인수인계 안내</h2>\n<h3>먼저 알아둘 내용</h3>\n<p>SCHAT은 AnythingLLM을 기반으로 만든 병원 실무지침 AI 시스템임. Google Cloud 서버에서 시범 운영함.</p>\n<p>관리자가 등록한 병원 문서에서 근거를 찾고 직원에게 답변·출처·원본 PDF를 제공함. 환자정보를 저장하는 시스템이 아님.</p>\n<h3>관련 문서</h3>\n<ul>\n<li>서버 배포 및 업데이트 안내: 운영 서버(https://schat-sch.duckdns.org) 구조, 업데이트 순서, 자주 생긴 문제, 보안 주의, 기한·비용 메모</li>\n</ul>\n<h3>담당자가 처음 확인할 체크리스트</h3>\n<ol>\n<li><code>docs_view/index.html</code>을 열어 현재 구성과 최근 변경 이력을 확인합니다.</li>\n<li><code>docs/00_현재상태/현재_프로젝트_상태.md</code>의 주의사항과 다음 확인 순서를 읽습니다.</li>\n<li>Docker 서비스 세 개의 상태를 확인합니다.</li>\n<li>실제 작업 전 <code>git status --short</code>로 다른 사람의 미완료 변경을 확인합니다.</li>\n<li><code>.env</code>의 키·비밀번호·계정정보를 화면, 문서, 로그나 Git에 복사하지 않습니다.</li>\n</ol>\n<h3>실행과 상태 확인</h3>\n<p>저장소 최상위 폴더에서 다음 명령을 사용합니다.</p>\n<pre><code>docker compose -f docker/docker-compose.yml up -d\ndocker compose -f docker/docker-compose.yml ps</code></pre>\n<p>정상 구성에서는 <code>schat-web</code>, <code>schat-chromadb</code>, <code>schat-safety-evaluator</code>가 표시됩니다. Python 안전검사 서비스는 연구용 코드를 보존하기 위해 실행될 수 있지만, 기본 직원 답변 경로의 Gate는 꺼져 있습니다.</p>\n<p>웹 서비스 로그가 필요하면 다음처럼 최근 부분만 확인합니다.</p>\n<pre><code>docker compose -f docker/docker-compose.yml logs --tail=200 schat-web</code></pre>\n<p>서비스를 멈출 때는 다음 명령을 사용합니다.</p>\n<pre><code>docker compose -f docker/docker-compose.yml down</code></pre>\n<p><code>down -v</code>는 저장 데이터를 삭제할 수 있으므로 사용하지 않습니다.</p>\n<h4>로컬에서 처음 실행할 때</h4>\n<p>저장소 최상위에서 <code>docker compose -f docker/docker-compose.yml up -d --build</code>를 사용함. 운영 서버 업데이트는 서버 배포 및 업데이트 안내를 따름.</p>\n<p>Docker는 다음 경로를 직접 사용하므로 이름이나 위치를 바꾸지 않음.</p>\n<ul>\n<li><code>frontend</code>: 직원·관리자 화면을 빌드함.</li>\n<li><code>server</code>: 로그인, 검색, 답변과 관리자 API를 실행함.</li>\n<li><code>collector</code>: PDF와 등록 파일을 처리함.</li>\n<li><code>schat-core</code>: safety evaluator가 필요한 공통 코드를 읽음.</li>\n<li><code>server</code> 안의 <code>storage</code> 폴더: DB, 등록 문서와 원본 PDF를 보관함.</li>\n</ul>\n<h3>문서 등록과 답변 흐름</h3>\n<ol>\n<li>관리자가 승인된 PDF를 문서 관리 화면에서 등록합니다.</li>\n<li>collector가 PDF를 읽고 검색 가능한 단위로 처리합니다.</li>\n<li>Gemini Embedding이 의미 검색용 값을 만들고 ChromaDB에 저장합니다.</li>\n<li>직원 질문이 들어오면 Chroma 의미 검색과 BM25 용어 검색을 결합합니다.</li>\n<li>질문과 직접 관련된 근거만 Gemini에 전달합니다.</li>\n<li>Gemini가 검색 근거를 바탕으로 자유형 답변을 작성합니다.</li>\n<li>직원 화면에 답변, 출처와 공개 가능한 근거 원문을 표시합니다.</li>\n</ol>\n<p>서비스 골격은 AnythingLLM을 사용하고, SCHAT이 BM25, Hybrid 75:25, 병원 질문 감지, 근거 선택, 원본 PDF, 체크리스트와 병원용 관리 기능을 추가한 혼합 구조임.</p>\n<p>근거가 0건이면 Gemini를 호출하지 않습니다. 외부 웹검색이나 일반 의학지식으로 내용을 채우지 않습니다.</p>\n<h3>문서 등록과 색인 복구</h3>\n<p>현재 업로드 계약은 collector가 실제로 만든 상대 <code>docpath</code> 목록을 서버가 반환하고, 화면이 그 정확한 batch만 선택하는 방식입니다. 큰 PDF도 목록 첫 100건을 다시 추정하지 않습니다. 업로드 뒤 일부 페이지만 보인다면 바로 재업로드하지 말고 먼저 오류 메시지와 현재 색인 상태를 확인합니다.</p>\n<p>현재 개수는 실행 환경에 따라 달라질 수 있으므로 복구 도구의 dry-run과 Chroma 상태로 직접 확인합니다. 메인 안내에는 변동 수치를 고정해 적지 않습니다.</p>\n<p>복구 상태는 다음 dry-run으로 읽기 전용 확인할 수 있습니다.</p>\n<pre><code>docker compose -f docker/docker-compose.yml exec -T -w /app/server schat-web node scripts/schatRepairGuideRegistration.js</code></pre>\n<p>정상이면 <code>already_complete</code>와 현재 개수가 표시됩니다. 예상하지 않은 상태라면 도구가 변경 전에 중단합니다. <code>--apply</code>는 확인된 범위의 복구를 실제 실행하므로, 대상·백업과 승인 범위를 다시 확인하지 않은 상태에서는 사용하지 않습니다.</p>\n<p>검색 이상 시에는 다음 순서로 확인합니다.</p>\n<ol>\n<li>Docker 세 서비스와 현재 vector 수를 확인합니다.</li>\n<li>위 dry-run을 실행합니다.</li>\n<li>BM25·검색 정책의 로컬 회귀 테스트와 선택 페이지를 확인합니다.</li>\n<li>그 뒤에만 승인된 복구를 검토합니다.</li>\n</ol>\n<p>Chroma volume 삭제나 PDF 재업로드부터 시작하면 안 됩니다.</p>\n<h3>주요 폴더</h3>\n<ul>\n<li><code>frontend</code>: 직원 채팅과 관리자 문서 화면</li>\n<li><code>04_화면디자인</code>: <code>03_전체_공식문서</code>와 분리된 별도 화면으로, 비개발자가 SCHAT 로고와 다크모드 변경 위치를 쉽게 찾는 설명 문서</li>\n<li><code>05_인수인계</code>: 새 담당자가 실행 방법, 현재 구조와 작업 시 주의사항을 쉽게 확인하는 별도 안내 폴더</li>\n<li><code>server</code>: 검색, Gemini 답변, 로그인, 출처 검증과 API</li>\n<li><code>collector</code>: PDF와 업로드 파일 처리</li>\n<li><code>docker</code>: 세 서비스의 실행 구성과 예제 설정</li>\n<li><code>safety_evaluator</code>: 현재 기본 답변 Gate와 분리된 연구용 Python 검사</li>\n<li><code>검사</code>: 저장소 전용 정적 검사</li>\n<li><code>문서도구</code>: 이 설명 화면과 개요 JSON 생성</li>\n<li><code>docs</code>: 현재 상태, 작업일지와 그 밖의 공식 문서 정본</li>\n</ul>\n<h3>변경하면 안 되는 항목</h3>\n<ul>\n<li>승인 없이 ChromaDB를 재색인하거나 volume을 삭제하지 않습니다.</li>\n<li>계정, 대화, 등록 문서와 PDF를 삭제하지 않습니다.</li>\n<li>검색, embedding, BM25와 closed-book 규칙을 문서 화면 작업 때문에 변경하지 않습니다.</li>\n<li><code>.env</code>와 실제 API 키를 문서나 Git에 넣지 않습니다.</li>\n<li>내부 SourceUnit ID, vector ID, metadata 원문과 내부 경로를 직원 화면에 공개하지 않습니다.</li>\n<li>기존 미커밋 변경은 작성자를 확인하지 않고 되돌리지 않습니다.</li>\n</ul>\n<h3>코드나 설정 변경 후 필수 확인</h3>\n<p>변경 범위에 맞는 단위 테스트를 먼저 실행합니다. 이어서 아래 항목을 확인합니다.</p>\n<pre><code>python 문서도구/문서화면_만들기.py\npython 검사/문서화면_분리_검사.py\ngit diff --check</code></pre>\n<p>frontend나 서버 코드가 바뀌었다면 production build도 확인합니다. 검색 관련 변경은 BM25·검색 정책·근거 0건 차단·출처 검사를 함께 실행합니다. 실제 Gemini 호출은 별도의 사용자 승인이 있을 때만 수행합니다.</p>\n<h3>설명 화면 자동 갱신</h3>\n<p><code>문서도구/문서화면_만들기.py</code>는 저장소 설정과 공식 문서를 읽어 <code>docs_view/schat-overview-data.json</code>과 <code>docs_view/index.html</code>을 함께 갱신합니다.</p>\n<p>개발·production frontend build 시작 전과 Git pre-commit에서도 이 생성기를 비차단 방식으로 실행합니다. 자동 생성이 실패하면 앱 실행이나 커밋을 막지는 않으며 경고를 표시합니다. 이 경우 위 명령을 수동으로 한 번 실행하고 오류 원인을 확인합니다.</p>\n<h3>자주 발생하는 문제</h3>\n<h4>답변이 나오지 않을 때</h4>\n<p>먼저 검색 근거가 0건인지 확인합니다. 근거가 없다면 일반지식으로 답하지 않는 것이 정상입니다. 그다음 Gemini API 오류와 응답 처리 오류를 확인합니다.</p>\n<h4>검색 결과가 예상과 다를 때</h4>\n<p>ChromaDB 상태, 현재 등록 문서, 질문 대상과 section/page metadata를 확인합니다. 띄어 쓴 질문과 붙여 쓴 질문은 같은 규칙으로 처리됩니다. 넓은 <code>종류</code>·<code>목적</code> 질문은 장 단위 근거를 우선하고, 하위 범위를 질문에 적으면 해당 section을 선택합니다. 바로 재색인하지 말고 위 dry-run과 BM25 검사로 원인을 먼저 좁힙니다.</p>\n<h4>관련 이미지가 보이지 않을 때</h4>\n<p>먼저 검색 결과에 질문 초점 검사를 통과한 <code>image_description</code> 근거와 <code>image_key</code>가 있는지 확인합니다. 관련 이미지 후보는 Gemini에 전달되는 본문 top-N과 별도 경로로 보존되므로, 이미지 설명이 본문 근거 슬롯 밖에 있거나 Gemini가 텍스트 근거만 인용해도 관련 이미지에 남습니다. 같은 페이지의 <code>related_image_keys</code> 전체를 표시하는 방식은 사용하지 않으며, 화면은 중복을 제거한 뒤 최대 3장만 표시합니다.</p>\n<h4>문서 화면이 오래된 상태일 때</h4>\n<p>문서 생성기를 다시 실행하고 <code>검사/문서화면_분리_검사.py</code>를 실행합니다. JSON의 모델·Docker 서비스·최근 변경 날짜가 저장소와 일치하는지 확인합니다.</p>\n<h4>Docker 서비스가 healthy가 아닐 때</h4>\n<p><code>docker compose ... ps</code>와 해당 서비스의 최근 로그를 확인합니다. volume 삭제나 전체 초기화부터 시도하지 않습니다.</p>\n<h3>작업을 마칠 때</h3>\n<p>현재 상태 문서와 날짜별 작업일지를 갱신하고 설명 화면 생성기와 검사를 실행합니다. 수행하지 않은 테스트나 확인하지 않은 결과를 완료로 기록하지 않습니다. 사용자의 명시적인 요청 없이는 Git commit, tag, push를 실행하지 않습니다.</p>\n<h3>SCHAT 화면 운영 기준</h3>\n<ul>\n<li>사이드바는 <code>SCHC</code> 마크와 <code>SCHAT</code> 이름을 사용합니다.</li>\n<li>채팅 설정 메뉴에는 글자 크기와 다크모드만 표시합니다.</li>\n<li>일반 직원에게는 사이드바 하단 설정 버튼을 표시하지 않습니다. 로그인 모드에서는 <code>admin</code>만 볼 수 있고 단일 사용자 모드는 관리자와 동일하게 처리합니다.</li>\n<li>모델 선택 기능과 응답 성능 측정 코드는 내부에 남아 있지만 직원 화면에는 모델명·응답 시간·초당 토큰을 표시하지 않습니다.</li>\n<li>화면 단순화 작업에서 검색, 답변, 출처와 관련 이미지 로직을 함께 변경하지 않습니다.</li>\n</ul>",
+    "html": "<h2>SCHAT 인수인계 안내</h2>\n<h3>먼저 알아둘 내용</h3>\n<p>SCHAT은 AnythingLLM을 기반으로 만든 병원 실무지침 AI 시스템임. Google Cloud 서버에서 시범 운영함.</p>\n<p>관리자가 등록한 병원 문서에서 근거를 찾고 직원에게 답변·출처·원본 PDF를 제공함. 환자정보를 저장하는 시스템이 아님.</p>\n<h3>관련 문서</h3>\n<ul>\n<li>서버 배포 및 업데이트 안내: 운영 서버(https://schat-sch.duckdns.org) 구조, 업데이트 순서, 자주 생긴 문제, 보안 주의, 기한·비용 메모</li>\n</ul>\n<h3>담당자가 처음 확인할 체크리스트</h3>\n<ol>\n<li><code>docs_view/index.html</code>을 열어 현재 구성과 최근 변경 이력을 확인합니다.</li>\n<li><code>docs/00_현재상태/현재_프로젝트_상태.md</code>의 주의사항과 다음 확인 순서를 읽습니다.</li>\n<li>Docker 서비스 세 개의 상태를 확인합니다.</li>\n<li>실제 작업 전 <code>git status --short</code>로 다른 사람의 미완료 변경을 확인합니다.</li>\n<li><code>.env</code>의 키·비밀번호·계정정보를 화면, 문서, 로그나 Git에 복사하지 않습니다.</li>\n</ol>\n<h3>실행과 상태 확인</h3>\n<p>저장소 최상위 폴더에서 다음 명령을 사용합니다.</p>\n<pre><code>docker compose -f docker/docker-compose.yml up -d\ndocker compose -f docker/docker-compose.yml ps</code></pre>\n<p>정상 구성에서는 <code>schat-web</code>, <code>schat-chromadb</code>, <code>schat-safety-evaluator</code>가 표시됩니다. Python 안전검사 서비스는 연구용 코드를 보존하기 위해 실행될 수 있지만, 기본 직원 답변 경로의 Gate는 꺼져 있습니다.</p>\n<p>웹 서비스 로그가 필요하면 다음처럼 최근 부분만 확인합니다.</p>\n<pre><code>docker compose -f docker/docker-compose.yml logs --tail=200 schat-web</code></pre>\n<p>서비스를 멈출 때는 다음 명령을 사용합니다.</p>\n<pre><code>docker compose -f docker/docker-compose.yml down</code></pre>\n<p><code>down -v</code>는 저장 데이터를 삭제할 수 있으므로 사용하지 않습니다.</p>\n<h4>로컬에서 처음 실행할 때</h4>\n<p>저장소 최상위에서 <code>docker compose -f docker/docker-compose.yml up -d --build</code>를 사용함. 운영 서버 업데이트는 서버 배포 및 업데이트 안내를 따름.</p>\n<p>Docker는 다음 경로를 직접 사용하므로 이름이나 위치를 바꾸지 않음.</p>\n<ul>\n<li><code>frontend</code>: 직원·관리자 화면을 빌드함.</li>\n<li><code>server</code>: 로그인, 검색, 답변과 관리자 API를 실행함.</li>\n<li><code>collector</code>: PDF와 등록 파일을 처리함.</li>\n<li><code>schat-core</code>: safety evaluator가 필요한 공통 코드를 읽음.</li>\n<li><code>server</code> 안의 <code>storage</code> 폴더: DB, 등록 문서와 원본 PDF를 보관함.</li>\n</ul>\n<h3>문서 등록과 답변 흐름</h3>\n<ol>\n<li>관리자가 승인된 PDF를 문서 관리 화면에서 등록합니다.</li>\n<li>collector가 PDF를 읽고 검색 가능한 단위로 처리합니다.</li>\n<li>Gemini Embedding이 의미 검색용 값을 만들고 ChromaDB에 저장합니다.</li>\n<li>직원 질문이 들어오면 Chroma 의미 검색과 BM25 용어 검색을 결합합니다.</li>\n<li>질문과 직접 관련된 근거만 Gemini에 전달합니다.</li>\n<li>Gemini가 검색 근거를 바탕으로 자유형 답변을 작성합니다.</li>\n<li>직원 화면에 답변, 출처와 공개 가능한 근거 원문을 표시합니다.</li>\n</ol>\n<p>서비스 골격은 AnythingLLM을 사용하고, SCHAT이 BM25, Hybrid 75:25, 병원 질문 감지, 근거 선택, 원본 PDF, 체크리스트와 병원용 관리 기능을 추가한 혼합 구조임.</p>\n<p>근거가 0건일 때의 처리는 채팅 방식에 따라 다릅니다.</p>\n<ul>\n<li>직원이 쓰는 Automatic 채팅: 병원 질문인데 근거가 0건이면 이전 대화를 빼고 현재 질문만 Gemini에 보냅니다. Gemini는 &quot;등록된 문서에서 확인되지 않습니다.&quot; 규칙에 따라 답하고, 구체적인 숫자·시간·절차를 만들지 않습니다.</li>\n<li>query 모드 채팅이나 Python 안전검사를 켠 경우: 근거가 0건이면 Gemini를 호출하지 않습니다.</li>\n<li>어느 경우든 외부 웹검색이나 일반 의학지식으로 내용을 채우지 않습니다.</li>\n</ul>\n<h3>문서 등록과 색인 복구</h3>\n<p>현재 업로드 계약은 collector가 실제로 만든 상대 <code>docpath</code> 목록을 서버가 반환하고, 화면이 그 정확한 batch만 선택하는 방식입니다. 큰 PDF도 목록 첫 100건을 다시 추정하지 않습니다. 업로드 뒤 일부 페이지만 보인다면 바로 재업로드하지 말고 먼저 오류 메시지와 현재 색인 상태를 확인합니다.</p>\n<p>현재 개수는 실행 환경에 따라 달라질 수 있으므로 복구 도구의 dry-run과 Chroma 상태로 직접 확인합니다. 메인 안내에는 변동 수치를 고정해 적지 않습니다.</p>\n<p>복구 상태는 다음 dry-run으로 읽기 전용 확인할 수 있습니다.</p>\n<pre><code>docker compose -f docker/docker-compose.yml exec -T -w /app/server schat-web node scripts/schatRepairGuideRegistration.js</code></pre>\n<p>정상이면 <code>already_complete</code>와 현재 개수가 표시됩니다. 예상하지 않은 상태라면 도구가 변경 전에 중단합니다. <code>--apply</code>는 확인된 범위의 복구를 실제 실행하므로, 대상·백업과 승인 범위를 다시 확인하지 않은 상태에서는 사용하지 않습니다.</p>\n<p>검색 이상 시에는 다음 순서로 확인합니다.</p>\n<ol>\n<li>Docker 세 서비스와 현재 vector 수를 확인합니다.</li>\n<li>위 dry-run을 실행합니다.</li>\n<li>BM25·검색 정책의 로컬 회귀 테스트와 선택 페이지를 확인합니다.</li>\n<li>그 뒤에만 승인된 복구를 검토합니다.</li>\n</ol>\n<p>Chroma volume 삭제나 PDF 재업로드부터 시작하면 안 됩니다.</p>\n<h3>주요 폴더</h3>\n<ul>\n<li><code>frontend</code>: 직원 채팅과 관리자 문서 화면</li>\n<li><code>04_화면디자인</code>: <code>03_전체_공식문서</code>와 분리된 별도 화면으로, 비개발자가 SCHAT 로고와 다크모드 변경 위치를 쉽게 찾는 설명 문서</li>\n<li><code>05_인수인계</code>: 새 담당자가 실행 방법, 현재 구조와 작업 시 주의사항을 쉽게 확인하는 별도 안내 폴더</li>\n<li><code>server</code>: 검색, Gemini 답변, 로그인, 출처 검증과 API</li>\n<li><code>collector</code>: PDF와 업로드 파일 처리</li>\n<li><code>docker</code>: 세 서비스의 실행 구성과 예제 설정</li>\n<li><code>safety_evaluator</code>: 현재 기본 답변 Gate와 분리된 연구용 Python 검사</li>\n<li><code>검사</code>: 저장소 전용 정적 검사</li>\n<li><code>문서도구</code>: 이 설명 화면과 개요 JSON 생성</li>\n<li><code>docs</code>: 현재 상태, 작업일지와 그 밖의 공식 문서 정본</li>\n</ul>\n<h3>변경하면 안 되는 항목</h3>\n<ul>\n<li>승인 없이 ChromaDB를 재색인하거나 volume을 삭제하지 않습니다.</li>\n<li>계정, 대화, 등록 문서와 PDF를 삭제하지 않습니다.</li>\n<li>검색, embedding, BM25와 closed-book 규칙을 문서 화면 작업 때문에 변경하지 않습니다.</li>\n<li><code>.env</code>와 실제 API 키를 문서나 Git에 넣지 않습니다.</li>\n<li>내부 SourceUnit ID, vector ID, metadata 원문과 내부 경로를 직원 화면에 공개하지 않습니다.</li>\n<li>기존 미커밋 변경은 작성자를 확인하지 않고 되돌리지 않습니다.</li>\n</ul>\n<h3>코드나 설정 변경 후 필수 확인</h3>\n<p>변경 범위에 맞는 단위 테스트를 먼저 실행합니다. 이어서 아래 항목을 확인합니다.</p>\n<pre><code>python 문서도구/문서화면_만들기.py\npython 검사/문서화면_분리_검사.py\ngit diff --check</code></pre>\n<p>frontend나 서버 코드가 바뀌었다면 production build도 확인합니다. 검색 관련 변경은 BM25·검색 정책·근거 0건 차단·출처 검사를 함께 실행합니다. 실제 Gemini 호출은 별도의 사용자 승인이 있을 때만 수행합니다.</p>\n<h3>설명 화면 자동 갱신</h3>\n<p><code>문서도구/문서화면_만들기.py</code>는 저장소 설정과 공식 문서를 읽어 <code>docs_view/schat-overview-data.json</code>과 <code>docs_view/index.html</code>을 함께 갱신합니다.</p>\n<p>개발·production frontend build 시작 전과 Git pre-commit에서도 이 생성기를 비차단 방식으로 실행합니다. 자동 생성이 실패하면 앱 실행이나 커밋을 막지는 않으며 경고를 표시합니다. 이 경우 위 명령을 수동으로 한 번 실행하고 오류 원인을 확인합니다.</p>\n<h3>자주 발생하는 문제</h3>\n<h4>답변이 나오지 않을 때</h4>\n<p>먼저 검색 근거가 0건인지 확인합니다. 근거가 없다면 일반지식으로 답하지 않는 것이 정상입니다. 그다음 Gemini API 오류와 응답 처리 오류를 확인합니다.</p>\n<h4>검색 결과가 예상과 다를 때</h4>\n<p>ChromaDB 상태, 현재 등록 문서, 질문 대상과 section/page metadata를 확인합니다. 띄어 쓴 질문과 붙여 쓴 질문은 같은 규칙으로 처리됩니다. 넓은 <code>종류</code>·<code>목적</code> 질문은 장 단위 근거를 우선하고, 하위 범위를 질문에 적으면 해당 section을 선택합니다. 바로 재색인하지 말고 위 dry-run과 BM25 검사로 원인을 먼저 좁힙니다.</p>\n<h4>관련 이미지가 보이지 않을 때</h4>\n<p>먼저 검색 결과에 질문 초점 검사를 통과한 <code>image_description</code> 근거와 <code>image_key</code>가 있는지 확인합니다. 관련 이미지 후보는 Gemini에 전달되는 본문 top-N과 별도 경로로 보존되므로, 이미지 설명이 본문 근거 슬롯 밖에 있거나 Gemini가 텍스트 근거만 인용해도 관련 이미지에 남습니다. 같은 페이지의 <code>related_image_keys</code> 전체를 표시하는 방식은 사용하지 않으며, 화면은 중복을 제거한 뒤 최대 3장만 표시합니다.</p>\n<h4>문서 화면이 오래된 상태일 때</h4>\n<p>문서 생성기를 다시 실행하고 <code>검사/문서화면_분리_검사.py</code>를 실행합니다. JSON의 모델·Docker 서비스·최근 변경 날짜가 저장소와 일치하는지 확인합니다.</p>\n<h4>Docker 서비스가 healthy가 아닐 때</h4>\n<p><code>docker compose ... ps</code>와 해당 서비스의 최근 로그를 확인합니다. volume 삭제나 전체 초기화부터 시도하지 않습니다.</p>\n<h3>작업을 마칠 때</h3>\n<p>현재 상태 문서와 날짜별 작업일지를 갱신하고 설명 화면 생성기와 검사를 실행합니다. 수행하지 않은 테스트나 확인하지 않은 결과를 완료로 기록하지 않습니다. 사용자의 명시적인 요청 없이는 Git commit, tag, push를 실행하지 않습니다.</p>\n<h3>SCHAT 화면 운영 기준</h3>\n<ul>\n<li>사이드바는 <code>SCHC</code> 마크와 <code>SCHAT</code> 이름을 사용합니다.</li>\n<li>채팅 설정 메뉴에는 글자 크기와 다크모드만 표시합니다.</li>\n<li>일반 직원에게는 사이드바 하단 설정 버튼을 표시하지 않습니다. 로그인 모드에서는 <code>admin</code>만 볼 수 있고 단일 사용자 모드는 관리자와 동일하게 처리합니다.</li>\n<li>모델 선택 기능과 응답 성능 측정 코드는 내부에 남아 있지만 직원 화면에는 모델명·응답 시간·초당 토큰을 표시하지 않습니다.</li>\n<li>화면 단순화 작업에서 검색, 답변, 출처와 관련 이미지 로직을 함께 변경하지 않습니다.</li>\n</ul>",
     "document": "05_인수인계/SCHAT_인수인계.md"
   },
   "guides": [
@@ -518,7 +549,7 @@
     },
     {
       "title": "2026-09-19 멘토링 조언과 이행 현황",
-      "summary": "검색 구조와 성능, Chroma 저장 칸, 21문항 실패 원인, 답변 안전 기준, 프롬프트 우선순위와 버전 4 계획은 평가와 검색 기준에 통합함.",
+      "summary": "> 표의 `정리 전 작업일지 번호`는 2026-10-01 문서 정리 전의 번호임. 지금은 주요 기록만 작업일지 목록에 남아 번호로 찾을 수 없음. 정리 전 원본 파일은 보호 커밋 `5793ea77`에서 확인함.",
       "document": "docs/02_멘토링/2026-09-19_멘토링_상세근거.md"
     }
   ]

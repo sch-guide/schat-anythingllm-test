@@ -170,7 +170,18 @@ def _mentoring_diagrams() -> str:
         "</figure>"
         for title, description, filename in diagrams
     )
-    return '<div class="mentoring-diagrams">' + cards + "</div>"
+    merged = (
+        '<figure class="mentoring-diagram wide" id="merged-architecture">'
+        "<figcaption><strong>통합 아키텍처 (Hybrid 검색 + AnythingLLM 임베딩)</strong>"
+        "<span>버전 2에서 검증한 Hybrid 검색과 AnythingLLM의 임베딩·채팅 구조가 현재 SCHAT에서 합쳐진 위치"
+        f' · <a href="assets/mentoring/{_e(MERGED_ARCHITECTURE)}" target="_blank" rel="noopener">새 창에서 크게 보기</a></span></figcaption>'
+        f'<iframe src="assets/mentoring/{_e(MERGED_ARCHITECTURE)}" title="SCHAT 통합 아키텍처" loading="lazy"></iframe>'
+        "</figure>"
+    )
+    return '<div class="mentoring-diagrams">' + merged + cards + "</div>"
+
+
+MERGED_ARCHITECTURE = "시스템_아키텍처_통합구조.html"
 
 
 MENUS = (
@@ -281,7 +292,7 @@ def render_page(data: dict) -> str:
         '<details class="doc-panel"><summary>현재 상태 문서의 완료·진행 중·예정 목록</summary><div class="status-grid">'
         + _status_column("완료", "done", data["status"]["completed"])
         + _status_column("진행 중", "working", data["status"]["inProgress"])
-        + _status_column("예정", "next", data["status"]["planned"])
+        + _status_column("예정 · 버전 4 이후 개선사항", "next", data["status"]["planned"])
         + "</div></details>"
     )
     next_steps = state.get("nextSteps") or data["status"]["planned"]
@@ -400,7 +411,7 @@ def render_page(data: dict) -> str:
         f'<section id="mentoring"><h3>멘토링 결과</h3><p class="muted">멘토 조언과 그 조언을 어디까지 반영했는지 근거와 함께 정리합니다. 새 기록이 위에 옵니다.</p>'
         f'{_mentoring_sections(data.get("mentoring", []))}<p class="footer-note">공식 정본: docs/02_멘토링</p></section>'
         f'<section id="next"><h3>다음 개선사항</h3><article class="plain-card">{next_intro}<ul>{_simple_list(next_steps)}</ul></article>'
-        f'<p class="footer-note">공식 정본: {_e(data["handover"]["document"])}{guide_documents} · 데이터 생성일: {_e(data["generatedOn"])}</p></section>',
+        f'<p class="footer-note">공식 정본: {_e(data["handover"]["document"])}{guide_documents} · 최종 업데이트(데이터 생성일): {_e(data["generatedOn"])}</p></section>',
     )
 
     return (
@@ -409,7 +420,7 @@ def render_page(data: dict) -> str:
         "<title>SCHAT 프로젝트 안내</title><style>\n"
         + PAGE_STYLE
         + '</style></head><body><div class="layout">\n'
-        '<aside><h1>SCHAT 안내</h1><p>처음이면 1번부터 차례로 보세요.</p>'
+        f'<aside><h1>SCHAT 안내</h1><small class="updated">최종 업데이트: {_e(data["generatedOn"])}</small><p>처음이면 1번부터 차례로 보세요.</p>'
         '<button type="button" class="menu-toggle" aria-expanded="false" aria-controls="site-nav">'
         "<span>1. 프로젝트 소개</span><small>메뉴 ▾</small></button>"
         f'<nav id="site-nav" aria-label="문서 메뉴">{menu_links}</nav></aside>\n<main>\n'
@@ -422,7 +433,7 @@ def render_page(data: dict) -> str:
 PAGE_STYLE = """:root{--navy:#102a43;--teal:#087f8c;--teal-soft:#e8f5f6;--bg:#f4f7fa;--paper:#fff;--line:#d8e2ea;--muted:#627d98;--green:#247a52;--amber:#a76500}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--navy);font-family:Pretendard,"Noto Sans KR","Segoe UI",sans-serif;line-height:1.65}
 a{color:inherit}.layout{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:100vh}aside{position:sticky;top:0;height:100vh;overflow:auto;padding:28px 18px;background:#fff;border-right:1px solid var(--line)}
-aside h1{font-size:20px;margin:0 0 4px}aside p,.muted{color:var(--muted)}#site-nav{display:grid;gap:6px;margin-top:26px}#site-nav a{display:grid;gap:2px;padding:11px 12px;border-radius:11px;text-decoration:none;border:1px solid transparent}#site-nav a strong{font-size:15px}#site-nav a small{font-size:12px;color:var(--muted)}#site-nav a:hover{background:var(--teal-soft);color:var(--teal)}#site-nav a.active{background:var(--teal);border-color:var(--teal);color:#fff}#site-nav a.active small{color:#d9f1f3}.menu-toggle{display:none}
+aside h1{font-size:20px;margin:0 0 4px}aside .updated{display:inline-block;margin:2px 0 6px;padding:2px 9px;border-radius:999px;background:var(--teal-soft);color:var(--teal);font-size:12px;font-weight:700}aside p,.muted{color:var(--muted)}#site-nav{display:grid;gap:6px;margin-top:26px}#site-nav a{display:grid;gap:2px;padding:11px 12px;border-radius:11px;text-decoration:none;border:1px solid transparent}#site-nav a strong{font-size:15px}#site-nav a small{font-size:12px;color:var(--muted)}#site-nav a:hover{background:var(--teal-soft);color:var(--teal)}#site-nav a.active{background:var(--teal);border-color:var(--teal);color:#fff}#site-nav a.active small{color:#d9f1f3}.menu-toggle{display:none}
 main{width:min(100% - 40px,1080px);margin:0 auto;padding:36px 0 90px}.page+.page{margin-top:70px;padding-top:40px;border-top:1px solid var(--line)}.js .page+.page{margin-top:0;padding-top:0;border-top:0}.page-head h2{font-size:30px;margin:0 0 6px}section{scroll-margin-top:24px;margin-top:40px}section h3{font-size:21px;margin:0 0 10px}section h4{margin:0 0 10px}.lead{margin:0 0 14px;color:var(--muted)}
 .subnav{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}.subnav a{padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:13px;text-decoration:none;color:var(--teal)}.subnav a:hover{background:var(--teal-soft)}
 .hero{margin-top:24px;padding:40px;border-radius:24px;background:linear-gradient(135deg,#087f8c,#102a43);color:#fff;box-shadow:0 18px 50px rgba(16,42,67,.16)}.eyebrow{display:block;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.78}.hero h2{margin:8px 0 12px;font-size:clamp(28px,5vw,44px);line-height:1.15}.hero p{max-width:760px;margin:8px 0;line-height:1.75}.hero .hero-version{display:inline-block;margin-top:14px;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.16)}
@@ -438,11 +449,11 @@ main{width:min(100% - 40px,1080px);margin:0 auto;padding:36px 0 90px}.page+.page
 .history-panel>summary{padding:18px 20px}.history-list{display:grid;gap:0;padding:0 20px 20px}.history-item{display:grid;grid-template-columns:100px 1fr;gap:18px;padding:17px 0;border-top:1px solid var(--line)}.history-item time{color:var(--teal);font-size:13px;font-weight:800}.history-item p{margin:4px 0;color:var(--muted)}.history-item small{color:var(--muted)}
 .handover{padding:28px;background:#fff;border:1px solid var(--line);border-radius:18px}.handover h2:first-child{display:none}.handover h3{margin-top:30px;border-bottom:1px solid var(--line);padding-bottom:7px}.handover h4{margin-top:24px}.handover pre{overflow:auto;padding:15px;border-radius:10px;background:#102a43;color:#eaf7f8;line-height:1.55}.handover code{font-family:"Cascadia Code",Consolas,monospace}.handover li{margin:6px 0}.handover :not(pre)>code{padding:1px 6px;border-radius:6px;background:var(--teal-soft);color:var(--navy);font-size:.92em;word-break:break-all}.handover .table-wrap{overflow-x:auto;margin:14px 0}.handover table{width:100%;border-collapse:collapse;font-size:14px}.handover th,.handover td{padding:9px 12px;border:1px solid var(--line);text-align:left;vertical-align:top}.handover th{background:var(--teal-soft)}.handover blockquote{margin:14px 0;padding:10px 16px;border-left:4px solid var(--amber);background:#fff8ec;border-radius:0 10px 10px 0}.handover blockquote p{margin:4px 0}.handover hr{border:0;border-top:1px solid var(--line);margin:26px 0}.handover a{color:var(--teal)}.guide-block{margin-top:14px}.status-badge{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:700;font-size:13px;white-space:nowrap;border:1px solid transparent}.status-done{background:#e3f5ea;color:#1d6b43;border-color:#b7e2c8}.status-working{background:#fff1d6;color:#8a5300;border-color:#f3d49a}.status-todo{background:#fde8e8;color:#a3261f;border-color:#f5bdb9}.status-decide{background:#e8eefc;color:#2446a3;border-color:#bccbf2}.status-na{background:#eef1f4;color:#4b5563;border-color:#d5dbe1}.handover th .status-badge{font-size:14px}.guide-title{font-size:22px;margin:0 0 12px;padding-top:6px}.footer-note{margin-top:30px;color:var(--muted);font-size:12px}
 .mentoring-evidence{margin-top:24px}.mentoring-evidence>summary{padding:18px 20px;color:var(--teal)}.mentoring-evidence-item{padding:20px}.mentoring-evidence-item+.mentoring-evidence-item{border-top:1px solid var(--line)}
-.mentoring-diagrams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:16px 0}.mentoring-diagram{margin:0;padding:16px;background:#fff;border:1px solid var(--line);border-radius:16px}.mentoring-diagram figcaption{display:grid;gap:3px;margin-bottom:12px}.mentoring-diagram figcaption span{color:var(--muted);font-size:13px}.mentoring-diagram img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
+.mentoring-diagrams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:16px 0}.mentoring-diagram{margin:0;padding:16px;background:#fff;border:1px solid var(--line);border-radius:16px}.mentoring-diagram figcaption{display:grid;gap:3px;margin-bottom:12px}.mentoring-diagram figcaption span{color:var(--muted);font-size:13px}.mentoring-diagram img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff}.mentoring-diagram.wide{grid-column:1/-1}.mentoring-diagram iframe{display:block;width:100%;height:760px;border:1px solid var(--line);border-radius:10px;background:#fff}
 .pager{display:flex;justify-content:space-between;gap:12px;margin-top:46px;padding-top:20px;border-top:1px solid var(--line)}.pager a{padding:10px 16px;border:1px solid var(--line);border-radius:10px;background:#fff;text-decoration:none;color:var(--teal);font-weight:700}.pager a:hover{background:var(--teal-soft)}
 @media(max-width:1100px){.reading-order{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:900px){.tech-grid,.workflow,.card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.status-grid{grid-template-columns:1fr}}
-@media(max-width:760px){.layout{display:block}aside{position:sticky;z-index:10;height:auto;padding:14px 16px;border-right:0;border-bottom:1px solid var(--line)}aside>p{display:none}.menu-toggle{display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:10px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--teal-soft);color:var(--navy);font:inherit;font-weight:700}#site-nav{margin-top:10px}.js #site-nav:not(.open){display:none}main{width:min(100% - 24px,1080px);padding-top:20px}.hero{padding:26px 20px}section{margin-top:32px}.tech-grid,.workflow,.flow-pair,.status-grid,.safety-grid,.mentoring-diagrams,.card-grid,.reading-order{grid-template-columns:1fr}.folder summary{align-items:flex-start;flex-direction:column;gap:4px}.folder code{min-width:0}.history-item{grid-template-columns:1fr;gap:4px}.handover{padding:20px 16px}.pager{flex-direction:column}}
+@media(max-width:760px){.layout{display:block}aside{position:sticky;z-index:10;height:auto;padding:14px 16px;border-right:0;border-bottom:1px solid var(--line)}aside>p{display:none}.menu-toggle{display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:10px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--teal-soft);color:var(--navy);font:inherit;font-weight:700}#site-nav{margin-top:10px}.js #site-nav:not(.open){display:none}main{width:min(100% - 24px,1080px);padding-top:20px}.hero{padding:26px 20px}section{margin-top:32px}.tech-grid,.workflow,.flow-pair,.status-grid,.safety-grid,.mentoring-diagrams,.card-grid,.reading-order{grid-template-columns:1fr}.mentoring-diagram iframe{height:560px}.folder summary{align-items:flex-start;flex-direction:column;gap:4px}.folder code{min-width:0}.history-item{grid-template-columns:1fr;gap:4px}.handover{padding:20px 16px}.pager{flex-direction:column}}
 """
 
 
@@ -461,6 +472,10 @@ def build_docs_view(repository_root: Path, output_dir: Path) -> None:
         "저장_구조_ERD.svg",
     ):
         shutil.copyfile(diagram_source / filename, diagram_output / filename)
+    shutil.copyfile(
+        diagram_source.parent / f"17_{MERGED_ARCHITECTURE}",
+        diagram_output / MERGED_ARCHITECTURE,
+    )
     overview = _load_overview_generator()
     data = overview.write_overview_data(root, output_dir / "schat-overview-data.json")
     (output_dir / "index.html").write_text(render_page(data), encoding="utf-8")

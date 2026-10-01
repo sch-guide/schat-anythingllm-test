@@ -385,17 +385,21 @@ def _safe_section_html(markdown: str) -> str:
     return markdown_to_safe_html(markdown)
 
 
+def _list_items(markdown: str) -> list[str]:
+    return [
+        re.sub(r"^(?:[-*]|\d+[.)])\s+", "", line.strip())
+        for line in markdown.splitlines()
+        if re.match(r"^\s*(?:[-*]|\d+[.)])\s+", line)
+    ]
+
+
 def _state_document(repository_root: Path) -> dict:
     """Pieces of the official current-state document, placed in the docs
     view menus (the document itself stays the single source)."""
     text = _read(repository_root / "docs/00_현재상태/현재_프로젝트_상태.md")
     version_state = _section_markdown(text, "5.")
     verification = re.split(r"^###\s", version_state, maxsplit=1, flags=re.MULTILINE)[0]
-    next_steps = [
-        re.sub(r"^(?:[-*]|\d+[.)])\s+", "", line.strip())
-        for line in _section_markdown(text, "버전 4").splitlines()
-        if re.match(r"^\s*(?:[-*]|\d+[.)])\s+", line)
-    ]
+    next_steps = _list_items(_section_markdown(text, "버전 4"))
     return {
         "searchMethods": _table_rows(_section_markdown(text, "질문 처리")),
         "registrationHtml": _safe_section_html(_section_markdown(text, "문서 등록")),
@@ -411,10 +415,16 @@ def _status(repository_root: Path) -> dict:
     text = _read(repository_root / "docs/00_현재상태/현재_프로젝트_상태.md")
     completed = _section_items(text, "완료") or _table_status(text)
     in_progress = _section_items(text, "진행 중") or _section_items(text, "현재 주의사항", 6)
-    planned = _section_items(text, "예정") or _section_items(text, "다음 확인 순서", 6)
+    # The current-state document keeps its next work under "버전 4 이후 개선사항"
+    # (a ### heading), not under "예정".
+    planned = (
+        _section_items(text, "예정")
+        or _section_items(text, "다음 확인 순서", 6)
+        or _list_items(_section_markdown(text, "버전 4"))
+    )
     return {
         "completed": completed or ["현재 상태 문서에서 완료 항목을 확인해야 합니다."],
-        "inProgress": in_progress or ["현재 상태 문서에서 진행 중 항목을 확인해야 합니다."],
+        "inProgress": in_progress or ["현재 상태 문서에 진행 중으로 적힌 항목이 없음."],
         "planned": planned or ["현재 상태 문서에서 예정 항목을 확인해야 합니다."],
     }
 

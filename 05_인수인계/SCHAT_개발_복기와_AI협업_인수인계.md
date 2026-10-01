@@ -1519,7 +1519,9 @@ NotebookLM은 Citation에서 원본 PDF 페이지를 보여주는 사용자 경�
 **마지막 상태:** GitHub push와 DB 백업은 성공했지만 server git pull이 GitHub 인증 오류로 실패함.\
 **마지막 시도:** `git pull --ff-only origin main`.\
 **오류:** `fatal: could not read Password for 'https://sch-guide@github.com': No such device or address`\
-**다음 확인:** 서버용 read-only deploy key, GitHub CLI 인증 또는 안전한 credential helper 중 팀 정책에 맞는 방식을 구성함. 인증 값을 문서나 로그에 남기지 않음.
+**다음 확인:** 서버용 read-only deploy key, GitHub CLI 인증 또는 안전한 credential helper 중 팀 정책에 맞는 방식을 구성함. 인증 값을 문서나 로그에 남기지 않음.\
+**이후 변경 (2026-10-02 추가):** 이 기록은 지우지 않고 보존함. 이후 [서버 배포 및 업데이트 안내](서버_배포_및_업데이트_안내.md)에 GitHub 열쇠(이 저장소 읽기 전용 Fine-grained token)를 Password 칸에 붙여넣어 `git pull`하는 방법이 마련됨.\
+**실제 반영 여부:** 확인 필요. 운영 서버에 `c7efc972` 이후 코드가 실제로 반영됐는지는 저장소 기록만으로 확인할 수 없음.
 
 ### 미해결 6 — RAGAS 실제 평가
 
@@ -1624,8 +1626,8 @@ NotebookLM은 Citation에서 원본 PDF 페이지를 보여주는 사용자 경�
 - `SCHAT_SAFETY_EVALUATOR_URL=http://schat-safety-evaluator:8001`
 - `SCHAT_PDF_IMAGE_ENABLED=true`
 - `SCHAT_PDF_IMAGE_DESCRIPTION_ENABLED=true`
-- `SCHAT_TEST_EMPLOYEE_USERNAME=[REDACTED]`
-- `SCHAT_TEST_EMPLOYEE_PASSWORD` 값은 `[REDACTED]`
+- 테스트 계정 아이디 설정: 값은 `[REDACTED]`
+- 테스트 계정 비밀번호 설정: 값은 `[REDACTED]`
 
 ### 특징적인 오류 문자열
 
@@ -1710,12 +1712,12 @@ AnythingLLM에서 workspace, 채팅, 사용자·권한, 문서관리, 관리자 
 - 문서 최신 버전만 검색하는 current filter
 - Vision 실패 256개 재처리 여부
 - RAGAS 실제 실행
-- 운영 서버 GitHub 인증과 최종 배포·브라우저 검증
+- 운영 서버 최종 배포·브라우저 검증 (GitHub 열쇠로 pull하는 방법은 배포 안내에 마련됨. 실제 반영 여부는 확인 필요)
 - 다른 팀원 코드의 정확한 계보
 
 ### 다음 사람이 가장 먼저 확인해야 할 것
 
-1. 운영 서버가 commit `c7efc972` 이후 실제로 업데이트됐는지 확인함. 현재 기록상 GitHub 인증 실패로 pull이 중단됨.
+1. 운영 서버가 commit `c7efc972` 이후 실제로 업데이트됐는지 확인함. 09-30 기록상 GitHub 인증 실패로 pull이 중단됐고, 이후 GitHub 열쇠로 pull하는 방법이 배포 안내에 마련됨. 실제 반영 여부는 확인 필요.
 2. 운영 DB와 Chroma volume을 백업하고 삭제·초기화하지 않음.
 3. 21문항 재검증은 UI와 같은 Agent WebSocket 경로로 수행함. 빈 HTTP 결과를 성능으로 집계하지 않음.
 4. 검색 로직을 바꾸기 전에 A8 Top-10 hash와 body vector 654개를 기준선으로 저장함.
