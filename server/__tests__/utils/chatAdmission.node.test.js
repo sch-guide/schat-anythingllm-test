@@ -76,13 +76,13 @@ test("FIFO updates positions when waiting client closes", async () => {
   (await third).release();
 });
 
-test("queue times out at 30 seconds and account can retry", async () => {
+test("queue times out at 15 seconds and account can retry", async () => {
   const timer = clock(),
     q = createAdmission(timer);
   q.configure({ maxActive: 1 });
   const first = await q.acquire(1);
   const waiting = assert.rejects(q.acquire(2), { code: "SCHAT_QUEUE_TIMEOUT" });
-  timer.tick(29999);
+  timer.tick(14999);
   assert.equal(q.snapshot().waiting, 1);
   timer.tick(1);
   await waiting;
@@ -116,7 +116,7 @@ test("generation timeout aborts before releasing and duplicate release is harmle
   const secondRejection = assert.rejects(second, {
     code: "SCHAT_QUEUE_TIMEOUT",
   });
-  timer.tick(89999);
+  timer.tick(79999);
   await secondRejection;
   const next = q.acquire(3);
   timer.tick(1);
@@ -193,7 +193,7 @@ test("completion clears its timeout so an old timer cannot cancel replacement wo
   timer.tick(1000);
   first.release();
   const second = await q.acquire(1);
-  timer.tick(89000);
+  timer.tick(79000);
   assert.equal(second.signal.aborted, false);
   assert.equal(q.snapshot().active, 1);
   second.release();
@@ -219,15 +219,15 @@ test("a failing fake generation releases in finally and next user can run", asyn
   assert.equal(await generate(2, async () => "answer"), "answer");
 });
 
-test("waiting for 29 seconds still leaves a full 90 seconds after admission", async () => {
+test("waiting for 14 seconds still leaves a full 80 seconds after admission", async () => {
   const timer = clock(), q = createAdmission(timer);
   q.configure({ maxActive: 1 });
   const first = await q.acquire(1);
   const pending = q.acquire(2);
-  timer.tick(29000);
+  timer.tick(14000);
   first.release();
   const second = await pending;
-  timer.tick(89999);
+  timer.tick(79999);
   assert.equal(second.signal.aborted, false);
   timer.tick(1);
   assert.equal(second.signal.reason.code, "SCHAT_GENERATION_TIMEOUT");

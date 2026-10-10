@@ -91,7 +91,7 @@ export default function ChatAdmissionPanel() {
       </p>
       <p className="text-xs mt-2 text-theme-text-secondary">
         로그인 인원이 아닌 답변 처리 수입니다. 1인당 처리·대기 합계 1건, 대기
-        최대 30초, 처리 최대 90초입니다. 직원 화면은 입장 후 100초에 중단합니다. Gemini 자체 호출 한도와는 별개이며
+        최대 15초, 처리 최대 80초입니다. 직원 화면은 입장 후 90초에 중단합니다. Gemini 자체 호출 한도와는 별개이며
         기본 4건은 부하 테스트 후 조정해야 합니다.
       </p>
       <div className={`mt-4 rounded-lg border p-3 ${state?.dailyUsage?.warning ? "border-amber-500 bg-amber-500/10" : "border-theme-sidebar-border"}`}>

@@ -153,10 +153,11 @@ test("Agent generation deadline aborts and closes real route; slot becomes reusa
   const app = agentSetup(gate);
   const socket = new Socket();
   await app.connect("u", socket);
-  [...timers.values()].find((t) => t.ms === 90000).fn();
+  [...timers.values()].find((t) => t.ms === 80000).fn();
   assert.equal(app.handlers[0].aborted, true);
   assert.equal(socket.readyState, 3);
   assert.equal(socket.messages.at(-1).type, "wssFailure");
+  assert.equal(socket.messages.at(-1).errorCode, "SCHAT_GENERATION_TIMEOUT");
   const next = await gate.acquire("u");
   next.release();
 });

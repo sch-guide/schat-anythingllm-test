@@ -77,7 +77,7 @@ test("deadline aborts Agent before allowing another request and cleans listeners
     order.push("next");
     return lease;
   });
-  [...timers.values()].find((t) => t.ms === 90000).fn();
+  [...timers.values()].find((t) => t.ms === 80000).fn();
   const lease = await next;
   assert.deepEqual(order, ["SCHAT_GENERATION_TIMEOUT", "next"]);
   session.release();

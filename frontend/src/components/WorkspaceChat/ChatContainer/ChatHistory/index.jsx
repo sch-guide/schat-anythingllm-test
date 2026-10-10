@@ -5,6 +5,7 @@ import StatusResponse, { StoppedNotice } from "./StatusResponse";
 import { waitingPhase, AUTO_STOP_SECONDS } from "@/utils/schatWaitingStatus";
 import { admissionPosition, generationStartedAt } from "@/utils/chatAdmissionDisplay.mjs";
 import { ABORT_STREAM_EVENT } from "@/utils/chat";
+import { retryableTimeout, retryQuestion } from "@/utils/chatRetry.mjs";
 import ToolApprovalRequest from "./ToolApprovalRequest";
 import ClarifyingQuestionCard from "./ClarifyingQuestion";
 import FileDownloadCard from "./FileDownloadCard";
@@ -248,19 +249,14 @@ export default forwardRef(function (
     return () => window.clearTimeout(timer);
   }, [runIsLive, admittedAt, stopAnswer]);
   const showStopped =
-    stoppedTurn?.key === waitingTurn && !answerHasStarted && !runIsLive;
+    stoppedTurn?.key === waitingTurn && !runIsLive;
+  const showServerRetry = !runIsLive && retryableTimeout(history);
   const retryStoppedQuestion = useCallback(() => {
-    const index = latestUserMessageIndex(history);
-    const question = history[index];
-    if (!question?.content) return;
+    const retry = retryQuestion(history);
+    if (!retry) return;
     setStoppedTurn(null);
     // Ask the same question again in place of the stopped one.
-    sendCommand({
-      text: question.content,
-      autoSubmit: true,
-      history: history.slice(0, index),
-      attachments: question.attachments || [],
-    });
+    sendCommand(retry);
   }, [history, sendCommand]);
 
   return (
@@ -276,7 +272,7 @@ export default forwardRef(function (
             {compiledHistory.map((item) => (Array.isArray(item) ? null : item))}
             {isWaitingForAnswer && queuePosition ? (
               <div role="status" aria-live="polite" className="py-4 text-sm text-theme-text-primary">
-                SCHAT 답변 대기 중 · {queuePosition}번째입니다. 최대 30초 동안 기다립니다.
+                SCHAT 답변 대기 중 · {queuePosition}번째입니다. 최대 15초 동안 기다립니다.
               </div>
             ) : isWaitingForAnswer && admittedAt === null ? (
               <div role="status" className="py-4 text-sm text-theme-text-primary">
@@ -293,6 +289,12 @@ export default forwardRef(function (
                 reason={stoppedTurn.reason}
                 onRetry={retryStoppedQuestion}
               />
+            )}
+            {showServerRetry && !showStopped && (
+              <button type="button" onClick={retryStoppedQuestion}
+                className="my-3 rounded-md border border-sky-500 px-3 py-2 text-sm text-sky-500">
+                다시 시도
+              </button>
             )}
           </div>
           {showing && (

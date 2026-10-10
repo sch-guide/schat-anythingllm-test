@@ -102,6 +102,7 @@ function agentWebsocket(app) {
                   JSON.stringify({
                     type: "wssFailure",
                     content: admissionMessage(reason?.code),
+                    errorCode: reason?.code,
                   })
                 );
               socket.close();
@@ -133,6 +134,7 @@ function agentWebsocket(app) {
         socket.send(
           JSON.stringify({
             type: "wssFailure",
+            errorCode: e?.code,
             content: e?.code?.startsWith("SCHAT_")
               ? admissionMessage(e.code)
               : e.message,

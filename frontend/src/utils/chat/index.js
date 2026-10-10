@@ -30,6 +30,13 @@ export default function handleChat(
     relatedImages = [],
   } = chatResult;
 
+  if (type === "generationPhase") {
+    _chatHistory.push({type: "statusResponse", role: "assistant", phase: chatResult.phase,
+      content: "답변 작성 중", animate: true});
+    setChatHistory([..._chatHistory]);
+    return;
+  }
+
   if (type === "admissionStatus") {
     setLoadingResponse(true);
     const next = updateAdmission(_chatHistory, chatResult.position);
@@ -85,6 +92,7 @@ export default function handleChat(
       ...remHistory,
       {
         type,
+        errorCode: chatResult.errorCode,
         uuid,
         content: textResponse,
         role: "assistant",
@@ -98,6 +106,7 @@ export default function handleChat(
     ]);
     _chatHistory.push({
       type,
+      errorCode: chatResult.errorCode,
       uuid,
       content: textResponse,
       role: "assistant",

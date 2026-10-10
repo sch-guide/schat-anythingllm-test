@@ -428,6 +428,7 @@ export default function handleSocketResponse(socket, event, setChatHistory) {
           sources: [],
           closed: true,
           error: data.content,
+          errorCode: data.errorCode,
           animate: false,
           pending: false,
           metrics: {},

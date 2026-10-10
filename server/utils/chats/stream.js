@@ -109,6 +109,7 @@ async function streamChatWithWorkspace(
       sources: [],
       close: true,
       error: admissionMessage(error?.code),
+      errorCode: error?.code,
     });
     response.end();
   };
@@ -387,6 +388,7 @@ async function streamChatWithWorkspace(
         // Python evaluator is selected separately by SCHAT_SAFETY_GATE_ENABLED.
         const { runSchatCompletion } = require("../schatSafety/chat");
         session.check();
+        writeResponseChunk(response, { uuid, type: "generationPhase", phase: "answer" });
         const safeResult = await runSchatCompletion({
           safetyGateEnabled,
           question: updatedMessage,
@@ -444,6 +446,7 @@ async function streamChatWithWorkspace(
         // If streaming is not explicitly enabled for connector
         // we do regular waiting of a response and send a single chunk.
         session.check();
+        writeResponseChunk(response, { uuid, type: "generationPhase", phase: "answer" });
         if (LLMConnector.streamingEnabled() !== true) {
           console.log(
             `\x1b[31m[STREAMING DISABLED]\x1b[0m Streaming is not available for ${LLMConnector.constructor.name}. Will use regular chat method.`

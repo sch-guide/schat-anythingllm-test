@@ -9,7 +9,7 @@
 // These messages stay hidden; only the friendly step below is shown.
 
 export const SLOW_NOTICE_SECONDS = 20;
-export const AUTO_STOP_SECONDS = 100;
+export const AUTO_STOP_SECONDS = 90;
 
 export const WAITING_PHASE_LABELS = {
   search: "문서를 찾는 중…",
@@ -38,6 +38,7 @@ export function waitingPhase(history = []) {
     const content = typeof message?.content === "string" ? message.content : "";
     if (message?.type === "toolCallInvocation") toolCalls += 1;
     if (message?.type !== "statusResponse") continue;
+    if (message.phase === "answer") finished += 1;
     if (SEARCH_FINISHED.test(content)) finished += 1;
     else if (EXTRA_SEARCH_STARTED.test(content)) executing += 1;
   }
