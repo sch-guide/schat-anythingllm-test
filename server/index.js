@@ -91,6 +91,7 @@ chatEndpoints(apiRouter);
 adminEndpoints(apiRouter);
 schatAdminEndpoints(apiRouter);
 require("./endpoints/geminiAvailability").geminiAvailabilityEndpoints(apiRouter);
+require("./endpoints/chatAdmission").chatAdmissionEndpoints(apiRouter);
 schatAccountEndpoints(apiRouter);
 schatQuizEndpoints(apiRouter);
 schatQuizGenerationEndpoints(apiRouter);

@@ -19,7 +19,7 @@ async function loadAgentHandler() {
   const outputFile = path.join(outputDirectory, "fixture.cjs");
   await build({
     stdin: {
-      contents: `export { default as handleSocketResponse } from "./src/utils/chat/agent.js";`,
+      contents: `export { default as handleSocketResponse } from "./src/utils/chat/agent.js"; export { default as handleChat } from "./src/utils/chat/index.js";`,
       resolveDir: frontendRoot,
       loader: "js",
     },
@@ -98,4 +98,20 @@ test("the first answer chunk replaces an internal status with the answer", async
   assert.equal(history[0].type, "textResponse");
   assert.equal(history[0].content, "직원에게 보여줄 답변");
   assert.doesNotMatch(history[0].content, /undefined|Found|context/);
+});
+
+test("HTTP queue keeps working state and final chat id belongs to the question", async () => {
+  const { handleChat } = await loadAgentHandler();
+  const history = [{role:'user',content:'synthetic'}];
+  let visible = history;
+  let loading = false;
+  const receive = data => handleChat(data, value=>loading=value, value=>visible=value, [history[0]], history, ()=>{});
+  receive({type:'admissionStatus',position:2});
+  receive({type:'admissionStatus',position:0});
+  assert.equal(loading,true);
+  assert.equal(visible.at(-1).animate,true);
+  receive({type:'textResponseChunk',uuid:'answer',textResponse:'reply',close:false});
+  receive({type:'finalizeResponseStream',uuid:'answer',chatId:42,close:true});
+  assert.equal(visible[0].chatId,42);
+  assert.equal(loading,false);
 });

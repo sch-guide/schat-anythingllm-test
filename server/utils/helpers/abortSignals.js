@@ -26,6 +26,7 @@ const ABORTABLE_REQUEST_METHODS = [
   ["chat", "completions", "create"], // OpenAI-compatible SDKs
   ["responses", "create"], // OpenAI Responses API
   ["messages", "create"], // Anthropic SDK
+  ["embeddings", "create"], // Request-scoped search embeddings
 ];
 
 /**
@@ -102,14 +103,16 @@ function bindAbortSignal(signalHolder, client) {
     if (typeof resource?.[method] !== "function") continue;
 
     const request = resource[method].bind(resource);
-    resource[method] = (body, options = {}) =>
-      request(body, {
+    resource[method] = (body, options = {}) => {
+      signalHolder.abortSignal?.throwIfAborted();
+      return request(body, {
         ...options,
         signal: combineAbortSignals([
           options?.signal,
           signalHolder.abortSignal,
         ]),
       });
+    };
     boundRequestMethod = true;
   }
   if (boundRequestMethod || typeof client.fetch !== "function") return;

@@ -1,6 +1,7 @@
 import { THREAD_RENAME_EVENT } from "@/components/Sidebar/ActiveWorkspaces/ThreadContainer";
 import { emitAssistantMessageCompleteEvent } from "@/components/contexts/TTSProvider";
 import { getAgentSessionActive } from "@/utils/chat/agent";
+import { updateAdmission } from "../chatAdmissionDisplay.mjs";
 export const ABORT_STREAM_EVENT = "abort-chat-stream";
 
 // For handling of chat responses in the frontend by their various types.
@@ -28,6 +29,14 @@ export default function handleChat(
     presentation = null,
     relatedImages = [],
   } = chatResult;
+
+  if (type === "admissionStatus") {
+    setLoadingResponse(true);
+    const next = updateAdmission(_chatHistory, chatResult.position);
+    _chatHistory.splice(0, _chatHistory.length, ...next);
+    setChatHistory([...next]);
+    return;
+  }
 
   if (type === "modelRouteNotification") {
     _chatHistory.push({
@@ -156,7 +165,12 @@ export default function handleChat(
           metrics,
         };
 
-        _chatHistory[chatIdx - 1] = { ..._chatHistory[chatIdx - 1], chatId }; // update prompt with chatID
+        // Queue/route statuses can sit between the question and its answer.
+        for (let index = chatIdx - 1; index >= 0; index -= 1) {
+          if (_chatHistory[index]?.role !== "user") continue;
+          _chatHistory[index] = { ..._chatHistory[index], chatId };
+          break;
+        }
 
         emitAssistantMessageCompleteEvent(chatId);
         setLoadingResponse(false);

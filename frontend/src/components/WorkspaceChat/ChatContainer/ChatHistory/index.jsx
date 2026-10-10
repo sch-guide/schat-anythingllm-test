@@ -3,6 +3,7 @@ import HistoricalMessage from "./HistoricalMessage";
 import PromptReply from "./PromptReply";
 import StatusResponse, { StoppedNotice } from "./StatusResponse";
 import { waitingPhase } from "@/utils/schatWaitingStatus";
+import { admissionPosition } from "@/utils/chatAdmissionDisplay.mjs";
 import { ABORT_STREAM_EVENT } from "@/utils/chat";
 import ToolApprovalRequest from "./ToolApprovalRequest";
 import ClarifyingQuestionCard from "./ClarifyingQuestion";
@@ -219,6 +220,7 @@ export default forwardRef(function (
   const answerHasStarted = hasVisibleAssistantAnswer(history);
   const isWaitingForAnswer = runIsLive && !answerHasStarted;
   const phase = waitingPhase(history);
+  const queuePosition = admissionPosition(history);
   // The question's position stays the same during a run, while its message
   // object can change (for example when the server returns its chat id), so
   // the waiting time and the stop state are tied to the position.
@@ -266,13 +268,17 @@ export default forwardRef(function (
         >
           <div className="w-full max-w-[750px]">
             {compiledHistory.map((item) => (Array.isArray(item) ? null : item))}
-            <StatusResponse
+            {isWaitingForAnswer && queuePosition ? (
+              <div role="status" aria-live="polite" className="py-4 text-sm text-theme-text-primary">
+                SCHAT 답변 대기 중 · {queuePosition}번째입니다. 최대 30초 동안 기다립니다.
+              </div>
+            ) : <StatusResponse
               key={waitingTurn}
               isThinking={isWaitingForAnswer}
               phase={phase}
               onStop={stopAnswer}
               startedAt={waitStart.turn === waitingTurn ? waitStart.at : null}
-            />
+            />}
             {showStopped && (
               <StoppedNotice
                 reason={stoppedTurn.reason}

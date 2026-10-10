@@ -7,6 +7,13 @@ const {
   WEBSOCKET_BAIL_COMMANDS,
 } = require("../utils/agents/aibitat/plugins/websocket");
 const { safeJsonParse } = require("../utils/http");
+const { runtime: admissionRuntime } = require("../utils/chatAdmissionRuntime");
+const {
+  openSession,
+  admissionMessage,
+} = require("../utils/chatAdmissionSession");
+const { withAdmissionSignal } = require("../utils/chatAdmissionContext");
+const connectedInvocations = new Set();
 
 // Setup listener for incoming messages to relay to socket so it can be handled by agent plugin.
 function relayToSocket(message) {
@@ -24,8 +31,22 @@ function agentWebsocket(app) {
   if (!app) return;
 
   app.ws("/agent-invocation/:uuid", async function (socket, request) {
+    const invocationId = String(request.params.uuid);
+    if (connectedInvocations.has(invocationId)) {
+      socket.close();
+      return;
+    }
+    connectedInvocations.add(invocationId);
+    let session;
+    let agentHandler;
+    socket.once("close", () => {
+      connectedInvocations.delete(invocationId);
+      agentHandler?.aibitat?.abort();
+      // openSession's close listener aborts first and then releases the slot.
+      // Do not remove it by releasing early while createAIbitat is pending.
+    });
     try {
-      const agentHandler = await new AgentHandler({
+      agentHandler = await new AgentHandler({
         uuid: String(request.params.uuid),
       }).init();
 
@@ -33,14 +54,21 @@ function agentWebsocket(app) {
         socket.close();
         return;
       }
+      if (socket.readyState !== socket.OPEN) return;
 
-      socket.on("message", relayToSocket);
+      socket.on("message", function (message) {
+        return withAdmissionSignal(session?.signal, () =>
+          relayToSocket.call(this, message)
+        );
+      });
       socket.on("close", () => {
         // Abort the running agent loop (stop button, tab close, disconnect) so
         // in-flight LLM requests are cancelled and no further turns run.
         agentHandler.aibitat?.abort();
         agentHandler.closeAlert();
-        WorkspaceAgentInvocation.close(String(request.params.uuid));
+        WorkspaceAgentInvocation.close(String(request.params.uuid)).catch(
+          () => {}
+        );
         return;
       });
 
@@ -58,14 +86,58 @@ function agentWebsocket(app) {
         }
       };
 
+      const gate = await admissionRuntime.ready();
+      session = await openSession(
+        gate,
+        agentHandler.invocation.user_id ?? "single-user",
+        socket,
+        {
+          onPosition: (position) =>
+            socket.send(JSON.stringify({ type: "admissionStatus", position })),
+          onAbort: (reason) => {
+            agentHandler.aibitat?.abort();
+            if (socket.readyState === socket.OPEN) {
+              if (reason?.code !== "SCHAT_CANCELLED")
+                socket.send(
+                  JSON.stringify({
+                    type: "wssFailure",
+                    content: admissionMessage(reason?.code),
+                  })
+                );
+              socket.close();
+            }
+          },
+        }
+      );
+      session.check();
+      socket.send(JSON.stringify({ type: "admissionStatus", position: 0 }));
       await Telemetry.sendTelemetry("agent_chat_started");
-      await agentHandler.createAIbitat({ socket });
+      session.check();
+      await withAdmissionSignal(session.signal, () =>
+        agentHandler.createAIbitat({ socket })
+      );
+      if (session.signal.aborted) {
+        agentHandler.aibitat?.abort();
+        session.check();
+      }
       // Socket can close while aibitat is being built - don't start a session nobody is listening to.
       if (socket.readyState !== socket.OPEN) return;
-      await agentHandler.startAgentCluster();
+      await withAdmissionSignal(session.signal, () =>
+        agentHandler.startAgentCluster()
+      );
     } catch (e) {
+      agentHandler?.aibitat?.abort();
+      session?.release();
       console.error(e.message, e);
-      socket?.send(JSON.stringify({ type: "wssFailure", content: e.message }));
+      if (socket.readyState === socket.OPEN && e?.code !== "SCHAT_CANCELLED")
+        socket.send(
+          JSON.stringify({
+            type: "wssFailure",
+            content: e?.code?.startsWith("SCHAT_")
+              ? admissionMessage(e.code)
+              : e.message,
+          })
+        );
       socket?.close();
     }
   });

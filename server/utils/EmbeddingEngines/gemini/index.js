@@ -23,6 +23,9 @@ class GeminiEmbedder {
     require("../../geminiAvailability").observeCreate(
       this.openai.embeddings, this.model, "embedding", apiKey
     );
+    require("../../helpers/abortSignals").attachAbortSignal(
+      this, require("../../chatAdmissionContext").currentAdmissionSignal()
+    );
 
     this.maxConcurrentChunks = 4;
 

@@ -1,4 +1,5 @@
 import { v4 } from "uuid";
+import { updateAdmission } from "../chatAdmissionDisplay.mjs";
 import { safeJsonParse } from "../request";
 import { API_BASE } from "../constants";
 import { useEffect, useState } from "react";
@@ -88,6 +89,10 @@ export function websocketURI() {
 export default function handleSocketResponse(socket, event, setChatHistory) {
   const data = safeJsonParse(event.data, null);
   if (data === null) return;
+  if (data.type === "admissionStatus") {
+    setChatHistory(prev => updateAdmission(prev, data.position));
+    return;
+  }
 
   // Handle thread rename
   if (data.type === "rename_thread") {

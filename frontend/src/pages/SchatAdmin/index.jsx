@@ -25,6 +25,7 @@ import StatusSection from "./sections/Status";
 import StorageSection from "./sections/Storage";
 import DangerSection from "./sections/Danger";
 import GeminiAvailabilityBanner from "./GeminiAvailabilityBanner";
+import ChatAdmissionPanel from "./ChatAdmissionPanel";
 
 const SECTIONS = {
   brand: BrandSection,
@@ -181,6 +182,7 @@ export default function SchatAdmin() {
               </select>
             </label>
           )}
+          {section.key === "status" && <ChatAdmissionPanel />}
           <Body key={`${section.key}:${admin.slug}`} {...admin} />
         </div>
       </div>
