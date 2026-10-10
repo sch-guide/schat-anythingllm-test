@@ -191,6 +191,19 @@ const WorkspaceChats = {
     }
   },
 
+  // One SQLite write statement avoids deleteMany's read-then-delete transaction
+  // racing invocation/settings writes when an Agent connection closes.
+  deleteUnanswered: async function (chatId) {
+    if (!Number.isSafeInteger(chatId) || chatId <= 0) return false;
+    try {
+      await prisma.$executeRaw`DELETE FROM workspace_chats WHERE id = ${chatId} AND response = ${"{}"}`;
+      return true;
+    } catch (error) {
+      console.error(error.message);
+      return false;
+    }
+  },
+
   delete: async function (clause = {}) {
     try {
       await prisma.workspace_chats.deleteMany({

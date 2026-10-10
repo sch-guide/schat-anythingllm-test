@@ -1,0 +1,1 @@
+# Intentionally empty. Masks the image's .env during isolated tests.

@@ -5,10 +5,22 @@ const { WorkspaceThread } = require("../../../../models/workspaceThread");
 // stop after 70 seconds, or a closed window) must not leave an empty answer
 // in the chat history. Only the pre-registered row that still has no answer
 // is removed; a saved answer is never touched.
+const unansweredCleanup = new WeakMap();
 function forgetUnansweredChat(aibitat) {
   const chatId = aibitat.trackedChatId;
   if (!chatId) return null;
-  return WorkspaceChats.delete({ id: Number(chatId), response: "{}" });
+  const previous = unansweredCleanup.get(aibitat);
+  if (previous?.chatId === chatId) return previous.promise;
+  // Socket close, admission abort and provider abort can all notify the same run.
+  // Share the cleanup, retaining the response guard that protects saved answers.
+  const promise = Promise.resolve(WorkspaceChats.deleteUnanswered(Number(chatId)));
+  const entry = { chatId, promise };
+  unansweredCleanup.set(aibitat, entry);
+  const retryable = () => {
+    if (unansweredCleanup.get(aibitat) === entry) unansweredCleanup.delete(aibitat);
+  };
+  promise.then(result => { if (result === false) retryable(); }, retryable);
+  return promise;
 }
 
 /**

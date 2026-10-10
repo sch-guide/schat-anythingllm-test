@@ -13,7 +13,7 @@ const fakeChats = {
       return { chat: { id: 77 } };
     },
     upsert: async (id, data) => calls.push(["upsert", id, data.response?.text]),
-    delete: async (clause) => calls.push(["delete", clause]),
+    deleteUnanswered: async (id) => calls.push(["delete", {id,response:"{}"}]),
   },
 };
 const modelsDir = path.resolve(__dirname, "../../../models");
@@ -84,6 +84,15 @@ test("a saved answer is never removed by a later stop", async () => {
   assert.equal(calls.filter(([kind]) => kind === "upsert").length, 1);
 });
 
+test("repeated disconnect notifications share one empty-row cleanup", async () => {
+  calls.length = 0;
+  const run = fakeAibitat();
+  await run.userMessage("Synthetic cancellation test");
+  run.abort(); run.abort(); run.abort();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls.filter(([kind]) => kind === "delete"), [["delete", {id:77,response:"{}"}]]);
+});
+
 test("stopping while the row is still being created removes it once created", async () => {
   calls.length = 0;
   let release;
@@ -95,6 +104,22 @@ test("stopping while the row is still being created removes it once created", as
   await pending;
   createDelay = Promise.resolve();
   assert.deepEqual(calls.filter(([kind]) => kind === "delete"), [["delete", { id: 77, response: "{}" }]]);
+});
+
+test("failed cleanup can retry and a different tracked row is not suppressed", async () => {
+  const {forgetUnansweredChat}=require("../../../utils/agents/aibitat/plugins/chat-history");
+  const original=fakeChats.WorkspaceChats.deleteUnanswered;
+  const ids=[];
+  fakeChats.WorkspaceChats.deleteUnanswered=async id=>{ids.push(id);return ids.length>1;};
+  try {
+    const run={trackedChatId:77};
+    assert.equal(await forgetUnansweredChat(run),false);
+    assert.equal(await forgetUnansweredChat(run),true);
+    await forgetUnansweredChat(run);
+    run.trackedChatId=78;
+    await forgetUnansweredChat(run);
+    assert.deepEqual(ids,[77,77,78]);
+  } finally {fakeChats.WorkspaceChats.deleteUnanswered=original;}
 });
 
 test("only an empty row can match the delete condition", () => {

@@ -12,10 +12,9 @@ const WorkspaceAgentInvocation = {
   close: async function (uuid) {
     if (!uuid) return;
     try {
-      await prisma.workspace_agent_invocations.update({
-        where: { uuid: String(uuid) },
-        data: { closed: true },
-      });
+      // A single SQLite statement avoids a read/write upgrade when cancellation
+      // also cleans an unanswered chat. Repeated closes remain harmless.
+      await prisma.$executeRaw`UPDATE workspace_agent_invocations SET closed = 1 WHERE uuid = ${String(uuid)}`;
     } catch {}
   },
 
