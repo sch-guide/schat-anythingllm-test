@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { openEvidenceDocument } from "@/utils/pdfEvidenceDocument";
 import {
-  GlobalWorkerOptions,
-  getDocument,
-} from "pdfjs-dist/legacy/build/pdf.mjs";
-import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+  inspectPdfEvidence,
+  PDF_POSITION_UNAVAILABLE,
+} from "@/utils/pdfEvidenceHighlight";
 import StorageFiles from "@/models/files";
-
-GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 const ZOOMS = [1, 1.5, 2, 3];
 
@@ -25,6 +23,7 @@ export default function PdfPageCanvas({
   workspaceSlug,
   pdfRef,
   page,
+  evidenceTexts = [],
   documentName,
   onUnavailable,
 }) {
@@ -33,26 +32,33 @@ export default function PdfPageCanvas({
   const [pdf, setPdf] = useState(null);
   const [zoom, setZoom] = useState(1);
   const [rendered, setRendered] = useState(false);
-  const pageNumber = normalizedPage(page);
+  const [pageNumber, setPageNumber] = useState(normalizedPage(page));
+  const [highlights, setHighlights] = useState({ matched: false, rects: [] });
+  const evidenceKey = JSON.stringify(evidenceTexts);
 
   useEffect(() => {
     let active = true;
     let loadingTask = null;
     setPdf(null);
+    setRendered(false);
+    setHighlights({ matched: false, rects: [] });
     StorageFiles.originalPdf(workspaceSlug, pdfRef)
       .then(async (blob) => {
         if (!active) return;
         if (!blob || blob.type !== "application/pdf") return onUnavailable?.();
-        loadingTask = getDocument({
-          data: new Uint8Array(await blob.arrayBuffer()),
-          isEvalSupported: false,
-        });
+        const data = new Uint8Array(await blob.arrayBuffer());
+        if (!active) return;
+        loadingTask = openEvidenceDocument(data);
         const doc = await loadingTask.promise;
-        if (!active) return doc.destroy();
-        if (pageNumber > doc.numPages) {
-          doc.destroy();
-          return onUnavailable?.();
-        }
+        if (!active) return;
+        const result = await inspectPdfEvidence(
+          doc,
+          page,
+          JSON.parse(evidenceKey)
+        );
+        if (!active) return;
+        setPageNumber(result.page);
+        setHighlights(result);
         setPdf(doc);
       })
       .catch(() => active && onUnavailable?.());
@@ -60,9 +66,7 @@ export default function PdfPageCanvas({
       active = false;
       loadingTask?.destroy();
     };
-  }, [workspaceSlug, pdfRef, pageNumber, onUnavailable]);
-
-  useEffect(() => () => pdf?.destroy(), [pdf]);
+  }, [workspaceSlug, pdfRef, page, evidenceKey, onUnavailable]);
 
   useEffect(() => {
     if (!pdf || !canvasRef.current || !frameRef.current) return;
@@ -87,7 +91,35 @@ export default function PdfPageCanvas({
           canvasContext: canvas.getContext("2d"),
           viewport,
         });
-        return renderTask.promise.then(() => !cancelled && setRendered(true));
+        return renderTask.promise.then(() => {
+          if (cancelled) return;
+          const context = canvas.getContext("2d");
+          context.save();
+          context.globalCompositeOperation = "multiply";
+          context.fillStyle = "rgba(255,255,0,0.35)";
+          for (const rect of highlights.rects) {
+            const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(rect);
+            context.fillRect(
+              Math.min(x1, x2),
+              Math.min(y1, y2),
+              Math.abs(x2 - x1),
+              Math.abs(y2 - y1)
+            );
+          }
+          context.restore();
+          setRendered(true);
+          if (highlights.rects.length) {
+            const cssViewport = pdfPage.getViewport({ scale: cssScale });
+            const [x1, y1, x2, y2] = cssViewport.convertToViewportRectangle(
+              highlights.rects[0]
+            );
+            frameRef.current?.scrollTo({
+              left: Math.max(0, Math.min(x1, x2) - 16),
+              top: Math.max(0, Math.min(y1, y2) - 16),
+              behavior: "instant",
+            });
+          }
+        });
       })
       .catch((error) => {
         if (!cancelled && error?.name !== "RenderingCancelledException")
@@ -97,11 +129,19 @@ export default function PdfPageCanvas({
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [pdf, pageNumber, zoom, onUnavailable]);
+  }, [pdf, pageNumber, zoom, highlights, onUnavailable]);
 
   const zoomIndex = ZOOMS.indexOf(zoom);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {pdf && !highlights.matched && (
+        <p
+          role="status"
+          className="px-3 py-2 text-xs text-amber-300 light:text-amber-800"
+        >
+          {PDF_POSITION_UNAVAILABLE}
+        </p>
+      )}
       <div
         ref={frameRef}
         className="relative min-h-0 flex-1 overflow-auto bg-zinc-800 light:bg-slate-200"

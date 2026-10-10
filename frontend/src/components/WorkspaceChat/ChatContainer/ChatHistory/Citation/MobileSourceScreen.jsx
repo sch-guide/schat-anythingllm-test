@@ -9,6 +9,7 @@ import {
 import { createPortal } from "react-dom";
 import { ArrowLeft } from "@phosphor-icons/react";
 import RelatedImages from "../RelatedImages";
+import { sourceHighlightTexts } from "@/utils/pdfEvidenceHighlight";
 
 // pdf.js is only downloaded when a phone opens an original PDF.
 const PdfPageCanvas = lazy(() => import("./PdfPageCanvas"));
@@ -170,6 +171,7 @@ export default function MobileSourceScreen({
               workspaceSlug={workspaceSlug}
               pdfRef={source.pdfRef}
               page={source.page}
+              evidenceTexts={sourceHighlightTexts(source)}
               documentName={documentName}
               onUnavailable={markPdfFailed}
             />

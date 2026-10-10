@@ -22,6 +22,7 @@ import PdfPageViewer from "./PdfPageViewer";
 import MobileSourceScreen, { useMobileViewport } from "./MobileSourceScreen";
 import { buildCitationDisplay } from "@/utils/citationFilter";
 import { employeeDocumentName } from "@/utils/schatSourceDisplay";
+import { sourceHighlightTexts, mergeHighlightTexts } from "@/utils/pdfEvidenceHighlight";
 
 const LONG_EXCERPT_LENGTH = 420;
 
@@ -121,6 +122,7 @@ export function SourceEvidenceRow({
               workspaceSlug={workspaceSlug}
               pdfRef={source.pdfRef}
               page={source.page}
+              evidenceTexts={sourceHighlightTexts(source)}
               documentName={sourceDocumentName(source)}
               onUnavailable={markPdfUnavailable}
               onShowText={() => setTextMode(true)}
@@ -350,6 +352,7 @@ export function dedupeCitationSources(sources = []) {
         : current;
     result[position] = {
       ...representative,
+      highlightTexts: mergeHighlightTexts(current, source),
       pdfRef: current.pdfRef || source.pdfRef,
       documentName: current.documentName || source.documentName,
       document_name: current.document_name || source.document_name,

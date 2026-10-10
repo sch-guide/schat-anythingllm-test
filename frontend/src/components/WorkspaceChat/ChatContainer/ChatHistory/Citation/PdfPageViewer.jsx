@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import StorageFiles from "@/models/files";
+import {
+  inspectPdfEvidence,
+  saveHighlightedPdf,
+  pdfHighlightUrl,
+  PDF_POSITION_UNAVAILABLE,
+} from "@/utils/pdfEvidenceHighlight";
 
 function normalizedPdfPage(page) {
   const value = Number(page);
@@ -15,38 +21,102 @@ export default function PdfPageViewer({
   workspaceSlug,
   pdfRef,
   page,
+  evidenceTexts = [],
   documentName,
   onUnavailable,
   onShowText,
 }) {
   const [objectUrl, setObjectUrl] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [position, setPosition] = useState(null);
+  const [positionUnavailable, setPositionUnavailable] = useState(false);
+  const [originalUrl, setOriginalUrl] = useState("");
+  const [displayPage, setDisplayPage] = useState(normalizedPdfPage(page));
+  const evidenceKey = JSON.stringify(evidenceTexts);
   const viewerUrl = useMemo(
-    () => pdfViewerUrl(objectUrl, page),
-    [objectUrl, page]
+    () => pdfHighlightUrl(objectUrl, displayPage, position),
+    [objectUrl, displayPage, position]
   );
 
   useEffect(() => {
     let active = true;
-    let currentUrl = "";
+    const urls = [];
+    let task = null;
     setObjectUrl("");
     setLoaded(false);
+    setPosition(null);
+    setPositionUnavailable(false);
+    setOriginalUrl("");
+    setDisplayPage(normalizedPdfPage(page));
 
-    StorageFiles.originalPdf(workspaceSlug, pdfRef).then((blob) => {
-      if (!active) return;
-      if (!blob || blob.type !== "application/pdf") {
-        onUnavailable?.();
-        return;
-      }
-      currentUrl = URL.createObjectURL(blob);
-      setObjectUrl(currentUrl);
-    });
+    StorageFiles.originalPdf(workspaceSlug, pdfRef)
+      .then(async (blob) => {
+        if (!active) return;
+        if (!blob || blob.type !== "application/pdf") {
+          onUnavailable?.();
+          return;
+        }
+        const original = URL.createObjectURL(blob);
+        urls.push(original);
+        setOriginalUrl(original);
+        let displayed = original;
+        try {
+          const { openEvidenceDocument } = await import(
+            "@/utils/pdfEvidenceDocument"
+          );
+          if (!active) return;
+          const data = new Uint8Array(await blob.arrayBuffer());
+          if (!active) return;
+          task = openEvidenceDocument(data);
+          const pdf = await task.promise;
+          if (!active) return;
+          const result = await inspectPdfEvidence(
+            pdf,
+            page,
+            JSON.parse(evidenceKey)
+          );
+          if (!active) return;
+          setDisplayPage(result.page);
+          if (result.matched) {
+            const saved = await saveHighlightedPdf(
+              pdf,
+              result.page,
+              result.rects
+            );
+            if (!active) return;
+            displayed = URL.createObjectURL(
+              new Blob([saved], { type: "application/pdf" })
+            );
+            urls.push(displayed);
+            const pdfPage = await pdf.getPage(result.page);
+            if (!active) return;
+            const viewport = pdfPage.getViewport({ scale: 1 });
+            const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(
+              result.rects[0]
+            );
+            setPosition([Math.min(x1, x2), Math.min(y1, y2)]);
+          } else {
+            setPositionUnavailable(true);
+          }
+        } catch {
+          displayed = original;
+          if (active) {
+            setPosition(null);
+            setPositionUnavailable(true);
+          }
+        } finally {
+          await task?.destroy();
+        }
+        if (active) setObjectUrl(displayed);
+      })
+      .catch(() => active && onUnavailable?.());
 
     return () => {
       active = false;
-      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      task?.destroy();
+      urls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [workspaceSlug, pdfRef, onUnavailable]);
+  }, [workspaceSlug, pdfRef, page, evidenceKey, onUnavailable]);
 
   if (!viewerUrl) {
     return (
@@ -61,6 +131,14 @@ export default function PdfPageViewer({
 
   return (
     <div className="mx-auto w-full max-w-[920px]">
+      {positionUnavailable && (
+        <p
+          role="status"
+          className="mb-2 text-xs text-amber-300 light:text-amber-800"
+        >
+          {PDF_POSITION_UNAVAILABLE}
+        </p>
+      )}
       {!loaded && (
         <p className="mb-2 text-center text-xs text-zinc-400 light:text-slate-500">
           PDF viewer를 준비하는 중입니다.
@@ -76,7 +154,7 @@ export default function PdfPageViewer({
       />
       <div className="mt-2 flex justify-center">
         <a
-          href={viewerUrl}
+          href={pdfViewerUrl(originalUrl, displayPage)}
           target="_blank"
           rel="noreferrer"
           className="text-xs font-medium text-blue-300 hover:text-blue-200 light:text-blue-700 light:hover:text-blue-800"
