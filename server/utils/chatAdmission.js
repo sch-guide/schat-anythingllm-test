@@ -44,7 +44,7 @@ function createAdmission({
     active.add(entry);
     entry.timer = setTimer(
       () => finish(entry, error("SCHAT_GENERATION_TIMEOUT")),
-      120000
+      90000
     );
     entry.resolve({
       signal: entry.controller.signal,

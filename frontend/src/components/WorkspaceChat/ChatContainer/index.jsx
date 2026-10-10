@@ -1,5 +1,6 @@
 import { useState, useEffect, useContext, useRef, useCallback } from "react";
 import ChatHistory from "./ChatHistory";
+import { resetAdmission } from "@/utils/chatAdmissionDisplay.mjs";
 import { CLEAR_ATTACHMENTS_EVENT, DndUploaderContext } from "./DnDWrapper";
 import PromptInput, {
   PROMPT_INPUT_EVENT,
@@ -218,7 +219,7 @@ export default function ChatContainer({
     if (history.length > 0) {
       // use pre-determined history chain.
       prevChatHistory = [
-        ...history,
+        ...resetAdmission(history),
         {
           content: "",
           role: "assistant",

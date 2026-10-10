@@ -9,7 +9,7 @@
 // These messages stay hidden; only the friendly step below is shown.
 
 export const SLOW_NOTICE_SECONDS = 20;
-export const AUTO_STOP_SECONDS = 70;
+export const AUTO_STOP_SECONDS = 100;
 
 export const WAITING_PHASE_LABELS = {
   search: "문서를 찾는 중…",

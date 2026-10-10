@@ -2,8 +2,8 @@ import { useMemo, useCallback, forwardRef, useEffect, useState } from "react";
 import HistoricalMessage from "./HistoricalMessage";
 import PromptReply from "./PromptReply";
 import StatusResponse, { StoppedNotice } from "./StatusResponse";
-import { waitingPhase } from "@/utils/schatWaitingStatus";
-import { admissionPosition } from "@/utils/chatAdmissionDisplay.mjs";
+import { waitingPhase, AUTO_STOP_SECONDS } from "@/utils/schatWaitingStatus";
+import { admissionPosition, generationStartedAt } from "@/utils/chatAdmissionDisplay.mjs";
 import { ABORT_STREAM_EVENT } from "@/utils/chat";
 import ToolApprovalRequest from "./ToolApprovalRequest";
 import ClarifyingQuestionCard from "./ClarifyingQuestion";
@@ -225,11 +225,7 @@ export default forwardRef(function (
   // object can change (for example when the server returns its chat id), so
   // the waiting time and the stop state are tied to the position.
   const waitingTurn = `turn-${latestUserMessageIndex(history)}`;
-  const [waitStart, setWaitStart] = useState({ turn: null, at: 0 });
-  useEffect(() => {
-    if (isWaitingForAnswer && waitStart.turn !== waitingTurn)
-      setWaitStart({ turn: waitingTurn, at: Date.now() });
-  }, [isWaitingForAnswer, waitingTurn, waitStart.turn]);
+  const admittedAt = generationStartedAt(history);
   // [멈추기] or the automatic stop: which question was stopped and why.
   const [stoppedTurn, setStoppedTurn] = useState(null);
   const stopAnswer = useCallback(
@@ -241,6 +237,16 @@ export default forwardRef(function (
     },
     [waitingTurn]
   );
+  // Covers streaming answers too, not just the pre-answer spinner. Waiting
+  // has no admission timestamp and does not consume this generation deadline.
+  useEffect(() => {
+    if (!runIsLive || admittedAt === null) return undefined;
+    const timer = window.setTimeout(
+      () => stopAnswer("timeout"),
+      Math.max(0, AUTO_STOP_SECONDS * 1000 - (Date.now() - admittedAt))
+    );
+    return () => window.clearTimeout(timer);
+  }, [runIsLive, admittedAt, stopAnswer]);
   const showStopped =
     stoppedTurn?.key === waitingTurn && !answerHasStarted && !runIsLive;
   const retryStoppedQuestion = useCallback(() => {
@@ -272,12 +278,15 @@ export default forwardRef(function (
               <div role="status" aria-live="polite" className="py-4 text-sm text-theme-text-primary">
                 SCHAT 답변 대기 중 · {queuePosition}번째입니다. 최대 30초 동안 기다립니다.
               </div>
+            ) : isWaitingForAnswer && admittedAt === null ? (
+              <div role="status" className="py-4 text-sm text-theme-text-primary">
+                답변 연결을 준비하고 있습니다.
+              </div>
             ) : <StatusResponse
               key={waitingTurn}
               isThinking={isWaitingForAnswer}
               phase={phase}
-              onStop={stopAnswer}
-              startedAt={waitStart.turn === waitingTurn ? waitStart.at : null}
+              startedAt={admittedAt}
             />}
             {showStopped && (
               <StoppedNotice

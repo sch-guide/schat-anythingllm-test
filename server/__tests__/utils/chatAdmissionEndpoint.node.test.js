@@ -52,6 +52,7 @@ function setup(role) {
     "../utils/middleware/validatedRequest": auth,
     "../utils/middleware/multiUserProtected": roles,
     "../utils/chatAdmissionRuntime": { runtime },
+    "../utils/geminiDailyUsage": { dailyUsage: {snapshot: async model => ({model, count: 7000, limit: 10000, warning: true})} },
   }).chatAdmissionEndpoints({
     get: (p, ...handlers) => (routes.GET = handlers.flat()),
     put: (p, ...handlers) => (routes.PUT = handlers.flat()),
@@ -114,6 +115,8 @@ test("admin saves validated limit and reads current active count without identit
   const res = await app.invoke("GET");
   assert.equal(res.data.active, 1);
   assert.equal(res.data.maxActive, 3);
+  assert.equal(res.data.dailyUsage.count, 7000);
+  assert.equal(res.data.dailyUsage.warning, true);
   assert.equal(JSON.stringify(res.data).includes("private-user"), false);
   lease.release();
 });

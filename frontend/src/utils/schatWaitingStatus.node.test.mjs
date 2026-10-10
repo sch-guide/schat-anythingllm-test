@@ -83,7 +83,7 @@ test("only the latest question counts", () => {
 
 test("the agreed times and texts", () => {
   assert.equal(SLOW_NOTICE_SECONDS, 20);
-  assert.equal(AUTO_STOP_SECONDS, 70);
+  assert.equal(AUTO_STOP_SECONDS, 100);
   assert.deepEqual(Object.values(WAITING_PHASE_LABELS), [
     "문서를 찾는 중…",
     "문서를 한 번 더 찾는 중…",

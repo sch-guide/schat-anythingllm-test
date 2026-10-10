@@ -1,5 +1,12 @@
-export function updateAdmission(history, position) {
+export function updateAdmission(history, position, now = Date.now()) {
   const rest = history.filter((item) => !item.admission);
+  // Keep the admission time on the current question: Agent status entries can
+  // be replaced as tools run. Never restart the clock for a repeated event.
+  if (position === 0) {
+    const index = rest.findLastIndex((item) => item.role === "user");
+    if (index >= 0 && !Number.isFinite(rest[index].admissionStartedAt))
+      rest[index] = { ...rest[index], admissionStartedAt: now };
+  }
   return [
     ...rest,
     {
@@ -14,6 +21,21 @@ export function updateAdmission(history, position) {
       closed: false,
     },
   ];
+}
+export function generationStartedAt(history = []) {
+  const question = history.findLast((item) => item?.role === "user");
+  return Number.isFinite(question?.admissionStartedAt)
+    ? question.admissionStartedAt
+    : null;
+}
+export function resetAdmission(history = []) {
+  const next = history.filter(item => !item.admission);
+  const index = next.findLastIndex(item => item?.role === "user");
+  if (index >= 0) {
+    const {admissionStartedAt, ...question} = next[index];
+    next[index] = question;
+  }
+  return next;
 }
 export function admissionPosition(history = []) {
   let start = 0;
