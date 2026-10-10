@@ -25,8 +25,7 @@ class GeminiProvider extends Provider {
           const cloned = res.clone();
           const text = await cloned.text().catch(() => "(unreadable)");
           this.providerLog(
-            `[Gemini.fetch] ${res.status} from ${typeof url === "string" ? url : url?.toString()}\n` +
-              `  Response body: ${text}`
+            `[Gemini.fetch] HTTP ${res.status}`
           );
           try {
             const json = safeJsonParse(text, {});
@@ -40,6 +39,9 @@ class GeminiProvider extends Provider {
       },
     });
 
+    require("../../../geminiAvailability").observeCreate(
+      client.chat.completions, model, "generation", process.env.GEMINI_API_KEY
+    );
     this._client = client;
     this.model = model;
     this.verbose = true;
@@ -348,6 +350,8 @@ class GeminiProvider extends Provider {
         uuid: msgUUID,
       };
     } catch (error) {
+      if (error.schatGeminiKind) this._lastErrorMessage = null;
+      if (error.schatGeminiKind === "exhausted") throw error;
       this.#logAPIError(error);
       const errorMsg = this._lastErrorMessage
         ? `Gemini error: ${this._lastErrorMessage}`
@@ -423,6 +427,8 @@ class GeminiProvider extends Provider {
         usage: this.getUsage(),
       };
     } catch (error) {
+      if (error.schatGeminiKind) this._lastErrorMessage = null;
+      if (error.schatGeminiKind === "exhausted") throw error;
       this.#logAPIError(error);
       const errorMsg = this._lastErrorMessage
         ? `Gemini error: ${this._lastErrorMessage}`

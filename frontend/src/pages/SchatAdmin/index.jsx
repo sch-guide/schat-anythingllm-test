@@ -24,6 +24,7 @@ import ConnectionsSection from "./sections/Connections";
 import StatusSection from "./sections/Status";
 import StorageSection from "./sections/Storage";
 import DangerSection from "./sections/Danger";
+import GeminiAvailabilityBanner from "./GeminiAvailabilityBanner";
 
 const SECTIONS = {
   brand: BrandSection,
@@ -124,6 +125,7 @@ export default function SchatAdmin() {
         <div
           className={`schat-admin flex flex-col w-full ${WIDE_SECTIONS.includes(section.key) ? "max-w-[1180px]" : "max-w-[860px]"} px-1 md:pl-6 md:pr-[50px] md:py-6 py-5 gap-y-5`}
         >
+          <GeminiAvailabilityBanner />
           <nav className="md:hidden flex flex-col gap-y-2 pr-12">
             <Link
               to={paths.home()}

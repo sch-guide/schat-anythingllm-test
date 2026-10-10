@@ -67,6 +67,9 @@ class GeminiLLM {
       // Even models that are v1 in gemini API can be used with v1beta/openai/ endpoint and nobody knows why.
       baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
     });
+    require("../../geminiAvailability").observeCreate(
+      this.openai.chat.completions, this.model, "generation", process.env.GEMINI_API_KEY
+    );
 
     this.limits = {
       history: this.promptWindowLimit() * 0.15,

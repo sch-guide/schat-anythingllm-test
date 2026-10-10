@@ -90,6 +90,7 @@ workspaceThreadEndpoints(apiRouter);
 chatEndpoints(apiRouter);
 adminEndpoints(apiRouter);
 schatAdminEndpoints(apiRouter);
+require("./endpoints/geminiAvailability").geminiAvailabilityEndpoints(apiRouter);
 schatAccountEndpoints(apiRouter);
 schatQuizEndpoints(apiRouter);
 schatQuizGenerationEndpoints(apiRouter);
