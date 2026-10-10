@@ -40,6 +40,29 @@ function periodStart(period, now = new Date()) {
   return new Date(kstMidnight - (days - 1) * 24 * 60 * 60 * 1000);
 }
 
+function usageFilters(period, { startDate, endDate, departmentIds = [], now = new Date() } = {}) {
+  const invalid = (message) => { const error = new Error(message); error.status = 400; throw error; };
+  let since = periodStart(period, now);
+  let until = new Date(now.getTime() + 1);
+  let days = PERIODS[period] || PERIODS['7d'];
+  if (period === 'custom') {
+    const parse = (value) => {
+      if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) invalid('시작일과 종료일을 선택해 주세요.');
+      const date = new Date(`${value}T00:00:00+09:00`);
+      if (!Number.isFinite(date.getTime()) || kstParts(date).day !== value) invalid('날짜가 올바르지 않습니다.');
+      return date;
+    };
+    since = parse(startDate);
+    until = new Date(parse(endDate).getTime() + 86400000);
+    days = (until - since) / 86400000;
+    if (days < 1 || days > 366) invalid('종료일은 시작일 이후여야 하며, 한 번에 최대 366일을 조회할 수 있습니다.');
+    if (endDate > kstParts(now).day) invalid('미래 날짜는 조회할 수 없습니다.');
+  }
+  if (!Array.isArray(departmentIds) || departmentIds.length > 100 || departmentIds.some(id => !/^\d+$/.test(String(id)) || !Number.isSafeInteger(Number(id)) || Number(id) <= 0))
+    invalid('부서 선택이 올바르지 않습니다.');
+  return { since, until, days, departmentIds: [...new Set(departmentIds.map(Number))].sort((a,b)=>a-b) };
+}
+
 function parseResponse(value) {
   try {
     const parsed = JSON.parse(value || "{}");
@@ -81,18 +104,37 @@ function computeUsageStats({
   documents = [],
   period = "7d",
   now = new Date(),
+  startDate,
+  endDate,
+  departmentIds = [],
 } = {}) {
-  const since = periodStart(period, now);
+  const filters = usageFilters(period, { startDate, endDate, departmentIds, now });
+  const { since, until, days } = filters;
+  const selected = new Set(filters.departmentIds);
+  if (filters.departmentIds.some(id => !departments.some(d => d.id === id))) {
+    const error = new Error('선택한 부서가 없습니다. 부서 목록을 다시 확인해 주세요.');
+    error.status = 400;
+    throw error;
+  }
+  const userDepartment = new Map(users.map((u) => [u.id, u.department_id]));
   const textSince = new Date(
     now.getTime() - QUESTION_TEXT_MAX_DAYS * 24 * 60 * 60 * 1000
   );
   const inPeriod = chats.filter(
     (chat) =>
-      new Date(chat.createdAt) >= since && new Date(chat.createdAt) <= now
+      new Date(chat.createdAt) >= since && new Date(chat.createdAt) < until && new Date(chat.createdAt) <= now &&
+      (!selected.size || selected.has(userDepartment.get(chat.user_id)))
   );
 
+  // A department filter must not bypass the existing small-group protection
+  // through totals, tokens or question lists in the other cards.
+  if (selected.size && filters.departmentIds.some(id => {
+    const people = new Set(inPeriod.filter(c => userDepartment.get(c.user_id) === id).map(c => c.user_id));
+    return people.size > 0 && people.size < MIN_DEPARTMENT_USERS;
+  })) return { period, since: since.toISOString(), suppressed: true,
+    message: '선택한 부서 중 조회 기간 사용자가 5명 미만인 부서가 있어 통계를 표시하지 않습니다.' };
+
   // (1) 질문 수
-  const days = PERIODS[period] || PERIODS["7d"];
   const daily = [];
   for (let index = 0; index < days; index += 1) {
     const day = kstParts(new Date(since.getTime() + index * 86400000 + 1)).day;
@@ -105,9 +147,10 @@ function computeUsageStats({
   const cited = new Map();
   const searchFailures = [];
   const notFoundAnswers = [];
+  let searchFailureCount = 0;
+  let notFoundCount = 0;
   const departmentUsage = new Map();
   const departmentName = new Map(departments.map((d) => [d.id, d.name]));
-  const userDepartment = new Map(users.map((u) => [u.id, u.department_id]));
   let promptTokens = 0;
   let completionTokens = 0;
   let chatsWithTokens = 0;
@@ -134,8 +177,10 @@ function computeUsageStats({
       date: day,
     };
     if (sources.length === 0) {
+      searchFailureCount += 1;
       if (entry) searchFailures.push(entry);
     } else if (NOT_FOUND_PATTERN.test(String(response.text || ""))) {
+      notFoundCount += 1;
       if (entry) notFoundAnswers.push(entry);
     }
 
@@ -186,11 +231,11 @@ function computeUsageStats({
         .sort((a, b) => a.localeCompare(b, "ko")),
     },
     searchFailures: {
-      total: searchFailures.length,
+      total: searchFailureCount,
       items: searchFailures.sort(newestFirst).slice(0, LIST_LIMIT),
     },
     notFoundAnswers: {
-      total: notFoundAnswers.length,
+      total: notFoundCount,
       items: notFoundAnswers.sort(newestFirst).slice(0, LIST_LIMIT),
     },
     departments: [...departmentUsage.values()]
@@ -213,16 +258,18 @@ function computeUsageStats({
 
 const cache = new Map();
 
-async function loadUsageStats(period = "7d", { now = new Date() } = {}) {
-  const key = PERIODS[period] ? period : "7d";
+async function loadUsageStats(period = "7d", { now = new Date(), startDate, endDate, departmentIds = [] } = {}) {
+  period = period === 'custom' || PERIODS[period] ? period : '7d';
+  const filters = usageFilters(period, { startDate, endDate, departmentIds, now });
+  const key = JSON.stringify([period, startDate, endDate, filters.departmentIds, kstParts(now).day]);
   const cached = cache.get(key);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.body;
 
   const prisma = require("../prisma");
-  const since = periodStart(key, now);
+  const { since, until } = filters;
   const [chats, users, departments, documentRows] = await Promise.all([
     prisma.workspace_chats.findMany({
-      where: { createdAt: { gte: since } },
+      where: { createdAt: { gte: since, lt: until } },
       select: { prompt: true, response: true, user_id: true, createdAt: true },
     }),
     prisma.users.findMany({ select: { id: true, department_id: true } }),
@@ -242,11 +289,17 @@ async function loadUsageStats(period = "7d", { now = new Date() } = {}) {
       users,
       departments,
       documents,
-      period: key,
+      period,
       now,
+      startDate,
+      endDate,
+      departmentIds: filters.departmentIds,
     }),
+    availableDepartments: departments.map(({ id, name }) => ({ id, name })).sort((a,b)=>a.name.localeCompare(b.name,'ko')),
+    selection: { period, startDate: kstParts(since).day, endDate: period === 'custom' ? endDate : kstParts(now).day, departmentIds: filters.departmentIds },
     generatedAt: now.toISOString(),
   };
+  if (cache.size >= 100) cache.clear();
   cache.set(key, { at: Date.now(), body });
   return body;
 }

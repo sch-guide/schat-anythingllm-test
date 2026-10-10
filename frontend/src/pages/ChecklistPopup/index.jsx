@@ -2,18 +2,21 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import Checklist from "@/models/checklist";
 import ChecklistTree from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Checklist/ChecklistTree";
+import ChecklistResetButton from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Checklist/ChecklistResetButton";
+import useChecklistChecks from "@/hooks/useChecklistChecks";
 
 /**
  * Standalone checklist window opened with window.open(). It loads the
  * checklist itself so it keeps working while the main SCHAT window is
- * minimized, navigated or closed. Checks and fold state live until this
- * window is closed; nothing is persisted.
+ * minimized, navigated or closed. Checks are saved per user and checklist
+ * (shared with the floating panel); fold state lives until the window closes.
  */
 export default function ChecklistPopup() {
   const { slug, checklistId } = useParams();
   const [checklist, setChecklist] = useState(null);
   const [status, setStatus] = useState("loading");
-  const [checkedItems, setCheckedItems] = useState({});
+  const { checkedItems, setCheckedItems, resetCheckedItems } =
+    useChecklistChecks(checklistId);
   const [expandedSections, setExpandedSections] = useState({});
 
   useEffect(() => {
@@ -43,9 +46,15 @@ export default function ChecklistPopup() {
       {status === "ready" ? (
         <>
           <header className="shrink-0 border-b border-zinc-700 px-4 py-3 light:border-slate-200">
-            <h1 className="m-0 text-base font-semibold text-zinc-50 light:text-slate-900">
-              {checklist.title} 체크리스트
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="m-0 min-w-0 flex-1 text-base font-semibold text-zinc-50 light:text-slate-900">
+                {checklist.title} 체크리스트
+              </h1>
+              <ChecklistResetButton
+                checkedItems={checkedItems}
+                onReset={resetCheckedItems}
+              />
+            </div>
             <p className="m-0 mt-1 text-xs text-zinc-400 light:text-slate-600">
               {checklist.source?.filename || ""}
             </p>

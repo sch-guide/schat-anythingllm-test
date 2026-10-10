@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowSquareOut, CaretUp, Minus, X } from "@phosphor-icons/react";
 import ChecklistTree from "./ChecklistTree";
+import ChecklistResetButton from "./ChecklistResetButton";
+import useChecklistChecks from "@/hooks/useChecklistChecks";
 
 const INITIAL_SIZE = { width: 390, height: 520 };
 const MIN_SIZE = { width: 310, height: 260 };
@@ -36,7 +38,9 @@ export default function ChecklistFloatingPanel({
   cascadeIndex = 0,
 }) {
   const [minimized, setMinimized] = useState(false);
-  const [checkedItems, setCheckedItems] = useState({});
+  // Checks are saved per user and checklist, so reopening keeps them.
+  const { checkedItems, setCheckedItems, resetCheckedItems } =
+    useChecklistChecks(checklist?.id);
   const [expandedSections, setExpandedSections] = useState({});
   // Each checklist panel owns its own position; later panels open slightly
   // offset so several checklists can be used side by side.
@@ -191,9 +195,15 @@ export default function ChecklistFloatingPanel({
       <div
         className={`${minimized ? "hidden" : "flex"} min-h-0 flex-1 flex-col`}
       >
-        <p className="m-0 shrink-0 px-4 py-2 text-xs text-zinc-400 light:text-slate-600">
-          {checklist.source?.filename || ""}
-        </p>
+        <div className="flex shrink-0 items-center gap-2 px-4 py-2">
+          <p className="m-0 min-w-0 flex-1 truncate text-xs text-zinc-400 light:text-slate-600">
+            {checklist.source?.filename || ""}
+          </p>
+          <ChecklistResetButton
+            checkedItems={checkedItems}
+            onReset={resetCheckedItems}
+          />
+        </div>
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-4">
           <ChecklistTree
             checklist={checklist}

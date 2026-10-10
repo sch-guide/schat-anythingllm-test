@@ -330,8 +330,12 @@ function schatAdminEndpoints(app) {
     async (request, response) => {
       try {
         const period = String(request.query?.period || "7d");
-        response.status(200).json(await loadUsageStats(period));
+        const { startDate, endDate, departments } = request.query || {};
+        const departmentIds = departments === undefined || departments === '' ? [] :
+          typeof departments === 'string' ? departments.split(',') : [null];
+        response.status(200).json(await loadUsageStats(period, { startDate, endDate, departmentIds }));
       } catch (e) {
+        if (e.status === 400) return response.status(400).json({ error: e.message });
         console.error("[schat-admin] usage stats failed:", e.message);
         response.sendStatus(500).end();
       }

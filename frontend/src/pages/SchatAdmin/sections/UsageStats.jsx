@@ -84,18 +84,41 @@ function QuestionList({ items = [], total = 0, empty }) {
 export default function UsageStatsSection() {
   const [period, setPeriod] = useState("7d");
   const [stats, setStats] = useState(null);
+  const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
+  const [departmentIds, setDepartmentIds] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [selection, setSelection] = useState({ period: '7d', departmentIds: [] });
+  const [validation, setValidation] = useState('');
 
   useEffect(() => {
+    let active = true;
     setStats(null);
-    SchatAdmin.usageStats(period).then((result) =>
-      setStats(result || { error: true })
-    );
-  }, [period]);
+    SchatAdmin.usageStats(selection.period, selection).then((result) => {
+      if (!active) return;
+      setStats(result || { error: true });
+      if (result?.availableDepartments) setDepartments(result.availableDepartments);
+    });
+    return () => { active = false; };
+  }, [selection]);
+
+  function applySelection(event) {
+    event.preventDefault();
+    if (period === 'custom' && (!startDate || !endDate || startDate > endDate || endDate > today ||
+      (new Date(endDate) - new Date(startDate)) / 86400000 >= 366)) {
+      setValidation('날짜를 확인해 주세요. 시작일~종료일은 최대 366일이며 미래 날짜는 선택할 수 없습니다.');
+      return;
+    }
+    setValidation('');
+    setSelection({ period, startDate, endDate, departmentIds: [...departmentIds] });
+  }
 
   return (
     <div className="flex flex-col gap-y-5">
+      <form onSubmit={applySelection} className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="기간">
-        {USAGE_PERIODS.map(([key, label]) => (
+        {[...USAGE_PERIODS, ['custom', '날짜 직접 선택']].map(([key, label]) => (
           <button
             key={key}
             type="button"
@@ -112,11 +135,36 @@ export default function UsageStatsSection() {
           </button>
         ))}
       </div>
+      {period === 'custom' && (
+        <div className="flex flex-wrap gap-3">
+          <label>시작일 <input aria-label="시작일" type="date" value={startDate} max={today} onChange={e=>setStartDate(e.target.value)} className="rounded border border-theme-sidebar-border bg-theme-bg-primary p-2" /></label>
+          <label>종료일 <input aria-label="종료일" type="date" value={endDate} min={startDate} max={today} onChange={e=>setEndDate(e.target.value)} className="rounded border border-theme-sidebar-border bg-theme-bg-primary p-2" /></label>
+        </div>
+      )}
+      <fieldset className="flex flex-wrap gap-2">
+        <legend className="mb-2 text-sm">대상 부서 (여러 부서 선택 가능)</legend>
+        <button type="button" aria-pressed={!departmentIds.length} onClick={()=>setDepartmentIds([])} className={`rounded-full border px-3 py-1 ${!departmentIds.length ? 'border-sky-500 bg-sky-500/15' : 'border-theme-sidebar-border'}`}>전체 부서</button>
+        {departments.map(dept=>(
+          <label key={dept.id} className={`flex items-center gap-2 rounded-full border px-3 py-1 ${departmentIds.includes(dept.id) ? 'border-sky-500 bg-sky-500/15' : 'border-theme-sidebar-border'}`}>
+            <input type="checkbox" checked={departmentIds.includes(dept.id)} onChange={()=>setDepartmentIds(ids=>ids.includes(dept.id)?ids.filter(id=>id!==dept.id):[...ids,dept.id])} />{dept.name}
+          </label>
+        ))}
+      </fieldset>
+      <p className="text-xs text-theme-text-secondary">기존 기록은 삭제하지 않습니다. 부서는 현재 계정 정보 기준이며, 선택한 부서의 질문과 저장된 토큰을 합산합니다. 질문 목록은 최근 90일 이내 최대 100건만 표시하며, 5명 미만 부서 선택 시 통계를 숨깁니다. 조건 변경 후 조회를 눌러 주세요.</p>
+      {validation && <p role="alert" className="text-red-500">{validation}</p>}
+      <button type="submit" className="self-start rounded-lg bg-sky-600 px-5 py-2 text-white">조회</button>
+      </form>
+
+      {stats?.selection && <p role="status" className="text-sm text-theme-text-secondary">
+        적용 기간: {stats.selection.startDate} ~ {stats.selection.endDate} (한국 시간) · 대상: {stats.selection.departmentIds.length ? departments.filter(d=>stats.selection.departmentIds.includes(d.id)).map(d=>d.name).join(', ') : '전체 부서'}
+      </p>}
 
       {!stats ? (
         <Loading />
       ) : stats.error ? (
-        <Notice tone="warning">통계를 불러오지 못했습니다.</Notice>
+        <Notice tone="warning">통계를 불러오지 못했습니다. 날짜와 부서 선택을 확인한 뒤 다시 조회해 주세요.</Notice>
+      ) : stats.suppressed ? (
+        <Notice tone="warning">{stats.message}</Notice>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2">

@@ -17,13 +17,19 @@ const SchatAdmin = {
       });
   },
   // 사용 통계 (admin only). period: today | 7d | 30d | 90d
-  usageStats: async (period = "7d") => {
+  usageStats: async (period = "7d", { startDate, endDate, departmentIds = [] } = {}) => {
+    const query = new URLSearchParams({ period });
+    if (period === 'custom') {
+      query.set('startDate', startDate || '');
+      query.set('endDate', endDate || '');
+    }
+    if (departmentIds.length) query.set('departments', departmentIds.join(','));
     return await fetch(
-      `${API_BASE}/schat-admin/usage-stats?period=${encodeURIComponent(period)}`,
+      `${API_BASE}/schat-admin/usage-stats?${query}`,
       { method: "GET", headers: baseHeaders() }
     )
       .then((res) => {
-        if (!res.ok) throw new Error("통계를 불러오지 못했습니다.");
+        if (!res.ok) throw new Error("통계를 불러오지 못했습니다. 날짜와 부서 선택을 확인해 주세요.");
         return res.json();
       })
       .catch(() => null);

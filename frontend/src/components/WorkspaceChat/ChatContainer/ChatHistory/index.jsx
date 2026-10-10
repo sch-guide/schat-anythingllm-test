@@ -1,7 +1,9 @@
 import { useMemo, useCallback, forwardRef, useEffect, useState } from "react";
 import HistoricalMessage from "./HistoricalMessage";
 import PromptReply from "./PromptReply";
-import StatusResponse from "./StatusResponse";
+import StatusResponse, { StoppedNotice } from "./StatusResponse";
+import { waitingPhase } from "@/utils/schatWaitingStatus";
+import { ABORT_STREAM_EVENT } from "@/utils/chat";
 import ToolApprovalRequest from "./ToolApprovalRequest";
 import ClarifyingQuestionCard from "./ClarifyingQuestion";
 import FileDownloadCard from "./FileDownloadCard";
@@ -216,7 +218,42 @@ export default forwardRef(function (
   const runIsLive = !!websocket || isLastMessageAnimating;
   const answerHasStarted = hasVisibleAssistantAnswer(history);
   const isWaitingForAnswer = runIsLive && !answerHasStarted;
-  const latestUserTurnKey = latestUserMessageKey(history);
+  const phase = waitingPhase(history);
+  // The question's position stays the same during a run, while its message
+  // object can change (for example when the server returns its chat id), so
+  // the waiting time and the stop state are tied to the position.
+  const waitingTurn = `turn-${latestUserMessageIndex(history)}`;
+  const [waitStart, setWaitStart] = useState({ turn: null, at: 0 });
+  useEffect(() => {
+    if (isWaitingForAnswer && waitStart.turn !== waitingTurn)
+      setWaitStart({ turn: waitingTurn, at: Date.now() });
+  }, [isWaitingForAnswer, waitingTurn, waitStart.turn]);
+  // [멈추기] or the automatic stop: which question was stopped and why.
+  const [stoppedTurn, setStoppedTurn] = useState(null);
+  const stopAnswer = useCallback(
+    (reason) => {
+      setStoppedTurn({ key: waitingTurn, reason });
+      // Same signal as the stop button: closes the agent connection, and
+      // the server then stops the run without saving an empty answer.
+      window.dispatchEvent(new CustomEvent(ABORT_STREAM_EVENT));
+    },
+    [waitingTurn]
+  );
+  const showStopped =
+    stoppedTurn?.key === waitingTurn && !answerHasStarted && !runIsLive;
+  const retryStoppedQuestion = useCallback(() => {
+    const index = latestUserMessageIndex(history);
+    const question = history[index];
+    if (!question?.content) return;
+    setStoppedTurn(null);
+    // Ask the same question again in place of the stopped one.
+    sendCommand({
+      text: question.content,
+      autoSubmit: true,
+      history: history.slice(0, index),
+      attachments: question.attachments || [],
+    });
+  }, [history, sendCommand]);
 
   return (
     <MessageActionsProvider>
@@ -230,9 +267,18 @@ export default forwardRef(function (
           <div className="w-full max-w-[750px]">
             {compiledHistory.map((item) => (Array.isArray(item) ? null : item))}
             <StatusResponse
-              key={latestUserTurnKey}
+              key={waitingTurn}
               isThinking={isWaitingForAnswer}
+              phase={phase}
+              onStop={stopAnswer}
+              startedAt={waitStart.turn === waitingTurn ? waitStart.at : null}
             />
+            {showStopped && (
+              <StoppedNotice
+                reason={stoppedTurn.reason}
+                onRetry={retryStoppedQuestion}
+              />
+            )}
           </div>
           {showing && (
             <ManageWorkspace
@@ -290,12 +336,6 @@ function hasVisibleAssistantAnswer(history = []) {
       message.content.replace(THOUGHT_REGEX_COMPLETE, "").trim().length > 0
     );
   });
-}
-
-function latestUserMessageKey(history = []) {
-  const index = latestUserMessageIndex(history);
-  const message = history[index];
-  return message?.uuid || message?.chatId || `user-turn-${index}`;
 }
 
 function latestUserMessageIndex(history = []) {

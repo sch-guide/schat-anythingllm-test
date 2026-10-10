@@ -1,6 +1,16 @@
 const { WorkspaceChats } = require("../../../../models/workspaceChats");
 const { WorkspaceThread } = require("../../../../models/workspaceThread");
 
+// SCHAT: a run stopped before its answer was saved ([멈추기], the automatic
+// stop after 70 seconds, or a closed window) must not leave an empty answer
+// in the chat history. Only the pre-registered row that still has no answer
+// is removed; a saved answer is never touched.
+function forgetUnansweredChat(aibitat) {
+  const chatId = aibitat.trackedChatId;
+  if (!chatId) return null;
+  return WorkspaceChats.delete({ id: Number(chatId), response: "{}" });
+}
+
 /**
  * Plugin to save chat history to AnythingLLM DB.
  */
@@ -17,6 +27,7 @@ const chatHistory = {
         // the pending save so a completing in-flight response doesn't reappear.
         aibitat.onAbort(() => {
           aibitat._aborted = true;
+          forgetUnansweredChat(aibitat);
         });
 
         // pre-register a workspace chat ID to secure it in the DB
@@ -56,6 +67,8 @@ const chatHistory = {
               response: {},
             });
             if (chat) aibitat.registerChatId(chat.id);
+            // Stopped while the row was being created.
+            if (chat && aibitat._aborted) await forgetUnansweredChat(aibitat);
           }
         });
 
@@ -207,4 +220,4 @@ const chatHistory = {
   },
 };
 
-module.exports = { chatHistory };
+module.exports = { chatHistory, forgetUnansweredChat };

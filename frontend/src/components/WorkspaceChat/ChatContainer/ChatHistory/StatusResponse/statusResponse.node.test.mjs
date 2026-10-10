@@ -12,7 +12,7 @@ const frontendRoot = path.resolve(
   "../../../../../.."
 );
 
-async function renderStatus({ isThinking }) {
+async function renderStatus({ isThinking, phase = "search", stopped = null }) {
   const outputDirectory = await mkdtemp(
     path.join(tmpdir(), "schat-answer-generation-status-")
   );
@@ -26,18 +26,22 @@ async function renderStatus({ isThinking }) {
   const entry = `
     import React from "react";
     import { renderToStaticMarkup } from "react-dom/server";
-    import StatusResponse from "./src/components/WorkspaceChat/ChatContainer/ChatHistory/StatusResponse/index.jsx";
+    import StatusResponse, { StoppedNotice } from "./src/components/WorkspaceChat/ChatContainer/ChatHistory/StatusResponse/index.jsx";
     import { I18nextProvider } from "react-i18next";
     import i18n from "i18next";
     i18n.init({ lng: "ko", resources: { ko: { translation: {} } } });
     export function renderFixture() {
+      const stopped = ${JSON.stringify(stopped)};
       return renderToStaticMarkup(
         React.createElement(I18nextProvider, { i18n },
-          React.createElement(StatusResponse, {
-            messages: [{ uuid: "tool-1", type: "statusResponse", content: "@agent is executing rag-memory tool { private: true }" }],
-            isThinking: ${JSON.stringify(isThinking)},
-            isLastGroup: true,
-          })
+          stopped
+            ? React.createElement(StoppedNotice, { reason: stopped, onRetry: () => {} })
+            : React.createElement(StatusResponse, {
+                messages: [{ uuid: "tool-1", type: "statusResponse", content: "@agent is executing rag-memory tool { private: true }" }],
+                isThinking: ${JSON.stringify(isThinking)},
+                phase: ${JSON.stringify(phase)},
+                onStop: () => {},
+              })
         )
       );
     }
@@ -52,7 +56,7 @@ async function renderStatus({ isThinking }) {
     jsx: "automatic",
     define: { "import.meta.env.VITE_API_BASE": '"/api"' },
     banner: {
-      js: 'globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };',
+      js: "globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };",
     },
     inject: [reactInjectFile],
     nodePaths: [path.join(frontendRoot, "node_modules")],
@@ -88,11 +92,39 @@ async function renderStatus({ isThinking }) {
   return module.renderFixture();
 }
 
-test("active agent work shows only a simple elapsed answer status", async () => {
+test("active agent work shows the friendly step, the time and a stop button only", async () => {
   const html = await renderStatus({ isThinking: true });
 
-  assert.match(html, /답변 생성 중 · 1초/);
+  assert.match(html, /문서를 찾는 중… · 1초/);
+  assert.match(html, />멈추기</);
   assert.doesNotMatch(html, /rag-memory|executing|private/);
+  // The slow notice appears only after 20 seconds.
+  assert.doesNotMatch(html, /오래 걸리고 있습니다/);
+});
+
+test("each step has its own words", async () => {
+  assert.match(
+    await renderStatus({ isThinking: true, phase: "research" }),
+    /문서를 한 번 더 찾는 중…/
+  );
+  assert.match(
+    await renderStatus({ isThinking: true, phase: "answer" }),
+    /답변을 작성하는 중…/
+  );
+});
+
+test("a stopped answer offers 다시 시도 and never says the guideline is missing", async () => {
+  const user = await renderStatus({ isThinking: false, stopped: "user" });
+  const timeout = await renderStatus({ isThinking: false, stopped: "timeout" });
+  assert.match(user, /답변을 멈췄습니다/);
+  assert.match(
+    timeout,
+    /응답이 늦어지고 있습니다\. 잠시 후 다시 시도해 주세요\./
+  );
+  for (const html of [user, timeout]) {
+    assert.match(html, />다시 시도</);
+    assert.doesNotMatch(html, /확인되지 않습니다/);
+  }
 });
 
 test("completed agent activity leaves no internal status in the conversation", async () => {
