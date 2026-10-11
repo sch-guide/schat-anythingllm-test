@@ -3,7 +3,10 @@ import { createPortal } from "react-dom";
 import { ArrowSquareOut, CaretUp, Minus, X } from "@phosphor-icons/react";
 import ChecklistTree from "./ChecklistTree";
 import ChecklistResetButton from "./ChecklistResetButton";
-import useChecklistChecks from "@/hooks/useChecklistChecks";
+import ChecklistLeftoverNotice from "./ChecklistLeftoverNotice";
+import useChecklistPersonalState from "@/hooks/useChecklistPersonalState";
+import ChecklistPersonalStatus from "./ChecklistPersonalStatus";
+import ChecklistMemo from "./ChecklistMemo";
 
 const INITIAL_SIZE = { width: 390, height: 520 };
 const MIN_SIZE = { width: 310, height: 260 };
@@ -39,8 +42,14 @@ export default function ChecklistFloatingPanel({
 }) {
   const [minimized, setMinimized] = useState(false);
   // Checks are saved per user and checklist, so reopening keeps them.
-  const { checkedItems, setCheckedItems, resetCheckedItems } =
-    useChecklistChecks(checklist?.id);
+  const {
+    checkedItems,
+    setCheckedItems,
+    resetCheckedItems,
+    leftover,
+    dismissLeftover,
+    patientInfo, otherMemo, setMemoField, flush, disabled, error, reload, remaining,
+  } = useChecklistPersonalState(checklist?.id, isOpen);
   const [expandedSections, setExpandedSections] = useState({});
   // Each checklist panel owns its own position; later panels open slightly
   // offset so several checklists can be used side by side.
@@ -204,9 +213,24 @@ export default function ChecklistFloatingPanel({
             onReset={resetCheckedItems}
           />
         </div>
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-4">
+        <ChecklistLeftoverNotice
+          leftover={leftover}
+          onDismiss={dismissLeftover}
+        />
+        <ChecklistPersonalStatus error={error} reload={reload} remaining={remaining} />
+        <fieldset disabled={disabled} className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto border-0 px-3 pb-4">
+          <ChecklistMemo
+            id="patient"
+            title="환자정보"
+            compact
+            placeholder="예: 612호 / 김민지"
+            value={patientInfo}
+            onChange={(value) => setMemoField("patient", value)}
+            onBlur={flush}
+          />
           <ChecklistTree
             checklist={checklist}
+            tone="blue"
             checkedItems={checkedItems}
             onCheckedChange={setCheckedItems}
             expandedSections={expandedSections}
@@ -217,7 +241,15 @@ export default function ChecklistFloatingPanel({
               }))
             }
           />
-        </div>
+          <ChecklistMemo
+            id="other"
+            title="기타메모"
+            placeholder="추가로 기록할 내용을 입력하세요"
+            value={otherMemo}
+            onChange={(value) => setMemoField("other", value)}
+            onBlur={flush}
+          />
+        </fieldset>
         {!isMobile &&
           RESIZE_HANDLES.map(({ key, label, edges, className }) => (
             <div

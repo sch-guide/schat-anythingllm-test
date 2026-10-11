@@ -3,7 +3,10 @@ import { useParams } from "react-router-dom";
 import Checklist from "@/models/checklist";
 import ChecklistTree from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Checklist/ChecklistTree";
 import ChecklistResetButton from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Checklist/ChecklistResetButton";
-import useChecklistChecks from "@/hooks/useChecklistChecks";
+import ChecklistLeftoverNotice from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Checklist/ChecklistLeftoverNotice";
+import useChecklistPersonalState from "@/hooks/useChecklistPersonalState";
+import ChecklistPersonalStatus from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Checklist/ChecklistPersonalStatus";
+import ChecklistMemo from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Checklist/ChecklistMemo";
 
 /**
  * Standalone checklist window opened with window.open(). It loads the
@@ -15,8 +18,14 @@ export default function ChecklistPopup() {
   const { slug, checklistId } = useParams();
   const [checklist, setChecklist] = useState(null);
   const [status, setStatus] = useState("loading");
-  const { checkedItems, setCheckedItems, resetCheckedItems } =
-    useChecklistChecks(checklistId);
+  const {
+    checkedItems,
+    setCheckedItems,
+    resetCheckedItems,
+    leftover,
+    dismissLeftover,
+    patientInfo, otherMemo, setMemoField, flush, disabled, error, reload, remaining,
+  } = useChecklistPersonalState(checklistId);
   const [expandedSections, setExpandedSections] = useState({});
 
   useEffect(() => {
@@ -59,9 +68,28 @@ export default function ChecklistPopup() {
               {checklist.source?.filename || ""}
             </p>
           </header>
-          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-4">
+          {leftover && (
+            <div className="shrink-0 pt-3">
+              <ChecklistLeftoverNotice
+                leftover={leftover}
+                onDismiss={dismissLeftover}
+              />
+            </div>
+          )}
+          <ChecklistPersonalStatus error={error} reload={reload} remaining={remaining} />
+          <fieldset disabled={disabled} className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto border-0 px-3 py-4">
+            <ChecklistMemo
+              id="patient"
+              title="환자정보"
+              compact
+              placeholder="예: 612호 / 김민지"
+              value={patientInfo}
+              onChange={(value) => setMemoField("patient", value)}
+              onBlur={flush}
+            />
             <ChecklistTree
               checklist={checklist}
+              tone="blue"
               checkedItems={checkedItems}
               onCheckedChange={setCheckedItems}
               expandedSections={expandedSections}
@@ -72,7 +100,15 @@ export default function ChecklistPopup() {
                 }))
               }
             />
-          </div>
+            <ChecklistMemo
+              id="other"
+              title="기타메모"
+              placeholder="추가로 기록할 내용을 입력하세요"
+              value={otherMemo}
+              onChange={(value) => setMemoField("other", value)}
+              onBlur={flush}
+            />
+          </fieldset>
         </>
       ) : (
         <p className="m-auto px-6 text-center text-sm text-zinc-300 light:text-slate-600">

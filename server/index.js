@@ -68,6 +68,16 @@ if (
   );
 }
 app.use(cors({ origin: true }));
+// Private notes: reject malformed/oversized bodies without echoing JSON text.
+app.use(/^\/api\/workspace\/[^/]+\/checklists\/[^/]+\/personal-state\/?$/, (req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  if (req.method !== "PUT") return next();
+  if (!req.is("application/json")) return res.status(415).json({ code: "INVALID_STATE" });
+  return express.json({ limit: "64kb" })(req, res, (error) => {
+    if (error) return res.status(error.status === 413 ? 413 : 400).json({ code: "INVALID_STATE" });
+    next();
+  });
+});
 app.use(bodyParser.text({ limit: FILE_LIMIT }));
 app.use(bodyParser.json({ limit: FILE_LIMIT }));
 app.use(
@@ -86,6 +96,7 @@ if (!!process.env.ENABLE_HTTPS) {
 app.use("/api", apiRouter);
 systemEndpoints(apiRouter);
 workspaceEndpoints(apiRouter);
+require("./endpoints/checklistPersonalState").checklistPersonalStateEndpoints(apiRouter);
 workspaceThreadEndpoints(apiRouter);
 chatEndpoints(apiRouter);
 adminEndpoints(apiRouter);

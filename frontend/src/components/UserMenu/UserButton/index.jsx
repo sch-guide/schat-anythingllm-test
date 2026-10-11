@@ -17,6 +17,8 @@ import MyReportsModal from "@/components/SchatAccount/MyReportsModal";
 import NotificationBell from "@/components/SchatAccount/NotificationBell";
 import { mergeStoredUser } from "@/components/SchatAccount/storedUser";
 import showToast from "@/utils/toast";
+import { purgeChecklistMemos } from "@/utils/checklistMemo";
+import { clearLegacyChecklistCopies } from "@/utils/checklistPersonalSession";
 
 const ROLE_LABELS = { admin: "관리자", default: "일반사용자" };
 
@@ -131,6 +133,11 @@ export default function UserButton() {
               window.localStorage.removeItem(AUTH_TIMESTAMP);
               window.localStorage.removeItem(LAST_VISITED_WORKSPACE);
               window.localStorage.removeItem(USER_PROMPT_INPUT_MAP);
+              // Checklist notes may hold patient names: never keep them
+              // past logout on a shared PC.
+              purgeChecklistMemos(window.localStorage);
+              clearLegacyChecklistCopies(window.localStorage);
+              window.dispatchEvent(new Event("schat-personal-logout"));
               window.location.replace(paths.home());
             }}
             type="button"

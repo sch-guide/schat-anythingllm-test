@@ -22,6 +22,7 @@ import {
   setLineCheckable,
   updateLine,
 } from "@/utils/checklistLines";
+import { checklistTone } from "./checklistTone";
 
 // In edit mode every text is replaced in place by a field with the same
 // typography, so the administrator edits exactly where the text is shown.
@@ -66,7 +67,7 @@ function Tools({ children }) {
   );
 }
 
-function ParentCheckbox({ state, label, onChange, disabled }) {
+function ParentCheckbox({ state, label, onChange, disabled, boxClass }) {
   const ref = useRef(null);
   useEffect(() => {
     if (ref.current) ref.current.indeterminate = state === "indeterminate";
@@ -82,7 +83,7 @@ function ParentCheckbox({ state, label, onChange, disabled }) {
       disabled={disabled}
       aria-label={`${label} 전체`}
       data-checklist-parent=""
-      className="mt-1 h-5 w-5 shrink-0 accent-sky-600"
+      className={`mt-1 h-5 w-5 shrink-0 ${boxClass}`}
     />
   );
 }
@@ -269,6 +270,7 @@ function CheckableItem({
   lineChange,
   itemTools,
   onLabel,
+  boxClass,
 }) {
   const state = parentState(scope, item, checkedItems);
   const Row = editing ? "div" : "label";
@@ -281,6 +283,7 @@ function CheckableItem({
           state={state}
           label={item.label}
           disabled={editing}
+          boxClass={boxClass}
           onChange={() =>
             onCheckedChange?.(toggleParent(scope, item, checkedItems))
           }
@@ -323,7 +326,7 @@ function CheckableItem({
                       disabled
                       aria-label={`${detail} 체크박스`}
                       data-checklist-child=""
-                      className="mt-1 h-4 w-4 shrink-0 accent-sky-600"
+                      className={`mt-1 h-4 w-4 shrink-0 ${boxClass}`}
                     />
                   )}
                   <div className="flex min-w-0 flex-1 items-start gap-2">
@@ -360,7 +363,7 @@ function CheckableItem({
                   }
                   aria-label={detail}
                   data-checklist-child=""
-                  className="mt-1 h-4 w-4 shrink-0 accent-sky-600"
+                  className={`mt-1 h-4 w-4 shrink-0 ${boxClass}`}
                 />
                 <span
                   data-checklist-child-text=""
@@ -394,6 +397,9 @@ function CheckableItem({
  * updateItem(sectionIndex, itemIndex, updater), moveItem(sectionIndex,
  * itemIndex, direction), removeItem(sectionIndex, itemIndex) and
  * addItem(sectionIndex).
+ *
+ * `tone` only changes card colours: "blue" for the employee screens, the
+ * administrator screens keep "default".
  */
 export default function ChecklistTree({
   checklist,
@@ -402,15 +408,14 @@ export default function ChecklistTree({
   expandedSections = {},
   onToggleSection,
   edit = null,
+  tone = "default",
 }) {
   const editing = Boolean(edit);
+  const colors = checklistTone(tone);
   return (checklist?.sections || []).map((section, sectionIndex) => {
     const expanded = editing || expandedSections[section.id] !== false;
     return (
-      <section
-        key={section.id}
-        className="rounded-lg border border-zinc-700 bg-zinc-900 light:border-slate-200 light:bg-white"
-      >
+      <section key={section.id} className={`rounded-lg border ${colors.card}`}>
         {editing ? (
           <div className="flex w-full items-center gap-3 px-4 py-3">
             <input
@@ -427,14 +432,16 @@ export default function ChecklistTree({
             type="button"
             aria-expanded={expanded}
             onClick={() => onToggleSection?.(section.id, expanded)}
-            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-base font-semibold text-zinc-50 light:text-slate-900"
+            className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-base font-semibold ${colors.header}`}
           >
             <span>{section.title}</span>
             {expanded ? <CaretDown size={18} /> : <CaretRight size={18} />}
           </button>
         )}
         {expanded && (
-          <div className="flex flex-col gap-5 border-t border-zinc-700 px-4 py-4 light:border-slate-200">
+          <div
+            className={`flex flex-col gap-5 border-t px-4 py-4 ${colors.divider}`}
+          >
             {section.items.map((item, itemIndex) => {
               const editProps = editing
                 ? {
@@ -465,6 +472,7 @@ export default function ChecklistTree({
                   item={item}
                   checkedItems={checkedItems}
                   onCheckedChange={onCheckedChange}
+                  boxClass={colors.checkbox}
                   {...editProps}
                 />
               );

@@ -15,6 +15,19 @@ datasource db {
   url      = "file:../storage/anythingllm.db"
 }
 
+// Private employee checklist state; never join into chat, reports or analytics.
+model schat_checklist_personal_state {
+  userId      Int
+  checklistId String
+  revision    String
+  payload     String
+  updatedAt   BigInt
+  expiresAt   BigInt
+
+  @@id([userId, checklistId])
+  @@index([expiresAt], map: "schat_checklist_personal_state_expiry")
+}
+
 model api_keys {
   id            Int      @id @default(autoincrement())
   name          String?
