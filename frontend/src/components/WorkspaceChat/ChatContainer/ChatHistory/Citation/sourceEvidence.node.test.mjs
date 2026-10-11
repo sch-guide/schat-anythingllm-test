@@ -7,6 +7,15 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
+test("text-only retrieved source remains openable and explains PDF limitation", async () => {
+  const source = { title: "시험.txt", text: "시험카드를 확인합니다." };
+  const closed = await renderEvidenceRow(source);
+  assert.match(closed, /aria-expanded="false"/);
+  const opened = await renderEvidenceRow(source, { initiallyOpen: true });
+  assert.match(opened, /시험카드를 확인합니다/);
+  assert.match(opened, /원문 보기는 PDF 문서만 지원합니다/);
+});
+
 const frontendRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../../../../.."

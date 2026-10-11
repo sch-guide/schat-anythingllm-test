@@ -111,6 +111,11 @@ export default function MobileSourceScreen({
       }}
     >
       <header className="flex flex-col gap-2 border-b border-zinc-800 px-3 pb-2 pt-2 light:border-slate-200">
+        {!source?.pdfRef && (
+          <p role="status" className="text-xs text-zinc-400 light:text-slate-500">
+            원문 보기는 PDF 문서만 지원합니다. 아래는 답변에 사용된 근거 텍스트입니다.
+          </p>
+        )}
         <div className="flex items-center gap-2">
           <button
             type="button"

@@ -52,7 +52,9 @@ export function SourceEvidenceRow({
   const isMobile = useMobileViewport();
   const contentId = useId();
   const excerpt =
-    typeof source?.excerpt === "string" ? source.excerpt.trim() : "";
+    (typeof source?.excerpt === "string" && source.excerpt.trim()) ||
+    (/\.txt$/i.test(sourceDocumentName(source)) && typeof source?.text === "string"
+      ? source.text.trim() : "");
   const isLong = excerpt.length > LONG_EXCERPT_LENGTH;
   const summary = sourceSummary(source);
   const paragraphs = excerpt
@@ -129,6 +131,11 @@ export function SourceEvidenceRow({
             />
           ) : (
             <div className="mx-auto w-full max-w-[720px]">
+              {!source?.pdfRef && (
+                <p role="status" className="mb-3 text-xs text-zinc-400 light:text-slate-500">
+                  원문 보기는 PDF 문서만 지원합니다. 아래는 답변에 사용된 근거 텍스트입니다.
+                </p>
+              )}
               <div className="mb-3 flex items-center justify-between gap-2">
                 <p className="text-xs font-medium text-zinc-400 light:text-slate-500">
                   근거 원문
