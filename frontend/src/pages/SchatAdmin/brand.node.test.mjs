@@ -149,7 +149,15 @@ test("실제 관리자 React 화면의 파일선택·공지·저장·초기화�
   }
   const html = renderToStaticMarkup(tree());
   assert.match(html, /accept="\.png,\.svg,image\/png,image\/svg\+xml"/);
-  assert.match(html, /한국 시간/);
+  assert.doesNotMatch(html, /한국 시간|열린 화면에서도 종료 시간에 숨겨요/);
+  assert.equal(
+    html.match(/<label[^>]*for="brand-notice-start"[^>]*>(.*?)<\/label>/s)?.[1],
+    "시작 일시"
+  );
+  assert.equal(
+    html.match(/<label[^>]*for="brand-notice-end"[^>]*>(.*?)<\/label>/s)?.[1],
+    "종료 일시"
+  );
   // 4 sections + the notice title's own [원래대로]
   assert.equal((html.match(/>원래대로<\/button>/g) || []).length, 5);
   find(tree(), (el) => el.props.id === "brand-subtitle").props.onChange({
@@ -164,6 +172,20 @@ test("실제 관리자 React 화면의 파일선택·공지·저장·초기화�
   const checkbox = find(tree(), (el) => el.props.id === "brand-notice-enabled");
   checkbox.props.onChange({ target: { checked: true } });
   assert.equal(c.getSnapshot().draft.announcement.enabled, true);
+  find(tree(), (el) => el.props.id === "brand-notice-start").props.onChange({
+    target: { value: "2026-10-11T09:00" },
+  });
+  find(tree(), (el) => el.props.id === "brand-notice-end").props.onChange({
+    target: { value: "2026-10-11T10:00" },
+  });
+  assert.equal(
+    c.getSnapshot().draft.announcement.start,
+    "2026-10-11T00:00:00.000Z"
+  );
+  assert.equal(
+    c.getSnapshot().draft.announcement.end,
+    "2026-10-11T01:00:00.000Z"
+  );
 });
 test("직원 공지는 HTML을 글자로 표시하며 열린 화면의 종료 시각에 자동으로 사라짐", async () => {
   const { createBrandStore } = load("../../hooks/useSchatBrand.js", {

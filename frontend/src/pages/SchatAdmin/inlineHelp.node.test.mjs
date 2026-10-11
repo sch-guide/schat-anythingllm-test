@@ -21,4 +21,12 @@ test("도움말은 처음 접혀 있고 카드 제목과 유효한 HTML을 만�
   }
   assert.match(html, /항상 보이는 입력 안내/);
   assert.match(html, /카드 본문/);
+  const panels = [
+    ...html.matchAll(/<div[^>]*class="schat-help__panel"[^>]*>(.*?)<\/div>/gs),
+  ];
+  assert.equal(panels.length, 2);
+  for (const [, content] of panels) {
+    assert.match(content, /^<ul>/);
+    assert.doesNotMatch(content, /<button\b|닫기/);
+  }
 });

@@ -20,10 +20,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 20px;
+  flex: 0 0 18px;
   box-sizing: border-box;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border: 1px solid #0f766e;
   border-radius: 50%;
   padding: 0;
@@ -38,8 +38,7 @@
   color: #fff;
 }
 
-.schat-help__toggle:focus-visible,
-.schat-help__close:focus-visible {
+.schat-help__toggle:focus-visible {
   outline: 2px solid #0f766e;
   outline-offset: 3px;
 }
@@ -63,18 +62,7 @@
 }
 
 .schat-help__panel ul {
-  margin: 4px 0 0;
+  margin: 0;
   padding-left: 18px;
   list-style: disc;
-}
-
-.schat-help__close {
-  display: block;
-  margin-left: auto;
-  border: 0;
-  padding: 0 2px;
-  background: transparent;
-  color: #1e3a5f;
-  font: inherit;
-  cursor: pointer;
 }

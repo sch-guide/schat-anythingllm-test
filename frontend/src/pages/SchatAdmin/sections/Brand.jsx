@@ -265,7 +265,6 @@ export function BrandEditorView({ controller, state }) {
         help={[
           "제목은 8자까지 쓰고, 비우면 ‘공지사항’으로 보여요. 긴 공지는 천천히 반복해서 흘러가요.",
           "직원이 ✕로 닫으면 그 브라우저에서 오늘은 숨겨요. 제목·내용을 바꾸면 다시 보여요.",
-          "시작·종료는 한국 시간이며 비우면 제한이 없어요. 열린 화면에서도 종료 시간에 숨겨요.",
         ]}
       >
         <form {...form("announcement")}>
@@ -316,8 +315,8 @@ export function BrandEditorView({ controller, state }) {
           </Field>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {[
-              ["start", "시작 일시 (한국 시간)"],
-              ["end", "종료 일시 (한국 시간)"],
+              ["start", "시작 일시"],
+              ["end", "종료 일시"],
             ].map(([key, label]) => (
               <Field key={key} label={label} htmlFor={`brand-notice-${key}`}>
                 <input

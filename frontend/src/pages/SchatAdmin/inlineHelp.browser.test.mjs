@@ -11,7 +11,7 @@ import { helpFixture } from "./inlineHelp.testFixture.mjs";
 
 const require = createRequire(import.meta.url);
 
-test("실제 클릭·Enter·Space·닫기로 독립적으로 열고 접으며 좁은 화면에서 내용이 흐름을 따라 배치됨", async () => {
+test("실제 클릭·Enter·Space로 독립적으로 열고 접으며 좁은 화면에서 본문이 패딩 바로 아래 배치됨", async () => {
   let chromium;
   try {
     ({ chromium } = require(
@@ -59,6 +59,7 @@ test("실제 클릭·Enter·Space·닫기로 독립적으로 열고 접으며 �
     const firstId = await first.getAttribute("aria-controls");
     const panel = page.locator(`[id="${firstId}"]`);
     assert.equal(await panel.locator("li").count(), 2);
+    assert.equal(await panel.getByRole("button").count(), 0);
     const geometry = await panel.evaluate((el) => {
       const rect = el.getBoundingClientRect();
       const button = document
@@ -70,20 +71,28 @@ test("실제 클릭·Enter·Space·닫기로 독립적으로 열고 접으며 �
         right: rect.right,
         position: styles.position,
         overflow: document.documentElement.scrollWidth > 320,
+        firstTag: el.firstElementChild.tagName,
+        contentTop:
+          el.querySelector("ul").getBoundingClientRect().top - rect.top,
+        inset:
+          parseFloat(styles.paddingTop) + parseFloat(styles.borderTopWidth),
       };
     });
     assert.equal(geometry.below, true);
     assert.equal(geometry.position, "static");
     assert.equal(geometry.overflow, false);
     assert.ok(geometry.right <= 320);
+    assert.equal(geometry.firstTag, "UL");
+    assert.ok(Math.abs(geometry.contentTop - geometry.inset) < 1);
     assert.deepEqual(
       await first.evaluate((el) => [el.offsetWidth, el.offsetHeight]),
-      [20, 20]
+      [18, 18]
     );
     await second.focus();
     await page.keyboard.press("Enter");
     assert.equal(await second.getAttribute("aria-expanded"), "true");
-    await panel.getByRole("button", { name: "닫기" }).click();
+    await first.focus();
+    await page.keyboard.press("Space");
     assert.equal(await first.getAttribute("aria-expanded"), "false");
     assert.equal(
       await first.evaluate((el) => el === document.activeElement),

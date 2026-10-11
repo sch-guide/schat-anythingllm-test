@@ -1,6 +1,6 @@
 // Small building blocks shared by the SCHAT admin sections. Wording on these
 // screens is written for non-developer hospital administrators.
-import React, { useId, useRef, useState } from "react";
+import React, { useId, useState } from "react";
 
 export const inputClass =
   "schat-admin-input w-full rounded-lg px-3 py-2 text-sm outline-none bg-theme-settings-input-bg text-theme-text-primary placeholder:text-theme-settings-input-placeholder border border-transparent focus:border-sky-500";
@@ -8,13 +8,11 @@ export const inputClass =
 export function Help({ children, heading, label = "자세한 설명" }) {
   const id = useId();
   const [open, setOpen] = useState(false);
-  const toggle = useRef(null);
   return (
     <div className="schat-help">
       <div className="schat-help__heading">
         {heading}
         <button
-          ref={toggle}
           type="button"
           aria-label={label}
           aria-expanded={open}
@@ -32,16 +30,6 @@ export function Help({ children, heading, label = "자세한 설명" }) {
         role="region"
         aria-label={`${label} 설명`}
       >
-        <button
-          type="button"
-          className="schat-help__close"
-          onClick={() => {
-            setOpen(false);
-            toggle.current?.focus();
-          }}
-        >
-          닫기 <span aria-hidden="true">✕</span>
-        </button>
         <ul>
           {React.Children.toArray(children).map((line, index) => (
             <li key={index}>{line}</li>
