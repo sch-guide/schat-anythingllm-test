@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import vm from "node:vm";
 import { setImmediate } from "node:timers/promises";
 import * as review from "./synonymReview.js";
-import { findSchatAdminSection } from "./menu.js";
+import { SCHAT_ADMIN_TITLE, findSchatAdminSection } from "./menu.js";
 
 const require = createRequire(import.meta.url);
 const React = require("react");
@@ -31,6 +31,7 @@ const sectionDeps = {
   "@/components/WorkspaceChat/ChatContainer/ChatHistory/Citation/PdfPageViewer":
     () => null,
   "../ui": ui,
+  "../menu": { SCHAT_ADMIN_TITLE, findSchatAdminSection },
   "../synonymReview": review,
   "../synonymTable.css": {},
 };
@@ -160,41 +161,75 @@ test("suggestion safety badges, document pages and unsupported-source notice sur
   assert.doesNotMatch(html, /제안 정보|추가 후보/);
 });
 
-test("loaded synonym screen uses the shared title and exact description once", () => {
+function loadedSynonyms(selected = []) {
   // 서버 렌더링은 비동기 목록 읽기를 실행하지 않으므로 첫 상태에 빈 목록만 공급한다.
   // 나머지 hooks와 실제 화면/하위 구성요소는 React 그대로 렌더링한다.
-  let firstState = true;
+  let stateIndex = 0;
   const hooks = {
     ...React,
     useState(initial) {
-      const value = firstState ? [] : initial;
-      firstState = false;
+      const index = stateIndex++;
+      const value = index === 0 ? [] : index === 2 ? selected : initial;
       return React.useState(value);
     },
   };
-  const { default: SynonymsSection } = load("./sections/Synonyms.jsx", {
+  return load("./sections/Synonyms.jsx", {
     ...sectionDeps,
     react: hooks,
-  });
+  }).default;
+}
+
+function renderAdmin(sectionKey, SynonymsSection = loadedSynonyms()) {
+  const deps = {
+    "react-router-dom": {
+      Link: ({ children }) => React.createElement("a", null, children),
+      useNavigate: () => () => {},
+      useParams: () => ({ section: sectionKey }),
+    },
+    "react-device-detect": { isMobile: false },
+    "@/components/SettingsSidebar": () => null,
+    "@/models/workspace": {},
+    "@/utils/constants": { LAST_VISITED_WORKSPACE: "test" },
+    "@/utils/request": { safeJsonParse: JSON.parse },
+    "@/utils/paths": { home: () => "/", settings: { schatAdmin: () => "/" } },
+    "./menu": {
+      SCHAT_ADMIN_SECTIONS: [],
+      SCHAT_ADMIN_TITLE: "SCHAT 관리자 설정",
+      findSchatAdminSection,
+    },
+    "./ui": ui,
+    "./uiHelp.css": {},
+    "./GeminiAvailabilityBanner": () =>
+      React.createElement("aside", null, "가짜 공지"),
+  };
+  for (const name of [
+    "Brand",
+    "Answer",
+    "AnswerCache",
+    "Chunks",
+    "Users",
+    "Reports",
+    "Quiz",
+    "Checklists",
+    "UsageStats",
+    "Status",
+    "Storage",
+  ])
+    deps[`./sections/${name}`] = () => null;
+  deps["./sections/Synonyms"] = SynonymsSection;
+  const { default: SchatAdmin } = load("./index.jsx", deps);
+  return renderToStaticMarkup(React.createElement(SchatAdmin));
+}
+
+test("실제 동의어 관리 화면은 제목과 안내를 한 번만 표시하고 넓은 표 영역을 쓴다", () => {
   const section = findSchatAdminSection("synonyms");
-  const html = renderToStaticMarkup(
-    React.createElement(
-      "main",
-      null,
-      React.createElement(
-        "header",
-        null,
-        React.createElement("h1", null, section.label),
-        React.createElement("p", null, section.description)
-      ),
-      React.createElement(SynonymsSection)
-    )
-  );
+  const html = renderAdmin("synonyms");
   assert.equal((html.match(/>동의어 관리</g) || []).length, 1);
   const description =
     "같은 뜻의 말을 묶어 두면, 어떤 말로 물어도 지침을 잘 찾아요.";
   assert.equal(section.description, description);
   assert.equal(html.split(description).length - 1, 1);
+  assert.match(html, /max-w-\[1180px\]/);
   assert.match(html, /<table[^>]*aria-label="동의어 관리 표"/);
   for (const label of [
     "분류 전체",
@@ -205,6 +240,34 @@ test("loaded synonym screen uses the shared title and exact description once", (
     "작업",
   ])
     assert.ok(html.includes(label), label);
+});
+
+test("새 묶음은 제목·안내 블록과 같은 제목 영역에 있다", () => {
+  const html = renderAdmin("synonyms", loadedSynonyms([1]));
+  const header = html.match(/<header\b[^>]*>[\s\S]*?<\/header>/)?.[0];
+  assert.ok(header, "동의어 제목 영역이 있어야 한다");
+  assert.match(header, /<h1[^>]*>동의어 관리<\/h1>/);
+  assert.match(header, /\+ 새 묶음 추가/);
+});
+
+test("선택 작업은 검색·분류·문서와 같은 도구 줄에 있다", () => {
+  const html = renderAdmin("synonyms", loadedSynonyms([1]));
+  assert.match(
+    html,
+    /class="synonym-toolbar"[^>]*><div class="synonym-filters"[\s\S]*?aria-label="단어로 찾기"[\s\S]*?aria-label="분류 전체"[\s\S]*?aria-label="문서 전체"[\s\S]*?<\/select><\/div><div class="synonym-selection"[\s\S]*?묶음으로 등록[\s\S]*?선택 해제/
+  );
+});
+
+test("다른 관리 화면은 공통 제목·설명과 공지 위치를 유지한다", () => {
+  for (const key of ["brand", "answer", "users", "usage"]) {
+    const section = findSchatAdminSection(key);
+    const html = renderAdmin(key);
+    assert.equal((html.match(/<h1\b/g) || []).length, 1, key);
+    assert.ok(html.includes(`>${section.label}</h1>`), key);
+    assert.ok(html.includes(section.description), key);
+    assert.ok(html.indexOf("가짜 공지") < html.indexOf("<header"), key);
+    assert.doesNotMatch(html, /synonym-management/, key);
+  }
 });
 
 test("분류 수정 저장 후 등록만 실패해 편집행이 필터 밖으로 사라져도 화면 조작 잠금이 풀린다", async () => {

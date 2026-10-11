@@ -3,6 +3,7 @@ import SchatSynonyms from "@/models/schatSynonyms";
 import showToast from "@/utils/toast";
 import PdfPageViewer from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Citation/PdfPageViewer";
 import { Button, Loading, Notice, inputClass } from "../ui";
+import { SCHAT_ADMIN_TITLE, findSchatAdminSection } from "../menu";
 import {
   RUN_TRIGGER_LABELS,
   canOpenSource,
@@ -730,12 +731,24 @@ export default function SynonymsSection() {
       ),
     ]),
   ].sort((a, b) => a - b);
-  if (groups === null && !loadError) return <Loading />;
-  return (
-    <div className="synonym-management" data-testid="synonym-management">
+  const section = findSchatAdminSection("synonyms");
+  const loading = groups === null && !loadError;
+  const header = (
+    <header className="synonym-header pb-5 border-b-2 border-theme-sidebar-border">
+      <div className="flex flex-col gap-y-1">
+        <p className="text-xs font-medium text-theme-text-secondary">
+          {SCHAT_ADMIN_TITLE}
+        </p>
+        <h1 className="text-lg leading-6 font-bold text-theme-text-primary">
+          {section.label}
+        </h1>
+        <p className="text-xs leading-5 text-theme-text-secondary">
+          {section.description}
+        </p>
+      </div>
       <div className="synonym-top-actions">
         <Button
-          disabled={locked || draftOpen}
+          disabled={loading || locked || draftOpen}
           onClick={() => {
             setSelected([]);
             setCreating(true);
@@ -748,6 +761,18 @@ export default function SynonymsSection() {
           + 새 묶음 추가
         </Button>
       </div>
+    </header>
+  );
+  if (loading)
+    return (
+      <div className="synonym-management">
+        {header}
+        <Loading />
+      </div>
+    );
+  return (
+    <div className="synonym-management" data-testid="synonym-management">
+      {header}
       {loadError && (
         <Notice tone="warning">
           목록을 불러오지 못했어요. 새로 확인한 뒤 다시 저장해 주세요.{" "}
@@ -796,69 +821,71 @@ export default function SynonymsSection() {
             </button>
           ))}
         </div>
-        <div className="synonym-filters">
-          <input
-            aria-label="단어로 찾기"
-            placeholder="단어로 찾기"
-            value={filters.query}
-            disabled={busy || draftOpen}
-            onChange={(event) => changeFilter("query", event.target.value)}
-            className={inputClass}
-          />
-          <select
-            aria-label="분류 전체"
-            value={filters.kind}
-            disabled={busy || draftOpen}
-            onChange={(event) => changeFilter("kind", event.target.value)}
-            className={inputClass}
-          >
-            <option value="">분류 전체</option>
-            {Object.entries(SYNONYM_KIND_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="문서 전체"
-            value={filters.document}
-            disabled={busy || draftOpen}
-            onChange={(event) => changeFilter("document", event.target.value)}
-            className={inputClass}
-          >
-            <option value="">문서 전체</option>
-            {view.documents.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
-        {selected.length > 0 && (
-          <div className="synonym-selection">
-            <span>{selected.length}개 선택됨</span>
-            <Button
-              disabled={locked || draftOpen}
-              onClick={() => reviewGroups(selected, true)}
+        <div className="synonym-toolbar">
+          <div className="synonym-filters">
+            <input
+              aria-label="단어로 찾기"
+              placeholder="단어로 찾기"
+              value={filters.query}
+              disabled={busy || draftOpen}
+              onChange={(event) => changeFilter("query", event.target.value)}
+              className={inputClass}
+            />
+            <select
+              aria-label="분류 전체"
+              value={filters.kind}
+              disabled={busy || draftOpen}
+              onChange={(event) => changeFilter("kind", event.target.value)}
+              className={inputClass}
             >
-              묶음으로 등록
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={locked || draftOpen}
-              onClick={() => reviewGroups(selected, false)}
+              <option value="">분류 전체</option>
+              {Object.entries(SYNONYM_KIND_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="문서 전체"
+              value={filters.document}
+              disabled={busy || draftOpen}
+              onChange={(event) => changeFilter("document", event.target.value)}
+              className={inputClass}
             >
-              제외
-            </Button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setSelected([])}
-            >
-              선택 해제
-            </button>
+              <option value="">문서 전체</option>
+              {view.documents.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
           </div>
-        )}
+          {selected.length > 0 && (
+            <div className="synonym-selection">
+              <span>{selected.length}개 선택됨</span>
+              <Button
+                disabled={locked || draftOpen}
+                onClick={() => reviewGroups(selected, true)}
+              >
+                묶음으로 등록
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={locked || draftOpen}
+                onClick={() => reviewGroups(selected, false)}
+              >
+                제외
+              </Button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setSelected([])}
+              >
+                선택 해제
+              </button>
+            </div>
+          )}
+        </div>
         <div className="synonym-table-scroll">
           <table aria-label="동의어 관리 표" className="synonym-table">
             <thead>

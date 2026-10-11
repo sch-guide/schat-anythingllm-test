@@ -161,17 +161,19 @@ export default function SchatAdmin() {
               </select>
             </label>
           </nav>
-          <header className="flex flex-col gap-y-1 pb-5 border-b-2 border-theme-sidebar-border">
-            <p className="text-xs font-medium text-theme-text-secondary">
-              {SCHAT_ADMIN_TITLE}
-            </p>
-            <h1 className="text-lg leading-6 font-bold text-theme-text-primary">
-              {section.label}
-            </h1>
-            <p className="text-xs leading-5 text-theme-text-secondary">
-              {section.description}
-            </p>
-          </header>
+          {section.key !== "synonyms" && (
+            <header className="flex flex-col gap-y-1 pb-5 border-b-2 border-theme-sidebar-border">
+              <p className="text-xs font-medium text-theme-text-secondary">
+                {SCHAT_ADMIN_TITLE}
+              </p>
+              <h1 className="text-lg leading-6 font-bold text-theme-text-primary">
+                {section.label}
+              </h1>
+              <p className="text-xs leading-5 text-theme-text-secondary">
+                {section.description}
+              </p>
+            </header>
+          )}
           {showPicker && (
             <label className="flex flex-col gap-y-1.5 max-w-[360px]">
               <span className="text-sm font-medium text-theme-text-primary">

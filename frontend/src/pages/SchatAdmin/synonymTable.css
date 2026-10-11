@@ -5,8 +5,17 @@
   font-size: 14px;
   color: var(--theme-text-primary, #233138);
 }
+.synonym-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
 .synonym-top-actions {
   display: flex;
+  flex-shrink: 0;
+  margin-left: auto;
   justify-content: flex-end;
 }
 .synonym-table-card {
@@ -47,14 +56,22 @@
   background: #fff3cb;
   color: #947324;
 }
+.synonym-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 20px;
+}
 .synonym-filters {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(100px, 150px) minmax(
+  flex: 1 1 420px;
+  min-width: 0;
+  grid-template-columns: minmax(140px, 1fr) minmax(100px, 130px) minmax(
       120px,
-      220px
+      180px
     );
   gap: 10px;
-  padding: 16px 20px;
 }
 .synonym-filters input,
 .synonym-filters select,
@@ -71,9 +88,8 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 10px 20px;
-  background: #f0faf8;
-  border-top: 1px solid #ddede9;
+  margin-left: auto;
+  font-size: 12px;
 }
 .synonym-table-scroll {
   width: 100%;
@@ -369,9 +385,12 @@
   .synonym-status-tabs > button {
     font-size: 12px;
   }
-  .synonym-filters {
-    grid-template-columns: 1fr 1fr;
+  .synonym-toolbar {
     padding: 12px;
+  }
+  .synonym-filters {
+    flex-basis: 100%;
+    grid-template-columns: 1fr 1fr;
   }
   .synonym-filters > input {
     grid-column: 1/-1;
@@ -423,8 +442,5 @@
   }
   .synonym-pagination {
     padding: 12px;
-  }
-  .synonym-selection {
-    padding: 10px 12px;
   }
 }
