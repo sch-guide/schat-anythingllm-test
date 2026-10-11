@@ -1,10 +1,25 @@
 // Small building blocks shared by the SCHAT admin sections. Wording on these
 // screens is written for non-developer hospital administrators.
+import { useId } from "react";
 
 export const inputClass =
   "schat-admin-input w-full rounded-lg px-3 py-2 text-sm outline-none bg-theme-settings-input-bg text-theme-text-primary placeholder:text-theme-settings-input-placeholder border border-transparent focus:border-sky-500";
 
-export function Card({ title, description, children, tone = "default" }) {
+export function Help({ children }) {
+  const id = useId();
+  return (
+    <span className="group relative ml-1 inline-flex text-xs text-theme-text-secondary">
+      <button type="button" aria-label="자세한 설명" aria-describedby={id}
+        className="cursor-help rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500">(?)</button>
+      <span id={id} role="tooltip"
+        className="absolute right-0 top-full z-50 hidden w-64 max-w-[80vw] whitespace-normal rounded-lg border border-theme-sidebar-border bg-theme-bg-primary p-3 text-left font-normal shadow-lg group-hover:block group-focus-within:block">
+        {children}
+      </span>
+    </span>
+  );
+}
+
+export function Card({ title, description, help, children, tone = "default" }) {
   return (
     <section
       className={`schat-admin-card ${tone === "danger" ? "schat-admin-card--danger" : ""} rounded-xl p-5 flex flex-col gap-y-4`}
@@ -14,6 +29,7 @@ export function Card({ title, description, children, tone = "default" }) {
           {title && (
             <h2 className="text-base font-semibold text-theme-text-primary">
               {title}
+              {help && <Help>{help}</Help>}
             </h2>
           )}
           {description && (

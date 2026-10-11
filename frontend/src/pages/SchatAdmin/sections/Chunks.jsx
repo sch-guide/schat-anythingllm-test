@@ -1,20 +1,19 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import ChunkViewer from "@/models/chunkViewer";
 import { createChunkViewerController } from "../chunkViewerController";
-import { Badge, Button, Card, Notice, inputClass } from "../ui";
+import { Badge, Button, Card, Help, Notice, inputClass } from "../ui";
 
 function time(value) {
-  return value
-    ? new Date(value).toLocaleString("ko-KR")
-    : "등록 시각 확인 불가";
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("ko-KR");
 }
 function Version({ item }) {
+  const parts = [item.page ? `${item.page}쪽` : "", item.version ? `등록 버전: ${item.version}` : "", time(item.registeredAt)].filter(Boolean);
+  if (!parts.length) return null;
   return (
     <p className="text-xs text-theme-text-secondary">
-      {item.page ? `${item.page}쪽 · ` : "페이지 확인 불가 · "}
-      {item.version ? `등록 버전: ${item.version}` : "버전 확인 불가"}
-      {" · "}
-      {time(item.registeredAt)}
+      {parts.join(" · ")}
     </p>
   );
 }
@@ -29,10 +28,13 @@ export function ChatEvidence({ detail }) {
   return (
     <Card
       title="저장된 답변 근거"
-      description="답변 당시 저장된 발췌와 현재 조회 가능한 검색 조각을 따로 표시합니다. 발췌가 전체 원본을 뜻하지는 않습니다."
+      help="답할 때 참고한 내용과 현재 조회 가능한 근거 문단을 구분합니다. 참고한 내용이 원문 전체를 뜻하지는 않습니다."
     >
       <p className="text-sm text-theme-text-primary">{detail.question}</p>
       {detail.notice && <Notice tone="warning">{detail.notice}</Notice>}
+      {detail.sources.some(source => source.status === "unavailable") && (
+        <Notice>일부 원본의 현재 상태는 확인할 수 없습니다. 답할 때 참고한 내용을 확인해 주세요.</Notice>
+      )}
       {detail.sourcesTruncated && (
         <Notice>근거가 많아 앞의 50개만 표시합니다.</Notice>
       )}
@@ -57,31 +59,22 @@ export function ChatEvidence({ detail }) {
             </Badge>
           </div>
           <Version item={source} />
-          {source.status === "previous" && (
-            <Notice>검색 대상에서 제외된 이전 등록 자료입니다.</Notice>
-          )}
-          {source.status === "unavailable" && (
-            <Notice>
-              삭제 여부나 이전 버전 여부를 확인할 수 없습니다. 저장된 발췌를
-              참고해 주세요.
-            </Notice>
-          )}
           <h4 className="text-sm font-medium text-theme-text-primary">
-            저장된 발췌
+            답할 때 참고한 내용
           </h4>
           <Text>{source.excerpt}</Text>
           {source.excerptTruncated && (
-            <Notice>발췌가 길어 앞부분만 표시합니다.</Notice>
+            <Notice>참고한 내용이 길어 앞부분만 표시합니다.</Notice>
           )}
           {source.chunk && (
             <>
               <h4 className="text-sm font-medium text-theme-text-primary">
-                실제 검색 조각
+                근거 문단
               </h4>
               <Version item={source.chunk} />
               <Text>{source.chunk.text}</Text>
               {source.chunk.truncated && (
-                <Notice>검색 조각이 길어 앞부분만 표시합니다.</Notice>
+                <Notice>근거 문단이 길어 앞부분만 표시합니다.</Notice>
               )}
             </>
           )}
@@ -118,8 +111,8 @@ export function ChunksView({
   return (
     <div className="flex flex-col gap-5">
       <Notice>
-        관리자 전용 읽기 화면입니다. 문서나 검색 조각을 수정하지 않습니다.
-        질문의 전화번호·긴 숫자는 가려 표시합니다.
+        근거를 확인하는 화면이며 지침은 바뀌지 않습니다.
+        <Help>관리자만 볼 수 있으며 질문의 전화번호와 긴 숫자는 가립니다. 이전 버전은 현재 검색 대상이 아닙니다.</Help>
       </Notice>
       <div
         className="flex flex-wrap gap-2"
@@ -132,7 +125,7 @@ export function ChunksView({
           variant={mode === "documents" ? "primary" : "secondary"}
           onClick={() => setMode("documents")}
         >
-          문서별 검색 조각
+          지침별로 보기
         </Button>
         <Button
           role="tab"
@@ -140,14 +133,14 @@ export function ChunksView({
           variant={mode === "chats" ? "primary" : "secondary"}
           onClick={() => setMode("chats")}
         >
-          질문별 답변 근거
+          질문별로 보기
         </Button>
       </div>
       {mode === "documents" ? (
         <>
           <Card
-            title={`${workspace.name} 문서`}
-            description="등록 자료별로 조회합니다. PDF는 페이지별 자료로 나뉠 수 있습니다. 조각은 한 번에 최대 50개씩 확인합니다."
+            title={`${workspace.name} 지침`}
+            help="PDF는 페이지별 자료로 나뉠 수 있습니다. 근거 문단은 한 번에 최대 50개씩 확인합니다."
           >
             {state.loading.documents && (
               <p role="status">문서 목록을 불러오는 중입니다.</p>
@@ -182,7 +175,7 @@ export function ChunksView({
                           {doc.name}
                           {doc.page ? ` · ${doc.page}쪽` : ""}
                           {doc.status === "previous" ? " (이전 버전)" : ""}
-                          {` · ${time(doc.registeredAt)}`}
+                          {time(doc.registeredAt) ? ` · ${time(doc.registeredAt)}` : ""}
                         </option>
                       ))}
                     </select>
@@ -206,8 +199,9 @@ export function ChunksView({
           </Card>
           {state.selectedDocument && (
             <Card
-              title="검색 조각 내용"
-              description="키워드가 들어 있는 조각을 찾습니다. 검색 결과는 관련도 순위가 아닌 저장된 조각 순서입니다."
+              title="근거 문단"
+              description="단어로 찾기"
+              help="등록 순서로 보여 줍니다. ‘몇 번째’는 현재 표시된 목록의 순서이며 원문의 문단 번호가 아닙니다."
             >
               <form
                 className="flex flex-wrap gap-2"
@@ -217,7 +211,7 @@ export function ChunksView({
                 }}
               >
                 <input
-                  aria-label="조각 내용 검색어"
+                  aria-label="근거 문단에서 찾을 단어"
                   className={`${inputClass} max-w-[360px]`}
                   maxLength={200}
                   value={keyword}
@@ -236,7 +230,7 @@ export function ChunksView({
                 </Button>
               </form>
               {state.loading.chunks && (
-                <p role="status">검색 조각을 불러오는 중입니다.</p>
+                <p role="status">근거 문단을 불러오는 중입니다.</p>
               )}
               {state.errors.chunks && (
                 <Notice tone="warning">{state.errors.chunks}</Notice>
@@ -251,28 +245,27 @@ export function ChunksView({
                   <Version item={state.chunks.document} />
                   {state.chunks.scanLimited && (
                     <Notice>
-                      한 번에 최대 1,000개 조각을 확인합니다. 다음 목록에서
+                      한 번에 최대 1,000개 문단을 확인합니다. 다음 목록에서
                       이어서 찾을 수 있습니다.
                     </Notice>
                   )}
                   {!state.chunks.items.length && (
                     <Notice>
                       {state.chunks.hasMore
-                        ? "이번 조회 구간에서 일치하는 조각이 없습니다. 다음 목록을 확인해 주세요."
+                        ? "이번 목록에는 일치하는 문단이 없습니다. 다음 목록을 확인해 주세요."
                         : state.q
-                          ? "일치하는 검색 조각이 없습니다."
-                          : "조회 가능한 검색 조각이 없습니다."}
+                          ? "일치하는 근거 문단이 없습니다."
+                          : "조회 가능한 근거 문단이 없습니다."}
                     </Notice>
                   )}
-                  {state.chunks.items.map((chunk) => (
+                  {state.chunks.items.map((chunk, index) => (
                     <details
                       key={chunk.id}
                       className="rounded-lg border border-theme-sidebar-border p-3 text-theme-text-primary"
                     >
                       <summary className="cursor-pointer text-sm">
-                        {chunk.page ? `${chunk.page}쪽` : "페이지 확인 불가"}
-                        {chunk.section ? ` · ${chunk.section}` : ""} · 조각{" "}
-                        {chunk.id}
+                        {chunk.page ? `${chunk.page}쪽` : "근거 문단"} {index + 1}번째
+                        {chunk.section ? ` · ${chunk.section}` : ""}
                       </summary>
                       <div className="flex flex-col gap-2 pt-3">
                         <Version item={chunk} />
@@ -299,7 +292,7 @@ export function ChunksView({
         <>
           <Card
             title="질문 기록"
-            description="질문을 선택하면 해당 답변에 저장된 근거를 바로 확인합니다. 직원 이름·계정은 표시하지 않습니다."
+            help="질문을 누르면 답할 때 참고한 내용을 확인할 수 있습니다. 직원 이름과 계정은 표시하지 않습니다."
           >
             <Button
               variant="secondary"

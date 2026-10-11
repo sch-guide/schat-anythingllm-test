@@ -16,7 +16,7 @@ test("the wrench opens exactly the SCHAT admin sections in order", () => {
       "답변 설정",
       "답변 재사용",
       "사용자 관리",
-      "검색 조각 조회",
+      "답변 근거 보기",
       "문제 신고",
       "퀴즈 관리",
       "체크리스트 관리",

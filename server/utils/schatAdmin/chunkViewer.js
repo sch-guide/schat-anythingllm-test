@@ -139,7 +139,7 @@ function createChunkViewer({
     if (provider() !== "chroma")
       fail(
         422,
-        "현재 검색 조각 직접 조회는 Chroma 연결에서만 지원합니다. 저장된 답변 근거는 질문별 탭에서 확인할 수 있습니다."
+        "현재 연결에서는 근거 문단을 직접 볼 수 없습니다. 질문별로 보기에서 답할 때 참고한 내용을 확인해 주세요."
       );
   }
   async function getDocument(workspaceId, documentId) {
@@ -416,9 +416,9 @@ function createChunkViewer({
         sources,
         sourcesTruncated: allSources.length > PAGE_SIZE,
         notice: lookupFailed
-          ? "현재 검색 조각 조회에 실패했습니다. 저장된 발췌만 확인할 수 있습니다."
+          ? "근거 문단을 불러오지 못했습니다. 답할 때 참고한 내용을 표시합니다."
           : provider() !== "chroma"
-            ? "현재 연결은 검색 조각 직접 조회를 지원하지 않습니다. 저장된 발췌만 표시합니다."
+            ? "현재 연결에서는 근거 문단을 직접 볼 수 없습니다. 답할 때 참고한 내용을 표시합니다."
             : null,
       };
     },

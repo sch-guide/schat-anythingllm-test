@@ -436,5 +436,5 @@ test("실패한 청크 조회는 저장 발췌에 명시 안내하고 불완전�
   const detail = await viewer.chat(workspace, "7");
   assert.equal(detail.sources[0].chunk, null);
   assert.equal(detail.sources[0].status, "unavailable");
-  assert.match(detail.notice, /실패/);
+  assert.match(detail.notice, /불러오지 못했습니다/);
 });

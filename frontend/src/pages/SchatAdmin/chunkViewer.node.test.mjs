@@ -17,6 +17,13 @@ function make(api) {
   return createChunkViewerController(api, 1);
 }
 const empty = { items: [], hasMore: false, nextOffset: null };
+test("도움말은 키보드로 접근할 버튼과 연결된 설명을 제공함", () => {
+  const ui = load("./ui.jsx");
+  const html = renderToStaticMarkup(React.createElement(ui.Help, null, "목록 순서 설명"));
+  assert.match(html, /<button[^>]*aria-describedby=/);
+  assert.match(html, /role="tooltip"/);
+  assert.match(html, /목록 순서 설명/);
+});
 const docs = { ...empty, items: [{ documentId: "doc-a", name: "시험 문서" }] };
 test("문서 선택·검색·다음/이전 페이지를 작업 공간 안에서 조회함", async () => {
   const calls = [];
@@ -150,15 +157,58 @@ test("근거 화면은 저장 발췌·실제 청크·버전 상태를 구분하�
     })
   );
   for (const label of [
-    "저장된 발췌",
-    "실제 검색 조각",
+    "답할 때 참고한 내용",
+    "근거 문단",
     "이전 버전",
     "원본 확인 불가",
-    "버전 확인 불가",
     "&lt;script&gt;",
   ])
     assert.ok(html.includes(label), label);
   assert.equal(html.includes("<script>"), false);
+  assert.doesNotMatch(html, /버전 확인 불가|등록 시각 확인 불가|페이지 확인 불가/);
+});
+
+test("긴 내부 번호 대신 쪽과 목록 순서를 표시하고 없는 정보는 숨김", () => {
+  const ui = load("./ui.jsx");
+  const view = load("./sections/Chunks.jsx", {
+    "../ui": ui,
+    "@/models/chunkViewer": { default: {} },
+    "../chunkViewerController": { createChunkViewerController },
+  });
+  const html = renderToStaticMarkup(React.createElement(view.ChunksView, {
+    controller: {}, workspace: { name: "시험" }, mode: "documents",
+    setMode() {}, keyword: "", setKeyword() {},
+    state: {
+      loading: {}, errors: {}, selectedDocument: "doc", chunkHistory: [],
+      chunkOffset: 0, documentOffset: 0,
+      documents: { ...empty, items: [{ documentId: "doc", name: "합성 지침" }] },
+      chunks: { ...empty, document: {}, items: [
+        { id: "internal-long-uuid-12345", text: "첫 문단", page: 31 },
+        { id: "internal-long-uuid-67890", text: "둘째 문단", page: null },
+      ] },
+    },
+  }));
+  assert.match(html, /31쪽 1번째/);
+  assert.match(html, /근거 문단 2번째/);
+  assert.match(html, /지침별로 보기/);
+  assert.match(html, /질문별로 보기/);
+  assert.doesNotMatch(html, /internal-long-uuid|확인 불가|Invalid Date/);
+});
+
+test("여러 미확인 출처의 공통 주의는 한 번만 표시함", () => {
+  const ui = load("./ui.jsx");
+  const view = load("./sections/Chunks.jsx", {
+    "../ui": ui, "@/models/chunkViewer": { default: {} },
+    "../chunkViewerController": { createChunkViewerController },
+  });
+  const html = renderToStaticMarkup(React.createElement(view.ChatEvidence, {
+    detail: { question: "시험", sources: [1, 2, 3].map(n => ({
+      name: `지침 ${n}`, status: "unavailable", excerpt: `근거 ${n}`,
+    })) },
+  }));
+  assert.equal((html.match(/일부 원본의 현재 상태는 확인할 수 없습니다/g) || []).length, 1);
+  assert.doesNotMatch(html, /삭제 여부나 이전 버전 여부를/);
+  assert.match(html, /근거 3/);
 });
 test("API는 인증·작업 공간·검색조건을 GET으로 보내고 실패를 드러냄", async () => {
   const deps = {

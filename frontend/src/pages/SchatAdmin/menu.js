@@ -29,8 +29,8 @@ export const SCHAT_ADMIN_SECTIONS = [
   },
   {
     key: "chunks",
-    label: "검색 조각 조회",
-    description: "문서별 검색 조각과 질문에 저장된 답변 근거를 읽기 전용으로 확인합니다.",
+    label: "답변 근거 보기",
+    description: "지침과 질문에서 답변의 근거를 확인합니다.",
   },
   {
     key: "reports",
