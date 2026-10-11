@@ -18,6 +18,11 @@
   margin-left: auto;
   justify-content: flex-end;
 }
+@media (min-width: 768px) {
+  .synonym-header {
+    padding-right: 96px;
+  }
+}
 .synonym-table-card {
   background: #fff;
   border: 1px solid #e3e7e9;
