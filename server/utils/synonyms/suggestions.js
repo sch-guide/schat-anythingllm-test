@@ -572,9 +572,15 @@ async function askOnce(llm, batch) {
 async function askGemini(
   llm,
   batch,
-  { sleep = wait, delays = RETRY_DELAYS_MS, onRetry = () => null } = {}
+  {
+    sleep = wait,
+    delays = RETRY_DELAYS_MS,
+    onRetry = () => null,
+    beforeAttempt = async () => {},
+  } = {}
 ) {
   for (let attempt = 0; ; attempt += 1) {
+    await beforeAttempt(); // 내부 재시도 대기 중 바뀐 문서도 외부 호출 전에 확인한다.
     try {
       return await askOnce(llm, batch);
     } catch (error) {
@@ -773,6 +779,7 @@ async function processDocument(
         const output = await askGemini(client, batch, {
           sleep,
           delays,
+          beforeAttempt: validateCurrent,
           onRetry: () => {
             row.retries += 1;
           },
@@ -1231,6 +1238,9 @@ async function retryRun(runId, options = {}) {
       await prisma.schat_synonym_suggestion_runs
         .update({ where: { id }, data: { status: "persistence_failed" } })
         .catch(() => null);
+      await notifyFailures(prisma, [{ status: "failed" }]).catch(() =>
+        logger?.error?.("[SchatSynonymSuggestions] 관리자 실패 알림 저장 실패")
+      );
     }
     throw error;
   } finally {

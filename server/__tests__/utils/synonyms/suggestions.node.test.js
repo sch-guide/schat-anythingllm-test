@@ -1277,3 +1277,51 @@ test("AI 응답을 기다리는 동안 문서가 바뀌면 이전 문서의 결�
   assert.equal(f.db.groups.length, count);
   assert.equal(result.rows[0].batches[1].status, "succeeded");
 });
+
+test("내부 재시도 대기 중 문서 변경 또는 삭제는 다음 AI 호출 전에 차단한다", async () => {
+  for (const change of ["changed", "deleted"]) {
+    const f = retryFixture();
+    const first = await Suggestions.suggestForDocuments(f.documents, f.options);
+    let calls = 0;
+    const result = await Suggestions.retryRun(first.runId, {
+      ...f.options,
+      llm: { model: "fake-only", getChatCompletion: async () => {
+        calls++;
+        if (calls === 1) throw new Error("503 unavailable");
+        return { textResponse: JSON.stringify({ groups: [] }) };
+      } },
+      delays: [1],
+      sleep: async () => {
+        if (change === "changed") f.documents[0].pages[0].pageContent += "변경";
+        else f.documents.splice(0);
+      },
+      loadCurrentDocuments: async () => f.documents,
+      targets: [{ documentId: "doc-a", batchIndices: [1] }],
+    });
+    assert.equal(calls, 1);
+    assert.equal(result.rows[0].error, "document_changed");
+  }
+});
+
+test("재시도 결과 저장 실패도 관리자에게 안전한 새 알림을 남긴다", async () => {
+  const f = retryFixture();
+  const first = await Suggestions.suggestForDocuments(f.documents, f.options);
+  const before = f.db.notifications.length;
+  const update = f.prisma.schat_synonym_suggestion_runs.update;
+  f.prisma.schat_synonym_suggestion_runs.update = async (args) => {
+    if (JSON.parse(args.data.documents || "[]")[0]?.batches[1]?.status === "succeeded")
+      throw new Error("disk fake-input fake-response fake-key");
+    return update(args);
+  };
+  const options = { ...f.options, loadCurrentDocuments: async () => f.documents };
+  await assert.rejects(() => Suggestions.retryRun(first.runId, options), /저장/);
+  assert.equal(f.db.runs[0].status, "persistence_failed");
+  assert.equal(f.db.notifications.length - before, 1);
+  const notice = f.db.notifications.at(-1);
+  assert.equal(notice.user_id, 91);
+  assert.equal(notice.kind, "synonym_generation_failed");
+  assert.match(notice.message, /관리자 화면/);
+  assert.doesNotMatch(JSON.stringify(notice), /fake-input|fake-response|fake-key/);
+  await assert.rejects(() => Suggestions.retryRun(first.runId, options), /저장/);
+  assert.equal(f.db.notifications.length - before, 1);
+});
