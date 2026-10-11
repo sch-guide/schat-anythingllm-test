@@ -52,8 +52,7 @@ export const SCHAT_ADMIN_SECTIONS = [
   {
     key: "synonyms",
     label: "동의어 관리",
-    description:
-      "같은 뜻의 단어(예: 카테터 = cath = catheter)를 묶어 검색과 체크리스트 연결에 함께 쓰도록 관리합니다.",
+    description: "같은 뜻의 말을 묶어 두면, 어떤 말로 물어도 지침을 잘 찾아요.",
   },
   {
     key: "usage",

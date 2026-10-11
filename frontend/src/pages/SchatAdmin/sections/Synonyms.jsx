@@ -689,14 +689,6 @@ export default function SynonymsSection() {
   if (groups === null && !loadError) return <Loading />;
   return (
     <div className="flex flex-col gap-5" data-testid="synonym-management">
-      <header>
-        <h2 className="text-xl font-semibold text-theme-text-primary">
-          동의어 관리
-        </h2>
-        <p className="mt-1 text-sm text-theme-text-secondary">
-          같은 뜻의 말을 묶어 두면, 어떤 말로 물어도 지침을 잘 찾아요.
-        </p>
-      </header>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input
           aria-label="단어로 찾기"

@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import * as review from "./synonymReview.js";
+import { findSchatAdminSection } from "./menu.js";
 
 const require = createRequire(import.meta.url);
 const React = require("react");
@@ -23,14 +24,15 @@ function load(file, deps) {
   return module.exports;
 }
 const ui = load("./ui.jsx", {});
-const { GroupRow } = load("./sections/Synonyms.jsx", {
+const sectionDeps = {
   "@/models/schatSynonyms": {},
   "@/utils/toast": () => {},
   "@/components/WorkspaceChat/ChatContainer/ChatHistory/Citation/PdfPageViewer":
     () => null,
   "../ui": ui,
   "../synonymReview": review,
-});
+};
+const { GroupRow } = load("./sections/Synonyms.jsx", sectionDeps);
 function render(change = {}, props = {}) {
   const group = {
     id: 1,
@@ -92,4 +94,41 @@ test("suggestion safety badges, document pages and unsupported-source notice sur
   ])
     assert.ok(html.includes(value), value);
   assert.match(html, /border-dashed border-amber/);
+});
+
+test("loaded synonym screen uses the shared title and exact description once", () => {
+  // 서버 렌더링은 비동기 목록 읽기를 실행하지 않으므로 첫 상태에 빈 목록만 공급한다.
+  // 나머지 hooks와 실제 화면/하위 구성요소는 React 그대로 렌더링한다.
+  let firstState = true;
+  const hooks = {
+    ...React,
+    useState(initial) {
+      const value = firstState ? [] : initial;
+      firstState = false;
+      return React.useState(value);
+    },
+  };
+  const { default: SynonymsSection } = load("./sections/Synonyms.jsx", {
+    ...sectionDeps,
+    react: hooks,
+  });
+  const section = findSchatAdminSection("synonyms");
+  const html = renderToStaticMarkup(
+    React.createElement(
+      "main",
+      null,
+      React.createElement(
+        "header",
+        null,
+        React.createElement("h1", null, section.label),
+        React.createElement("p", null, section.description)
+      ),
+      React.createElement(SynonymsSection)
+    )
+  );
+  assert.equal((html.match(/>동의어 관리</g) || []).length, 1);
+  const description =
+    "같은 뜻의 말을 묶어 두면, 어떤 말로 물어도 지침을 잘 찾아요.";
+  assert.equal(section.description, description);
+  assert.equal(html.split(description).length - 1, 1);
 });
