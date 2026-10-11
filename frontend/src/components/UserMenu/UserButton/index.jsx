@@ -59,7 +59,7 @@ export default function UserButton() {
   // SCHAT user menu: profile, report, my reports, password, sign-out. The
   // existing sign-out steps below are unchanged.
   return (
-    <div className="schat-user-menu absolute top-3 right-4 md:top-9 md:right-10 w-fit h-fit z-40 flex items-center gap-x-2">
+    <div className="schat-user-menu absolute top-3 right-4 md:top-[calc(2.25rem_+_var(--schat-notice-h,0px))] md:right-10 w-fit h-fit z-40 flex items-center gap-x-2">
       {isMulti && <NotificationBell />}
       <button
         ref={buttonRef}

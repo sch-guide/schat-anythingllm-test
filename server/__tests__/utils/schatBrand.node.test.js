@@ -315,3 +315,40 @@ test("PNG 비트깊이·색상·CRC·압축데이터·픽셀길이·필터 손�
   );
   assert.equal(core().validateLogo(pngUrl(original)), pngUrl(original));
 });
+test("공지 제목은 8자까지 저장하고, 예전 공지와 초기화는 공지사항 제목을 씀", async () => {
+  const { validateSection, publicBrand, defaults } = core();
+  const notice = (title) =>
+    validateSection("announcement", {
+      enabled: true,
+      text: "시스템 점검",
+      start: "",
+      end: "",
+      ...(title === undefined ? {} : { title }),
+    });
+  assert.equal(notice(undefined).title, "공지사항");
+  assert.equal(notice(" 점검 ").title, "점검");
+  // 비워 두면 그대로 저장하고, 화면에서 공지사항으로 보여 준다.
+  assert.equal(notice("").title, "");
+  assert.equal(notice("12345678").title, "12345678");
+  assert.throws(() => notice("123456789"), /길이 제한/);
+  assert.throws(() => notice("<b>알림</b>"), /일반 글자/);
+  // a notice saved before the title existed
+  const old = publicBrand(
+    JSON.stringify({
+      announcement: { enabled: true, text: "공지", start: "", end: "" },
+    })
+  );
+  assert.equal(old.announcement.title, "공지사항");
+  assert.equal(defaults().announcement.title, "공지사항");
+  const s = setup();
+  await s.invoke("PUT", {
+    section: "announcement",
+    value: { enabled: true, title: "알림", text: "공지", start: "", end: "" },
+  });
+  assert.equal((await s.invoke("GET")).body.brand.announcement.title, "알림");
+  await s.invoke("PUT", { section: "announcement", reset: true });
+  assert.equal(
+    (await s.invoke("GET")).body.brand.announcement.title,
+    "공지사항"
+  );
+});

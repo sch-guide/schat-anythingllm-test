@@ -1,9 +1,18 @@
 const MAX_LOGO_BYTES = 1024 * 1024;
+// 직원 화면 공지 띠의 제목. 비워 두면 화면에는 "공지사항"으로 보인다.
+const DEFAULT_NOTICE_TITLE = "공지사항";
+const NOTICE_TITLE_MAX = 8;
 const { inflateSync } = require("node:zlib");
 const defaults = () => ({
   logo: null,
   subtitle: "병원 실무지침 AI",
-  announcement: { enabled: false, text: "", start: "", end: "" },
+  announcement: {
+    enabled: false,
+    title: DEFAULT_NOTICE_TITLE,
+    text: "",
+    start: "",
+    end: "",
+  },
   welcome: { text: "오늘 어떻게 도와드릴까요?", examples: [] },
 });
 const tags = new Set(
@@ -292,6 +301,11 @@ function validateSection(section, value) {
       throw Error("공지 설정을 확인해 주세요.");
     const next = {
       enabled: value.enabled,
+      // Notices saved before the title existed keep the default title.
+      title:
+        value.title === undefined
+          ? DEFAULT_NOTICE_TITLE
+          : plainText(value.title, NOTICE_TITLE_MAX),
       text: plainText(value.text, 200),
       start: "",
       end: "",
@@ -346,6 +360,8 @@ function announcementActive(notice, now = Date.now()) {
   );
 }
 module.exports = {
+  DEFAULT_NOTICE_TITLE,
+  NOTICE_TITLE_MAX,
   defaults,
   validateLogo,
   validateSvg,

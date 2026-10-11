@@ -30,7 +30,7 @@ export default function ChatSettingsMenu() {
 
   return (
     <div
-      className={`absolute top-3 md:top-5 z-30 ${
+      className={`absolute top-3 md:top-[calc(1.25rem_+_var(--schat-notice-h,0px))] z-30 ${
         mode === "multi"
           ? "right-[98px] md:right-[110px]" // user button + notification bell
           : hasUserIcon

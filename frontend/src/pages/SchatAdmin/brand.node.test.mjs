@@ -49,6 +49,13 @@ function controller(api = {}) {
 function rules() {
   return load("../../utils/schatBrand.js");
 }
+function noticeView(brand = initial) {
+  return load("../../components/SchatBrandContent.jsx", {
+    "@/hooks/useSchatBrand": { default: () => ({ brand, now: Date.now() }) },
+    "@/utils/schatBrand": rules(),
+    "@/components/lib/SuggestedMessages": { default: () => null },
+  });
+}
 test("로고 선택 전에 파일 종류·크기를 검사하고 읽기 실패시 기존 미리보기를 보존함", async () => {
   const c = controller();
   await c.start();
@@ -127,6 +134,7 @@ test("실제 관리자 React 화면의 파일선택·공지·저장·초기화�
     "../brandController": { createBrandEditor() {} },
     "@/models/schatBrand": { default: {} },
     "@/utils/schatBrand": rules(),
+    "@/components/SchatBrandContent": noticeView(),
   });
   const tree = () =>
     view.BrandEditorView({ controller: c, state: c.getSnapshot() });
@@ -142,7 +150,8 @@ test("실제 관리자 React 화면의 파일선택·공지·저장·초기화�
   const html = renderToStaticMarkup(tree());
   assert.match(html, /accept="\.png,\.svg,image\/png,image\/svg\+xml"/);
   assert.match(html, /한국 시간/);
-  assert.equal((html.match(/>원래대로<\/button>/g) || []).length, 4);
+  // 4 sections + the notice title's own [원래대로]
+  assert.equal((html.match(/>원래대로<\/button>/g) || []).length, 5);
   find(tree(), (el) => el.props.id === "brand-subtitle").props.onChange({
     target: { value: "시험 부제목" },
   });
@@ -271,6 +280,7 @@ test("브랜드 상세 조건은 짧은 소개와 분리된 키보드 도움말�
     "../brandController": { createBrandEditor() {} },
     "@/models/schatBrand": { default: {} },
     "@/utils/schatBrand": rules(),
+    "@/components/SchatBrandContent": noticeView(),
   });
   const html = renderToStaticMarkup(
     view.BrandEditorView({ controller: c, state: c.getSnapshot() })
@@ -282,4 +292,135 @@ test("브랜드 상세 조건은 짧은 소개와 분리된 키보드 도움말�
     const description = section.match(/<p[^>]*>(.*?)<\/p>/s)?.[1] || "";
     assert.ok(description.length <= 55);
   }
+});
+test("공지 띠: 제목 기본값, ✕는 그날만 숨김, 제목·내용이 바뀌면 다시 보임", () => {
+  const r = rules();
+  assert.equal(r.noticeTitle({ title: "" }), "공지사항");
+  assert.equal(r.noticeTitle({}), "공지사항");
+  assert.equal(r.noticeTitle({ title: " 점검 " }), "점검");
+  const store = new Map();
+  const storage = {
+    getItem: (k) => store.get(k) ?? null,
+    setItem: (k, v) => store.set(k, v),
+  };
+  const notice = { title: "알림", text: "10일 점검" };
+  const today = new Date(2026, 9, 11, 9, 0);
+  const tonight = new Date(2026, 9, 11, 23, 59);
+  const tomorrow = new Date(2026, 9, 12, 0, 1);
+  assert.equal(r.noticeDismissed(notice, { storage, now: today }), false);
+  r.dismissNotice(notice, { storage, now: today });
+  assert.equal(r.noticeDismissed(notice, { storage, now: tonight }), true);
+  assert.equal(r.noticeDismissed(notice, { storage, now: tomorrow }), false);
+  assert.equal(
+    r.noticeDismissed(
+      { ...notice, text: "11일 점검" },
+      { storage, now: today }
+    ),
+    false
+  );
+  assert.equal(
+    r.noticeDismissed({ ...notice, title: "안내" }, { storage, now: today }),
+    false
+  );
+  // storage that throws (private window) never breaks the screen
+  const broken = {
+    getItem() {
+      throw Error("blocked");
+    },
+    setItem() {
+      throw Error("blocked");
+    },
+  };
+  assert.equal(r.noticeDismissed(notice, { storage: broken }), false);
+  r.dismissNotice(notice, { storage: broken });
+  // about 50px a second, including the gap before the text repeats
+  assert.equal(r.noticeScrollSeconds(952), 20);
+});
+
+test("공지 띠 모양: 아이콘·제목·구분선·글·✕, 자세히 보기 없음, 버튼과 대화는 띠만큼 내려감", () => {
+  const brand = {
+    ...initial,
+    announcement: {
+      enabled: true,
+      title: "",
+      text: "오늘 18시 시스템 점검",
+      start: "",
+      end: "",
+    },
+  };
+  const view = noticeView(brand);
+  const html = renderToStaticMarkup(
+    React.createElement(view.BrandAnnouncement)
+  );
+  assert.match(html, /📢/);
+  assert.match(html, /<strong[^>]*color:#0f766e[^>]*>공지사항<\/strong>/);
+  assert.match(html, /background:#ecfdf8/);
+  assert.match(html, /border-color:#bfe8dc/);
+  assert.match(html, /오늘 18시 시스템 점검/);
+  assert.match(html, /aria-label="공지 닫기"/);
+  assert.doesNotMatch(html, /자세히 보기/);
+  assert.ok(
+    html.indexOf("📢") < html.indexOf("공지사항") &&
+      html.indexOf("공지사항") < html.indexOf("오늘 18시") &&
+      html.indexOf("오늘 18시") < html.indexOf("공지 닫기")
+  );
+  // no notice: the panel keeps its old position (0px)
+  assert.equal(
+    view.useBrandPanelStyle().paddingTop,
+    "var(--schat-notice-h, 0px)"
+  );
+  const off = noticeView(initial);
+  assert.equal(
+    renderToStaticMarkup(React.createElement(off.BrandAnnouncement)),
+    ""
+  );
+  for (const file of [
+    "../../components/UserMenu/UserButton/index.jsx",
+    "../../components/WorkspaceChat/ChatContainer/ChatSettingsMenu/index.jsx",
+  ])
+    assert.match(
+      readFileSync(new URL(file, import.meta.url), "utf8"),
+      /md:top-\[calc\([0-9.]+rem_\+_var\(--schat-notice-h,0px\)\)\]/
+    );
+});
+
+test("관리자 공지: 제목칸(8자)·원래대로·실제 띠 미리보기", async () => {
+  const c = controller();
+  await c.start();
+  const view = load("./sections/Brand.jsx", {
+    "@/models/admin": { default: {} },
+    "@/models/system": { default: {} },
+    "@/models/workspace": { default: {} },
+    "@/utils/toast": { default() {} },
+    "@/components/SchLogo": { default: () => null },
+    "@/components/Sidebar/ActiveWorkspaces": {
+      REFETCH_WORKSPACES_EVENT: "test",
+    },
+    "../ui": load("./ui.jsx"),
+    "../brandController": { createBrandEditor() {} },
+    "@/models/schatBrand": { default: {} },
+    "@/utils/schatBrand": rules(),
+    "@/components/SchatBrandContent": noticeView(),
+  });
+  const render = () =>
+    renderToStaticMarkup(
+      view.BrandEditorView({ controller: c, state: c.getSnapshot() })
+    );
+  assert.match(
+    render(),
+    /id="brand-notice-title"[^>]*maxLength="8"|maxLength="8"[^>]*id="brand-notice-title"/i
+  );
+  assert.match(render(), /data-notice-preview/);
+  c.change("announcement", {
+    ...c.getSnapshot().draft.announcement,
+    title: "점검",
+    text: "18시 점검",
+  });
+  assert.match(render(), /<strong[^>]*>점검<\/strong>/);
+  assert.match(render(), /18시 점검/);
+  c.change("announcement", {
+    ...c.getSnapshot().draft.announcement,
+    title: "",
+  });
+  assert.match(render(), /<strong[^>]*>공지사항<\/strong>/);
 });
