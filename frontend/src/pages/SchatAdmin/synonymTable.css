@@ -238,6 +238,8 @@
 }
 .synonym-actions > button {
   white-space: nowrap;
+}
+.synonym-actions > button:not(.schat-admin-button) {
   color: #267f79;
 }
 .synonym-actions > button:disabled,

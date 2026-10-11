@@ -11,6 +11,23 @@ const css = readFileSync(
   "utf8"
 );
 
+test("동의어 편집의 등록 버튼은 PC와 모바일에서 흰 글자로 읽을 수 있다", async () => {
+  const { chromium } = require(process.env.SCHAT_PLAYWRIGHT_MODULE || "playwright");
+  const browser = await chromium.launch({ headless: true, ...(process.env.SCHAT_BROWSER_CHANNEL ? { channel: process.env.SCHAT_BROWSER_CHANNEL } : {}) });
+  try {
+    const page = await browser.newPage();
+    const brand = readFileSync(new URL("../../schat-brand.css", import.meta.url), "utf8");
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.setContent('<div class="synonym-management"><div class="synonym-actions"><button class="schat-admin-button schat-admin-button--primary">저장 후 등록</button></div></div>');
+      await page.addStyleTag({ content: brand + "\n" + css });
+      const button = page.locator("button");
+      assert.equal(await button.isEnabled(), true);
+      assert.equal(await button.evaluate(el => getComputedStyle(el).color), "rgb(255, 255, 255)", `${width}px 등록 글자색`);
+    }
+  } finally { await browser.close(); }
+});
+
 test("동의어 새 묶음 버튼은 PC 전역 알림·계정 영역과 겹치지 않고 모바일에서는 줄바꿈된다", async () => {
   const { chromium } = require(
     process.env.SCHAT_PLAYWRIGHT_MODULE || "playwright"
