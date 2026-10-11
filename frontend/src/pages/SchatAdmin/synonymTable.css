@@ -135,7 +135,7 @@
   width: 106px;
 }
 .synonym-table th:nth-child(5) {
-  width: 186px;
+  width: 220px;
 }
 .synonym-table input[type="checkbox"] {
   accent-color: #16857d;
@@ -282,6 +282,16 @@
   background: #0f766e;
   color: #fff;
   border-color: #0f766e;
+}
+.synonym-table td[data-label="작업"] > .synonym-actions {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.synonym-table td[data-label="작업"] > .synonym-actions > button {
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
 }
 .synonym-chip--procedure {
   border-left: 3px solid #14b8a6;
@@ -468,6 +478,9 @@
   margin-bottom: 12px;
 }
 @media (max-width: 700px) {
+  .synonym-table td[data-label="작업"] > .synonym-actions {
+    flex-wrap: wrap;
+  }
   .synonym-status-tabs {
     gap: 12px;
     padding: 0 12px;
