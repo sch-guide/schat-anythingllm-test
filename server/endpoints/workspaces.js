@@ -1037,25 +1037,10 @@ function workspaceEndpoints(app) {
   app.post(
     "/workspace/:slug/chat-feedback/:chatId",
     [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
-    async (request, response) => {
-      try {
-        const { chatId } = request.params;
-        const { feedback = null } = reqBody(request);
-        const user = await userFromSession(request, response);
-        const existingChat = await WorkspaceChats.get({
-          id: Number(chatId),
-          workspaceId: response.locals.workspace.id,
-          user_id: user?.id,
-        });
-
-        if (!existingChat) return response.status(404).json({ success: false });
-        await WorkspaceChats.updateFeedbackScore(chatId, feedback);
-        return response.status(200).json({ success: true });
-      } catch (error) {
-        console.error("Error updating chat feedback:", error);
-        response.status(500).end();
-      }
-    }
+    require("./answerFeedback").feedbackSaveHandler({
+      getUser: userFromSession,
+      getBody: reqBody,
+    })
   );
 
   app.get(

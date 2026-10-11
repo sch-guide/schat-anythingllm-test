@@ -13,7 +13,11 @@ import {
   inputClass,
 } from "../ui";
 
-const STATUS = { open: "미처리", in_progress: "처리중", resolved: "완료" };
+const STATUS = {
+  open: "확인 전",
+  in_progress: "처리 중",
+  resolved: "처리 완료",
+};
 const TONES = { open: "neutral", in_progress: "warning", resolved: "ok" };
 const when = (iso) =>
   iso
@@ -22,6 +26,170 @@ const when = (iso) =>
         timeStyle: "short",
       })
     : "-";
+
+const FEEDBACK_KINDS = {
+  wrong: "👎 틀림",
+  not_found: "👎 못 찾음",
+  report: "신고",
+};
+const isFeedback = (row) => ["wrong", "not_found"].includes(row?.kind);
+
+export function ReportRows({ reports, onSelect }) {
+  return (
+    <tbody>
+      {!reports.length && (
+        <tr>
+          <td colSpan={5} className="py-4 text-theme-text-secondary">
+            아직 들어온 내용이 없어요.
+          </td>
+        </tr>
+      )}
+      {reports.map((row) => (
+        <tr
+          key={`${row.kind || "report"}-${row.id}`}
+          className="border-b border-theme-sidebar-border hover:bg-theme-sidebar-item-hover cursor-pointer"
+          onClick={() => onSelect(row)}
+        >
+          <td className="py-3 pr-3 whitespace-nowrap">
+            <span
+              className={`rounded px-2 py-1 text-xs ${row.kind === "wrong" ? "text-red-500 bg-red-500/10" : row.kind === "not_found" ? "text-orange-500 bg-orange-500/10" : "text-theme-text-secondary bg-theme-bg-secondary"}`}
+            >
+              {FEEDBACK_KINDS[row.kind] || "신고"}
+            </span>
+          </td>
+          <td className="py-3 pr-3">
+            <button
+              type="button"
+              className="text-left text-theme-text-primary font-medium break-words"
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelect(row);
+              }}
+            >
+              {row.question || row.title}
+            </button>
+            {row.memo && (
+              <p className="mt-1 text-xs text-theme-text-secondary break-words">
+                {row.memo}
+              </p>
+            )}
+          </td>
+          <td className="py-3 pr-3">{row.department || "-"}</td>
+          <td className="py-3 pr-3 text-xs">{when(row.createdAt)}</td>
+          <td className="py-3 whitespace-nowrap">
+            <Badge tone={row.status === "resolved" ? "ok" : "neutral"}>
+              {row.status === "resolved" ? "처리 완료" : "확인 전"}
+            </Badge>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  );
+}
+
+export function FeedbackContent({ feedback, onResolve, saving = false }) {
+  return (
+    <div className="rounded-lg border border-theme-sidebar-border p-4 flex flex-col gap-3">
+      <h3 className="font-semibold text-theme-text-primary">
+        {FEEDBACK_KINDS[feedback.kind] || "답변 평가"}
+      </h3>
+      <InfoRow label="질문">
+        <span className="whitespace-pre-wrap break-words">
+          {feedback.question}
+        </span>
+      </InfoRow>
+      {feedback.memo && (
+        <p className="text-sm text-theme-text-secondary break-words">
+          {feedback.memo}
+        </p>
+      )}
+      <InfoRow label="답변">
+        <span className="whitespace-pre-wrap break-words">
+          {feedback.answer}
+        </span>
+      </InfoRow>
+      <div>
+        <p className="text-sm font-medium text-theme-text-primary">
+          참고한 지침
+        </p>
+        {!feedback.sources?.length ? (
+          <p className="text-sm text-theme-text-secondary">
+            기록된 지침이 없어요.
+          </p>
+        ) : (
+          <ul className="mt-2 list-disc pl-5 text-sm text-theme-text-primary">
+            {feedback.sources.map((source, index) => (
+              <li key={index} className="break-words">
+                {source.documentName ||
+                  source.document_name ||
+                  source.title ||
+                  "지침"}
+                {source.page ? ` · ${source.page}쪽` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {feedback.status !== "resolved" ? (
+        <Button onClick={onResolve} disabled={saving}>
+          {saving ? "저장 중..." : "처리 완료"}
+        </Button>
+      ) : (
+        <p className="text-sm text-theme-text-secondary">처리 완료</p>
+      )}
+    </div>
+  );
+}
+
+function FeedbackDetail({ id, onSaved }) {
+  const [feedback, setFeedback] = useState(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let active = true;
+    SchatAccount.answerFeedback(id)
+      .then((result) => {
+        if (!active) return;
+        if (result?.feedback) setFeedback(result.feedback);
+        else setError("내용을 불러오지 못했어요. 다시 선택해 주세요.");
+      })
+      .catch(() => {
+        if (active) setError("내용을 불러오지 못했어요. 다시 선택해 주세요.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+  async function resolve() {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const result = await SchatAccount.resolveAnswerFeedback(id);
+      if (!result?.success || !result.feedback) throw new Error();
+      setFeedback(result.feedback);
+      onSaved();
+    } catch {
+      setError("저장하지 못했어요. 다시 시도해 주세요.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <>
+      {error && <Notice>{error}</Notice>}
+      {feedback ? (
+        <FeedbackContent
+          feedback={feedback}
+          onResolve={resolve}
+          saving={saving}
+        />
+      ) : (
+        !error && <Loading />
+      )}
+    </>
+  );
+}
 
 export default function ReportsSection() {
   const [tab, setTab] = useState("list");
@@ -77,6 +245,7 @@ function ReportList({ onMakeFaq }) {
     status: "",
     from: "",
     to: "",
+    kind: "",
   });
   const [reports, setReports] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -105,8 +274,41 @@ function ReportList({ onMakeFaq }) {
   return (
     <Card
       title="신고 목록"
-      description="직원이 보낸 문제 신고입니다. 상태를 바꾸면 신고한 직원에게만 알림이 갑니다."
+      description="직원의 답변 평가와 문제 신고를 함께 확인해요."
     >
+      <div className="mb-3 flex flex-wrap gap-2">
+        {[
+          ["", "전체"],
+          ["wrong", "틀림"],
+          ["not_found", "못 찾음"],
+          ["report", "신고"],
+        ].map(([kind, label]) => (
+          <Button
+            key={kind}
+            variant={filters.kind === kind ? "primary" : "secondary"}
+            aria-pressed={filters.kind === kind}
+            onClick={() => {
+              setSelected(null);
+              setFilters((prev) => ({ ...prev, kind }));
+            }}
+          >
+            {label}
+          </Button>
+        ))}
+        <Button
+          variant={filters.status === "open" ? "primary" : "secondary"}
+          aria-pressed={filters.status === "open"}
+          onClick={() => {
+            setSelected(null);
+            setFilters((prev) => ({
+              ...prev,
+              status: prev.status === "open" ? "" : "open",
+            }));
+          }}
+        >
+          확인 전만
+        </Button>
+      </div>
       <div className="grid gap-3 md:grid-cols-3">
         <input
           aria-label="검색"
@@ -179,61 +381,28 @@ function ReportList({ onMakeFaq }) {
           >
             {reports.length}건
           </p>
-          <table className="w-full min-w-[760px] text-sm text-left">
+          <table className="w-full min-w-[540px] text-sm text-left">
             <thead className="text-xs text-theme-text-secondary border-b border-theme-sidebar-border">
               <tr>
-                <th className="py-2 pr-3 font-medium">번호</th>
-                <th className="py-2 pr-3 font-medium">제목</th>
                 <th className="py-2 pr-3 font-medium">종류</th>
-                <th className="py-2 pr-3 font-medium">신고자</th>
-                <th className="py-2 pr-3 font-medium">사번</th>
+                <th className="py-2 pr-3 font-medium">질문</th>
                 <th className="py-2 pr-3 font-medium">부서</th>
                 <th className="py-2 pr-3 font-medium">등록일</th>
                 <th className="py-2 font-medium">상태</th>
               </tr>
             </thead>
-            <tbody>
-              {reports.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="py-4 text-theme-text-secondary">
-                    신고가 없습니다.
-                  </td>
-                </tr>
-              )}
-              {reports.map((r) => (
-                <tr
-                  key={r.id}
-                  onClick={() => setSelected(r)}
-                  className={`cursor-pointer border-b border-theme-sidebar-border last:border-b-0 hover:bg-theme-sidebar-item-hover ${selected?.id === r.id ? "bg-theme-sidebar-item-hover" : ""}`}
-                >
-                  <td className="py-2 pr-3">{r.id}</td>
-                  <td className="py-2 pr-3 text-theme-text-primary font-medium">
-                    {r.title}
-                  </td>
-                  <td className="py-2 pr-3">{r.category}</td>
-                  <td className="py-2 pr-3">
-                    {r.reporterName}
-                    {r.reporterDeleted && (
-                      <span className="block text-xs text-theme-text-secondary">
-                        (삭제된 사용자)
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-3">{r.employeeNumber || "-"}</td>
-                  <td className="py-2 pr-3">{r.department || "-"}</td>
-                  <td className="py-2 pr-3 whitespace-nowrap">
-                    {when(r.createdAt)}
-                  </td>
-                  <td className="py-2">
-                    <Badge tone={TONES[r.status]}>{r.statusLabel}</Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+            <ReportRows reports={reports} onSelect={setSelected} />
           </table>
         </div>
       )}
-      {selected && (
+      {selected && isFeedback(selected) && (
+        <FeedbackDetail
+          key={`feedback-${selected.id}`}
+          id={selected.id}
+          onSaved={load}
+        />
+      )}
+      {selected && !isFeedback(selected) && (
         <ReportDetail
           key={selected.id}
           report={selected}

@@ -574,15 +574,10 @@ function schatAccountEndpoints(app) {
   );
 
   // ---- admin: reports, stats, FAQ -----------------------------------------
-  app.get(
-    "/schat-admin/reports",
+  require("./answerFeedback").registerFeedbackAdminEndpoints(app, {
     adminOnly,
-    handle(async (request, response) => {
-      response
-        .status(200)
-        .json({ reports: await service.listReports(request.query || {}) });
-    })
-  );
+    listReports: service.listReports,
+  });
 
   app.patch(
     "/schat-admin/reports/:id",

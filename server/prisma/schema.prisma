@@ -528,6 +528,23 @@ model schat_departments {
   users         users[]
 }
 
+// Standalone identifiers avoid any changes to existing account/chat tables.
+model schat_answer_feedback {
+  id         Int     @id @default(autoincrement())
+  chatId     Int
+  userId     Int
+  feedback   Boolean
+  reason     String?
+  memo       String?
+  status     String  @default("open")
+  createdAt  BigInt
+  updatedAt  BigInt
+  resolvedAt BigInt?
+
+  @@unique([userId, chatId])
+  @@index([reason, status])
+}
+
 model schat_issue_reports {
   id                  Int       @id @default(autoincrement())
   reporter_user_id    Int?

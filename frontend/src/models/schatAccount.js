@@ -124,6 +124,9 @@ const SchatAccount = {
     }),
 
   reports: (filters) => call(`/schat-admin/reports${query(filters)}`),
+  answerFeedback: (id) => call(`/schat-admin/answer-feedback/${id}`),
+  resolveAnswerFeedback: (id) =>
+    call(`/schat-admin/answer-feedback/${id}`, { method: "PATCH", body: {} }),
   updateReport: (id, changes) =>
     call(`/schat-admin/reports/${id}`, { method: "PATCH", body: changes }),
   deleteReport: (id) =>

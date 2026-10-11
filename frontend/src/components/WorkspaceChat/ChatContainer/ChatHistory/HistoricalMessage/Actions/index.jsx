@@ -1,12 +1,20 @@
-import React, { memo, useState } from "react";
+import React, { memo, useEffect, useMemo, useState } from "react";
 import useCopyText from "@/hooks/useCopyText";
-import { Check, ThumbsUp, ArrowsClockwise, Copy } from "@phosphor-icons/react";
+import {
+  Check,
+  ThumbsUp,
+  ThumbsDown,
+  ArrowsClockwise,
+  Copy,
+} from "@phosphor-icons/react";
 import Workspace from "@/models/workspace";
 import { EditMessageAction } from "./EditMessage";
 import ActionMenu from "./ActionMenu";
 import { useTranslation } from "react-i18next";
 import useUser from "@/hooks/useUser";
 import { canEditMessage, canManageAnswers } from "@/utils/answerActions.mjs";
+import { createFeedbackController } from "@/utils/answerFeedback.mjs";
+import DislikeForm from "./DislikeForm";
 
 const Actions = ({
   message,
@@ -18,15 +26,43 @@ const Actions = ({
   forkThread,
   isEditing,
   role,
+  readAloud,
 }) => {
   const { t } = useTranslation();
   const { user } = useUser();
-  const [selectedFeedback, setSelectedFeedback] = useState(feedbackScore);
-  const handleFeedback = async (newFeedback) => {
-    const updatedFeedback =
-      selectedFeedback === newFeedback ? null : newFeedback;
-    await Workspace.updateChatFeedback(chatId, slug, updatedFeedback);
-    setSelectedFeedback(updatedFeedback);
+  const [{ selected: selectedFeedback, pending }, setFeedback] = useState({
+    selected: feedbackScore ?? null,
+    pending: false,
+  });
+  const [formOpen, setFormOpen] = useState(false);
+  const [error, setError] = useState("");
+  const [thanks, setThanks] = useState(false);
+  const controller = useMemo(
+    () =>
+      createFeedbackController({
+        initial: feedbackScore ?? null,
+        save: (value, details) =>
+          Workspace.updateChatFeedback(chatId, slug, value, details),
+        onChange: setFeedback,
+      }),
+    [chatId, slug]
+  );
+  useEffect(() => {
+    controller.selected = feedbackScore ?? null;
+    setFeedback({ selected: controller.selected, pending: controller.pending });
+  }, [controller, feedbackScore]);
+  useEffect(() => {
+    if (!thanks) return;
+    const timer = setTimeout(() => setThanks(false), 2500);
+    return () => clearTimeout(timer);
+  }, [thanks]);
+  const saveFeedback = async (value, details) => {
+    if (controller.pending) return;
+    setError("");
+    const success = await controller.submit(value, details);
+    if (!success) return setError("저장하지 못했습니다. 다시 시도해 주세요.");
+    setFormOpen(false);
+    if (value === false) setThanks(true);
   };
 
   return (
@@ -34,7 +70,8 @@ const Actions = ({
       className={`flex w-full flex-wrap items-center gap-y-1 ${role === "user" ? "justify-end" : "justify-between"}`}
     >
       <div className="flex justify-start items-center gap-x-[8px]">
-        <div className="md:group-hover:opacity-100 transition-all duration-300 md:opacity-0 flex flex-wrap justify-start items-center gap-x-[8px] gap-y-1">
+        <div className="flex flex-wrap justify-start items-center gap-x-[8px] gap-y-1">
+          {role !== "user" && readAloud}
           <div
             className={`flex justify-start items-center gap-x-[8px] ${role === "user" ? "flex-row-reverse" : ""}`}
           >
@@ -57,10 +94,28 @@ const Actions = ({
           {chatId && role !== "user" && !isEditing && (
             <FeedbackButton
               isSelected={selectedFeedback === true}
-              handleFeedback={() => handleFeedback(true)}
+              disabled={pending}
+              handleFeedback={() =>
+                saveFeedback(controller.selected === true ? null : true)
+              }
               tooltipId="feedback-button"
               tooltipContent={t("chat_window.good_response")}
               IconComponent={ThumbsUp}
+            />
+          )}
+          {chatId && role !== "user" && !isEditing && (
+            <FeedbackButton
+              isSelected={selectedFeedback === false}
+              disabled={pending}
+              handleFeedback={() => {
+                if (controller.pending) return;
+                if (controller.selected === false) return saveFeedback(null);
+                setError("");
+                setFormOpen(true);
+              }}
+              tooltipId="dislike-button"
+              tooltipContent="싫어요"
+              IconComponent={ThumbsDown}
             />
           )}
           {canManageAnswers(user) && (
@@ -73,6 +128,30 @@ const Actions = ({
           )}
         </div>
       </div>
+      {formOpen && (
+        <DislikeForm
+          pending={pending}
+          error={error}
+          onCancel={() => {
+            setFormOpen(false);
+            setError("");
+          }}
+          onSubmit={(details) => saveFeedback(false, details)}
+        />
+      )}
+      {error && !formOpen && (
+        <p role="alert" className="mt-2 w-full text-sm text-red-500">
+          {error}
+        </p>
+      )}
+      {thanks && (
+        <p
+          role="status"
+          className="mt-2 w-full text-sm text-theme-text-secondary"
+        >
+          알려 주셔서 고마워요
+        </p>
+      )}
     </div>
   );
 };
@@ -82,12 +161,16 @@ function FeedbackButton({
   handleFeedback,
   tooltipContent,
   IconComponent,
+  disabled,
+  tooltipId = "feedback-button",
 }) {
   return (
     <div className="mt-3 relative">
       <button
         onClick={handleFeedback}
-        data-tooltip-id="feedback-button"
+        disabled={disabled}
+        aria-pressed={isSelected}
+        data-tooltip-id={tooltipId}
         data-tooltip-content={tooltipContent}
         className="text-zinc-300 light:text-slate-500"
         aria-label={tooltipContent}

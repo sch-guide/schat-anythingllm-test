@@ -23,12 +23,13 @@ await build({
   import { renderToStaticMarkup } from "react-dom/server";
   import { AuthContext } from "./src/AuthContext.jsx";
   import Actions from "./src/components/WorkspaceChat/ChatContainer/ChatHistory/HistoricalMessage/Actions/index.jsx";
+  import AsyncTTSMessage from "./src/components/WorkspaceChat/ChatContainer/ChatHistory/HistoricalMessage/Actions/TTSButton/asyncTts.jsx";
   import { I18nextProvider } from "react-i18next";
   import i18n from "i18next";
   i18n.init({ lng: "ko", resources: { ko: { translation: {} } } });
   export function render(user, role = "assistant") {
     return renderToStaticMarkup(<I18nextProvider i18n={i18n}><AuthContext.Provider value={{ store: { user } }}>
-      <Actions message="시험 답변" chatId={11} slug="space" isLastMessage role={role} regenerateMessage={() => {}} forkThread={() => {}} />
+      <Actions message="시험 답변" chatId={11} slug="space" isLastMessage role={role} readAloud={role === 'assistant' ? <AsyncTTSMessage chatId={11} slug="space" /> : null} regenerateMessage={() => {}} forkThread={() => {}} />
     </AuthContext.Provider></I18nextProvider>);
   }
 `,
@@ -74,20 +75,24 @@ function buttons(html) {
   );
 }
 for (const role of ["default", "manager"])
-  test(`${role} 답변 작업은 복사/다시답변/좋아요 순서로 렌더`, () => {
+  test(`${role} 답변 작업은 읽어주기/복사/다시답변/좋아요/싫어요 순서로 렌더`, () => {
     assert.deepEqual(buttons(fixture.render({ role })), [
+      "message-to-speech",
       "copy-assistant-text",
       "regenerate-assistant-text",
       "feedback-button",
+      "dislike-button",
     ]);
   });
 test("관리자와 단독 소유자의 답변 수정과 추가 작업 유지", () => {
   for (const user of [{ role: "admin" }, null]) {
     assert.deepEqual(buttons(fixture.render(user)), [
+      "message-to-speech",
       "copy-assistant-text",
       "edit-input-text",
       "regenerate-assistant-text",
       "feedback-button",
+      "dislike-button",
       "action-menu",
     ]);
   }
