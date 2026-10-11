@@ -64,6 +64,7 @@ function handleDefaultStreamResponseV2(response, stream, responseProps) {
     // Now handle the chunks from the streamed response and append to fullText.
     try {
       for await (const chunk of stream) {
+        if (chunk?.usage) stream.captureGeminiUsage?.(chunk.usage);
         const message = chunk?.choices?.[0];
         const token = message?.delta?.content;
 
@@ -157,6 +158,9 @@ function handleDefaultStreamResponseV2(response, stream, responseProps) {
           message.finish_reason !== "" &&
           message.finish_reason !== null
         ) {
+          // Gemini's terminal billing chunk follows finish_reason. Closing the
+          // client here could cancel it, so close only after reading telemetry.
+          if (stream.captureGeminiUsage) continue;
           writeResponseChunk(response, {
             uuid,
             sources,
@@ -170,6 +174,12 @@ function handleDefaultStreamResponseV2(response, stream, responseProps) {
           resolve(fullText);
           break; // Break streaming when a valid finish_reason is first encountered
         }
+      }
+      if (stream.captureGeminiUsage) {
+        response.removeListener("close", handleAbort);
+        stream.endMeasurement(usage);
+        writeResponseChunk(response, { uuid, sources, type: 'textResponseChunk', textResponse: '', close: true, error: false });
+        resolve(fullText);
       }
     } catch (e) {
       // Cancelling the upstream request rejects the iterator - that is the client

@@ -4,6 +4,7 @@
 // - Gemini 등 외부 AI를 호출하지 않는다. 저장된 대화 기록(workspace_chats)만 읽는다.
 // - 질문 원문은 응답을 만들 때 환자 정보로 보이는 숫자를 *** 로 가린다.
 
+const { estimateChatCost } = require('../aiUsageFees');
 const PERIODS = Object.freeze({ today: 1, "7d": 7, "30d": 30, "90d": 90 });
 const QUESTION_TEXT_MAX_DAYS = 90;
 const MIN_DEPARTMENT_USERS = 5;
@@ -246,6 +247,7 @@ function computeUsageStats({
       )
       .sort((a, b) => a.name.localeCompare(b.name, "ko")),
     aiUsage: {
+      estimatedCost: estimateChatCost(inPeriod),
       questions: inPeriod.length,
       chatsWithTokens,
       promptTokens,

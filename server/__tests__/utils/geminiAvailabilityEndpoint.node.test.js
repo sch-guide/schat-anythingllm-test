@@ -42,10 +42,31 @@ function setup(role = "admin") {
   const monitor = createMonitor(() => 1000);
   const routes = {};
   let saved = null;
+  let recharge = { revision: 0, records: [] };
   load("endpoints/geminiAvailability.js", {
     "../utils/middleware/validatedRequest": validated,
     "../utils/middleware/multiUserProtected": roles,
     "../utils/geminiAvailability": { monitor },
+    "../utils/aiRecharges": {
+      loadFees: async () => ({ percent: 80, level: "warning", ...recharge }),
+      rechargeStore: () => ({
+        mutate: async (body, action) => {
+          if (body.revision !== recharge.revision) {
+            const error = Error("새로고침해 주세요.");
+            error.status = 409;
+            throw error;
+          }
+          recharge = {
+            revision: recharge.revision + 1,
+            records:
+              action === "delete"
+                ? []
+                : [{ id: "test", amountKrw: body.amountKrw, date: body.date }],
+          };
+          return recharge;
+        },
+      }),
+    },
     "../utils/geminiBudget": {
       loadBudget: async () => ({ percent: 80, level: "warning" }),
       validateConfig: require("../../utils/geminiBudget").validateConfig,
@@ -61,11 +82,17 @@ function setup(role = "admin") {
     put(route, ...items) {
       routes["PUT " + route] = items.flat();
     },
+    post(route, ...items) {
+      routes["POST " + route] = items.flat();
+    },
+    delete(route, ...items) {
+      routes["DELETE " + route] = items.flat();
+    },
   });
   return {
     monitor,
     saved: () => saved,
-    async invoke(token, method = "GET", body) {
+    async invoke(token, method = "GET", body, route) {
       const res = {
         locals: {},
         statusCode: 200,
@@ -97,10 +124,15 @@ function setup(role = "admin") {
       for (const handler of routes[
         method +
           " /schat-admin/" +
-          (method === "GET" ? "gemini-availability" : "gemini-budget")
+          (route ||
+            (method === "GET" ? "gemini-availability" : "gemini-budget"))
       ]) {
         let next = false;
-        await handler({ header: () => token, body }, res, () => (next = true));
+        await handler(
+          { header: () => token, body, params: { id: "test" } },
+          res,
+          () => (next = true)
+        );
         if (!next) break;
       }
       return res;
@@ -112,6 +144,65 @@ test("unauthenticated and employee access are rejected", async () => {
   assert.equal(
     (await setup("default").invoke("Bearer synthetic")).statusCode,
     401
+  );
+});
+test("recharge CRUD rejects employees and stale revisions while preserving real AI quota state", async () => {
+  const employee = setup("default");
+  assert.equal(
+    (
+      await employee.invoke(
+        "Bearer synthetic",
+        "POST",
+        { revision: 0 },
+        "ai-recharges"
+      )
+    ).statusCode,
+    401
+  );
+  const { invoke, monitor } = setup();
+  const body = { revision: 0, amountKrw: 8000, date: "2026-10-11" };
+  const created = await invoke(
+    "Bearer synthetic",
+    "POST",
+    body,
+    "ai-recharges"
+  );
+  assert.equal(created.body.revision, 1);
+  assert.equal(
+    (await invoke("Bearer synthetic", "PUT", body, "ai-recharges/:id"))
+      .statusCode,
+    409
+  );
+  assert.equal(
+    (
+      await invoke(
+        "Bearer synthetic",
+        "PUT",
+        { ...body, revision: 1 },
+        "ai-recharges/:id"
+      )
+    ).body.revision,
+    2
+  );
+  await assert.rejects(
+    monitor.wrap(async () => {
+      throw { status: 429, message: "daily quota exceeded" };
+    }, "test")()
+  );
+  assert.equal(
+    (
+      await invoke(
+        "Bearer synthetic",
+        "DELETE",
+        { revision: 2 },
+        "ai-recharges/:id"
+      )
+    ).body.records.length,
+    0
+  );
+  assert.equal(
+    (await invoke("Bearer synthetic")).body.state.status,
+    "exhausted"
   );
 });
 test("admin sees first occurrence only, and successful matching call clears it", async () => {

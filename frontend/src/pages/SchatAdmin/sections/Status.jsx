@@ -151,7 +151,7 @@ export default function StatusSection() {
   return (
     <div className="flex flex-col gap-y-5">
       <SystemLights ai={availability?.state} aiError={availabilityError} daily={admission?.dailyUsage}
-        connections={connections} connectionResult={connectionResult} />
+        connections={connections} connectionResult={connectionResult} budget={availability?.budget} />
       <Button className="self-start" variant="secondary" onClick={testConnections} disabled={testing}>
         {testing ? '확인 중…' : '연결 시험'}
       </Button>

@@ -1,4 +1,5 @@
 const { TokenManager } = require("../tiktoken");
+const { normalizeGeminiUsage } = require("../../aiUsageFees");
 
 /**
  * @typedef {import("openai/streaming").Stream<import("openai").OpenAI.ChatCompletionChunk>} OpenAICompatibleStream
@@ -84,6 +85,19 @@ class LLMPerformanceMonitor {
       ...(modelTag ? { model: modelTag } : {}),
       ...(provider ? { provider: provider } : {}),
     };
+    if (provider === "GeminiLLM") {
+      stream.metrics.geminiBilling = {
+        version: 1,
+        calls: [normalizeGeminiUsage(null, modelTag)],
+      };
+      // Repeated stream usage is a snapshot of one call, never an increment.
+      stream.captureGeminiUsage = (usage) => {
+        stream.metrics.geminiBilling = {
+          version: 1,
+          calls: [normalizeGeminiUsage(usage, modelTag)],
+        };
+      };
+    }
 
     stream.endMeasurement = (reportedUsage = {}) => {
       const end = Date.now();

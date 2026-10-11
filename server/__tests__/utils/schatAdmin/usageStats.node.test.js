@@ -109,6 +109,15 @@ test("seven usage items, without any author information", () => {
   ]);
   // (7) stored tokens only
   assert.deepEqual(stats.aiUsage, {
+    estimatedCost: {
+      estimatedKrw: null,
+      chargedQuestions: 7,
+      missingChats: 7,
+      models: [],
+      unknownModels: [],
+      reason: "과거 기록이나 확인되지 않은 사용량이 있어 계산할 수 없어요.",
+      priceVerified: "2026-10-11",
+    },
     questions: 7,
     chatsWithTokens: 5,
     promptTokens: 500,

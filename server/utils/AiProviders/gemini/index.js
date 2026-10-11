@@ -1,4 +1,5 @@
 const fs = require("fs");
+const { normalizeGeminiUsage } = require("../../aiUsageFees");
 const path = require("path");
 const { GeminiEmbedder } = require("../../EmbeddingEngines/gemini");
 const {
@@ -72,7 +73,10 @@ class GeminiLLM {
       ),
     });
     require("../../geminiAvailability").observeCreate(
-      this.openai.chat.completions, this.model, "generation", process.env.GEMINI_API_KEY
+      this.openai.chat.completions,
+      this.model,
+      "generation",
+      process.env.GEMINI_API_KEY
     );
 
     this.limits = {
@@ -438,10 +442,14 @@ class GeminiLLM {
     return {
       textResponse: result.output.choices[0].message.content,
       metrics: {
-        prompt_tokens: result.output.usage.prompt_tokens || 0,
-        completion_tokens: result.output.usage.completion_tokens || 0,
-        total_tokens: result.output.usage.total_tokens || 0,
-        outputTps: result.output.usage.completion_tokens / result.duration,
+        geminiBilling: {
+          version: 1,
+          calls: [normalizeGeminiUsage(result.output.usage, this.model)],
+        },
+        prompt_tokens: result.output.usage?.prompt_tokens || 0,
+        completion_tokens: result.output.usage?.completion_tokens || 0,
+        total_tokens: result.output.usage?.total_tokens || 0,
+        outputTps: result.output.usage?.completion_tokens / result.duration,
         duration: result.duration,
         model: this.model,
         provider: this.className,

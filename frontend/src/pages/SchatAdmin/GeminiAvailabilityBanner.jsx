@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { API_BASE } from "@/utils/constants";
 import { baseHeaders } from "@/utils/request";
-import { LegacyHelp as Help } from './LegacyHelp';
+import { Help } from "./ui";
+import { feeWarning } from "./aiFeesPresentation";
 
 export default function GeminiAvailabilityBanner() {
   const { data, error } = useGeminiAvailability();
@@ -62,11 +63,11 @@ export function useGeminiAvailability() {
 }
 
 export const BUDGET_NOTICE =
-  "현재 표시되는 AI 예산 사용률은 SCHAT에 기록된 채팅 사용량을 기준으로 계산한 추정치입니다. 문서 검색 자료 만들기, PDF 이미지 설명, 퀴즈 생성, 동의어 자동 생성 등 일부 Gemini 사용량은 포함되지 않아 실제 사용액과 다를 수 있습니다.";
+  "문서 검색 자료 만들기, PDF 이미지 설명, 퀴즈 생성, 동의어 자동 생성 비용은 빠져 있어요. 실제 잔액은 AI Studio 결제 화면에서 확인해 주세요.";
 
 export function GeminiAvailabilityNotice({ alerts = [], budget }) {
   const warn =
-    Number.isFinite(budget?.percent) &&
+    Number.isFinite(budget?.remainingKrw) &&
     ["warning", "high"].includes(budget?.level);
   if (!alerts.length && !warn) return null;
   const first = new Date(alerts[0]?.firstOccurredAt);
@@ -99,26 +100,18 @@ export function GeminiAvailabilityNotice({ alerts = [], budget }) {
           role="alert"
           className={`rounded-lg border px-4 py-3 break-words ${budget.level === "high" ? "border-red-400 bg-red-50 text-red-950" : "border-amber-400 bg-amber-50 text-amber-950"}`}
         >
-          <strong>
-            예상 AI 예산 {budget.level === "high" ? "높은 사용량 경고" : "주의"}
-          </strong>
-          <p>
-            설정한 AI 예산의 약{" "}
-            {budget.percent.toLocaleString("ko-KR", {
-              maximumFractionDigits: 1,
-            })}
-            %를 사용함.
+          <Help
+            label="AI 사용 요금 경고 도움말"
+            heading={<strong>AI 요금 충전 필요</strong>}
+          >
+            {["SCHAT에 기록된 채팅을 기준으로 추정해요.", BUDGET_NOTICE]}
+          </Help>
+          <p>{feeWarning(budget)}</p>
+          <p className="text-sm mt-2">
+            채팅 기록 기준 추정치예요. 실제 잔액과 다를 수 있어요.
           </p>
-          <p>
-            예상 잔여 예산: 약{" "}
-            {budget.remainingPercent?.toLocaleString("ko-KR", {
-              maximumFractionDigits: 1,
-            })}
-            %
-          </p>
-          <p className="text-sm mt-2">채팅 사용 기록 기준 추정치입니다. <Help>{BUDGET_NOTICE}</Help></p>
           <p className="text-sm">
-            예산 추정치만으로 질문을 차단하지 않음. 실제 AI 한도 상태와 별개임.
+            실제 AI 한도 상태는 따로 확인해요. 이 추정치로 질문을 막지 않아요.
           </p>
         </div>
       )}

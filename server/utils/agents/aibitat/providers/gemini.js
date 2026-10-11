@@ -3,6 +3,7 @@ const Provider = require("./ai-provider.js");
 const { RetryError } = require("../error.js");
 const { safeJsonParse } = require("../../../http");
 const { v4 } = require("uuid");
+const { normalizeGeminiUsage } = require("../../../aiUsageFees");
 
 /**
  * The agent provider for the Gemini provider.
@@ -19,28 +20,32 @@ class GeminiProvider extends Provider {
     const client = new OpenAI({
       baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
       apiKey: process.env.GEMINI_API_KEY,
-      fetch: require("../../../geminiDailyUsage").countingFetch(async (url, init) => {
-        const res = await globalThis.fetch(url, init);
-        if (!res.ok) {
-          const cloned = res.clone();
-          const text = await cloned.text().catch(() => "(unreadable)");
-          this.providerLog(
-            `[Gemini.fetch] HTTP ${res.status}`
-          );
-          try {
-            const json = safeJsonParse(text, {});
-            const errorObj = Array.isArray(json) ? json[0] : json;
-            this._lastErrorMessage = errorObj?.error?.message || null;
-          } catch {
-            this._lastErrorMessage = text?.slice(0, 200) || null;
+      fetch: require("../../../geminiDailyUsage").countingFetch(
+        async (url, init) => {
+          const res = await globalThis.fetch(url, init);
+          if (!res.ok) {
+            const cloned = res.clone();
+            const text = await cloned.text().catch(() => "(unreadable)");
+            this.providerLog(`[Gemini.fetch] HTTP ${res.status}`);
+            try {
+              const json = safeJsonParse(text, {});
+              const errorObj = Array.isArray(json) ? json[0] : json;
+              this._lastErrorMessage = errorObj?.error?.message || null;
+            } catch {
+              this._lastErrorMessage = text?.slice(0, 200) || null;
+            }
           }
-        }
-        return res;
-      }, require("../../../geminiDailyUsage").dailyUsage),
+          return res;
+        },
+        require("../../../geminiDailyUsage").dailyUsage
+      ),
     });
 
     require("../../../geminiAvailability").observeCreate(
-      client.chat.completions, model, "generation", process.env.GEMINI_API_KEY
+      client.chat.completions,
+      model,
+      "generation",
+      process.env.GEMINI_API_KEY
     );
     this._client = client;
     this.model = model;
@@ -49,6 +54,22 @@ class GeminiProvider extends Provider {
 
   get client() {
     return this._client;
+  }
+
+  recordUsage(usage) {
+    super.recordUsage(usage);
+    const call = normalizeGeminiUsage(usage, this.model);
+    this.lastUsage.geminiBilling = { version: 1, calls: [call] };
+    const calls = this.cumulativeUsage.geminiBilling?.calls || [];
+    this.cumulativeUsage.geminiBilling = {
+      version: 1,
+      calls: [...calls, call],
+    };
+  }
+
+  resetCumulativeUsage() {
+    super.resetCumulativeUsage();
+    this.cumulativeUsage.geminiBilling = { version: 1, calls: [] };
   }
 
   /**
@@ -323,7 +344,7 @@ class GeminiProvider extends Provider {
         }
       }
 
-      if (usage) this.recordUsage(usage);
+      this.recordUsage(usage);
 
       if (completion.functionCall) {
         completion.functionCall.arguments = safeJsonParse(
@@ -399,7 +420,7 @@ class GeminiProvider extends Provider {
           : {}),
       });
 
-      if (response.usage) this.recordUsage(response.usage);
+      this.recordUsage(response.usage);
 
       /** @type {OpenAI.OpenAI.Chat.ChatCompletionMessage} */
       const completion = response.choices[0].message;

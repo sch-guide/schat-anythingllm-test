@@ -12,6 +12,7 @@ import SchatAdmin from "@/models/schatAdmin";
 import { Card, Help, InfoRow, Loading, Notice } from "../ui";
 import DepartmentPicker from "../DepartmentPicker";
 import { selectionError } from "../usageSelection";
+import { money } from "../aiFeesPresentation";
 
 // "사용 통계": 무엇을 물었는지 중심. 개인별 목록이나 사람끼리 비교하는 표시는 만들지 않는다.
 // 서버가 질문 원문의 환자 정보 같은 숫자를 가린 뒤 보낸다.
@@ -305,6 +306,9 @@ export default function UsageStatsSection() {
             ]}
           >
             <div>
+              <InfoRow label="예상 AI 요금">{money(stats.aiUsage.estimatedCost?.estimatedKrw)}</InfoRow>
+              <p className="text-xs text-theme-text-secondary">기록된 채팅만 계산한 추정치예요. 실제 잔액과 다를 수 있어요.</p>
+              {stats.aiUsage.estimatedCost?.reason && <p className="text-sm">{stats.aiUsage.estimatedCost.reason}</p>}
               <InfoRow label="질문 수">{n(stats.aiUsage.questions)}건</InfoRow>
               <InfoRow label="사용량 기록이 있는 답변">
                 {n(stats.aiUsage.chatsWithTokens)}건

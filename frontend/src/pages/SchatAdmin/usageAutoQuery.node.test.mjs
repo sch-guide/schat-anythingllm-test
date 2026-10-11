@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import { transformSync } from 'esbuild';
 import * as filters from './usageSelection.js';
+import * as fees from './aiFeesPresentation.js';
 const require = createRequire(import.meta.url);
 const React = require('react');
 
@@ -25,6 +26,7 @@ test('changing period/departments queries automatically and ignores older replie
     module, exports: module.exports,
     require: name => name === 'react' ? hooks : name === 'recharts' ? {} : name === '../ui' ? {Card:'section',Help:'span',InfoRow:'div',Loading:'p',Notice:'p'} :
       name === '../DepartmentPicker' ? { __esModule:true, default: 'picker' } : name === '../usageSelection' ? filters :
+      name === '../aiFeesPresentation' ? fees :
       name === '@/models/schatAdmin' ? { __esModule:true, default: { usageStats: (period, selection) => {
         calls.push({period, departments:[...selection.departmentIds]});
         return new Promise(resolve => pending.push(resolve));
