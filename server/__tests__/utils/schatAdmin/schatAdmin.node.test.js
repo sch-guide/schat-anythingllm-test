@@ -43,9 +43,9 @@ test("connection state sent to the browser never includes a key", () => {
   });
   assert.equal(JSON.stringify(state).includes("secret"), false);
   assert.equal(state.llm.keySet, true);
-  assert.equal(state.embedding.keySet, false);
+  assert.equal(state.embedding.keySet, true);
   assert.equal(state.embedding.model, "embed-a");
-  assert.equal(state.sharedKey, false);
+  assert.equal(state.sharedKey, true);
   const shared = publicConnectionState({
     GEMINI_API_KEY: "same-secret",
     GEMINI_EMBEDDING_API_KEY: "same-secret",

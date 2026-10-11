@@ -14,116 +14,13 @@ import {
 } from "../ui";
 import { promptInheritance } from "../promptInheritance";
 
-const PROVIDER_NAMES = { gemini: "Google Gemini" };
-
 export default function AnswerSection({ workspace, reload }) {
-  const [settings, setSettings] = useState(null);
   return (
     <div className="flex flex-col gap-y-5">
-      <AnswerModel onSettingsLoaded={setSettings} />
       <HistoryCount workspace={workspace} onSaved={reload} />
       <AnswerRules workspace={workspace} onSaved={reload} />
-      <Advanced workspace={workspace} onSaved={reload} settings={settings} />
+      <Advanced workspace={workspace} onSaved={reload} />
     </div>
-  );
-}
-
-function AnswerModel({ onSettingsLoaded }) {
-  const [settings, setSettings] = useState(null);
-  const [value, setValue] = useState("");
-  const [confirming, setConfirming] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  async function load() {
-    const keys = await System.keys();
-    setSettings(keys);
-    onSettingsLoaded?.(keys);
-    setValue(keys?.GeminiLLMModelPref || "");
-  }
-  useEffect(() => {
-    load();
-  }, []);
-
-  async function save() {
-    setSaving(true);
-    const { error } = await System.updateSystem({
-      GeminiLLMModelPref: value.trim(),
-    });
-    setSaving(false);
-    setConfirming(false);
-    if (error) return showToast("사용 모델을 바꾸지 못했습니다.", "error");
-    showToast("사용 모델을 바꿨습니다.", "success");
-    load();
-  }
-
-  const provider = settings?.LLMProvider;
-  const current = settings?.GeminiLLMModelPref || "";
-  const editable = provider === "gemini";
-  return (
-    <Card
-      title="사용 AI 모델"
-      description="직원 질문에 답변을 만드는 AI 모델입니다. 평소에는 바꿀 필요가 없습니다."
-    >
-      {!settings ? (
-        <Loading />
-      ) : (
-        <div className="flex flex-col gap-y-3">
-          <div>
-            <InfoRow label="AI 제공 서비스">
-              {PROVIDER_NAMES[provider] || provider || "설정 안 됨"}
-            </InfoRow>
-            <InfoRow label="현재 사용 모델">{current || "설정 안 됨"}</InfoRow>
-          </div>
-          {editable && (
-            <>
-              <Field
-                label="사용 모델 변경"
-                htmlFor="schat-answer-model"
-                help="모델 이름을 정확히 입력해야 합니다. 바꾼 뒤에는 '시스템 연결'에서 연결 테스트로 확인해 주세요. 잘못 입력하면 답변이 만들어지지 않을 수 있습니다."
-              >
-                <input
-                  id="schat-answer-model"
-                  className={`${inputClass} max-w-[360px]`}
-                  value={value}
-                  onChange={(e) => {
-                    setValue(e.target.value);
-                    setConfirming(false);
-                  }}
-                />
-              </Field>
-              {confirming ? (
-                <Notice tone="warning">
-                  <p className="mb-2">
-                    사용 모델을 <b>{current}</b>에서 <b>{value.trim()}</b>(으)로
-                    바꿀까요? 모든 직원 답변에 바로 적용됩니다.
-                  </p>
-                  <div className="flex gap-x-2">
-                    <Button onClick={save} disabled={saving}>
-                      {saving ? "변경 중..." : "변경"}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => setConfirming(false)}
-                    >
-                      취소
-                    </Button>
-                  </div>
-                </Notice>
-              ) : (
-                <div>
-                  <Button
-                    disabled={!value.trim() || value.trim() === current}
-                    onClick={() => setConfirming(true)}
-                  >
-                    모델 변경
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-    </Card>
   );
 }
 

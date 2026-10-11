@@ -68,6 +68,11 @@ function consumePreviewToken(token, userId, keys) {
 // Admin-only, read-only overview for the SCHAT admin screen.
 function schatAdminEndpoints(app) {
   if (!app) return;
+  const aiSettings = require('../utils/schatAdmin/aiSettings').createAiSettingsApi({body:reqBody});
+  const aiAdminOnly = [validatedRequest, flexUserRoleValid([ROLES.admin])];
+  app.get('/schat-admin/ai-settings', aiAdminOnly, aiSettings.read);
+  app.post('/schat-admin/ai-models', aiAdminOnly, aiSettings.models);
+  app.put('/schat-admin/ai-settings', aiAdminOnly, aiSettings.save);
 
   app.get(
     "/schat-admin/status",

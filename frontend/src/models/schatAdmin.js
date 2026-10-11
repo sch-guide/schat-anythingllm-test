@@ -2,6 +2,15 @@ import { API_BASE } from "@/utils/constants";
 import { baseHeaders } from "@/utils/request";
 
 const SchatAdmin = {
+  aiSettings: async () => fetch(`${API_BASE}/schat-admin/ai-settings`, {
+    method: 'GET', headers: baseHeaders(), cache: 'no-store',
+  }).then(res => res.json()).catch(() => null),
+  aiModels: async (input = {}) => fetch(`${API_BASE}/schat-admin/ai-models`, {
+    method: 'POST', headers: baseHeaders(), body: JSON.stringify(input),
+  }).then(res => res.json()).catch(() => ({ok:false,message:'모델 목록을 확인하지 못했습니다.'})),
+  saveAiSettings: async (input) => fetch(`${API_BASE}/schat-admin/ai-settings`, {
+    method: 'PUT', headers: baseHeaders(), body: JSON.stringify(input),
+  }).then(res => res.json()).catch(() => ({ok:false,message:'저장 결과를 확인하지 못했습니다. 화면을 다시 열어 확인해 주세요.'})),
   status: async () => {
     return await fetch(`${API_BASE}/schat-admin/status`, {
       method: "GET",

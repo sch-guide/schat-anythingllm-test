@@ -104,8 +104,8 @@ function connectionTargets(env = process.env) {
     embedding: {
       provider: env.EMBEDDING_ENGINE || null,
       model: env.EMBEDDING_MODEL_PREF || null,
-      keySet: !!env.GEMINI_EMBEDDING_API_KEY,
-      apiKey: env.GEMINI_EMBEDDING_API_KEY || null,
+      keySet: !!(env.GEMINI_EMBEDDING_API_KEY || env.GEMINI_API_KEY),
+      apiKey: env.GEMINI_EMBEDDING_API_KEY || env.GEMINI_API_KEY || null,
     },
   };
 }

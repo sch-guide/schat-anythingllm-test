@@ -1409,7 +1409,12 @@ async function validatePGVectorTableName(key, prevValue, nextValue) {
 // read from an ENV file as this seems to be a complicating step for many so allowing people to write
 // to the process will at least alleviate that issue. It does not perform comprehensive validity checks or sanity checks
 // and is simply for debugging when the .env not found issue many come across.
-async function updateENV(newENVs = {}, force = false, userId = null) {
+async function updateENV(
+  newENVs = {},
+  force = false,
+  userId = null,
+  { atomicDump = false } = {}
+) {
   let error = "";
   const runAfterAll = [];
   const validKeys = Object.keys(KEY_MAPPING);
@@ -1463,7 +1468,7 @@ async function updateENV(newENVs = {}, force = false, userId = null) {
     await runAfterAllFunc(newValues, userId);
 
   await logChangesToEventLog(newValues, userId);
-  if (process.env.NODE_ENV === "production") dumpENV();
+  if (process.env.NODE_ENV === "production") dumpENV({ atomic: atomicDump });
   return { newValues, error: error?.length > 0 ? error : false };
 }
 
@@ -1489,7 +1494,7 @@ async function logChangesToEventLog(newValues = {}, userId = null) {
   return;
 }
 
-function dumpENV() {
+function dumpENV({ atomic = false } = {}) {
   const fs = require("fs");
   const path = require("path");
 
@@ -1597,7 +1602,44 @@ function dumpENV() {
     .join("\n");
 
   const envPath = path.join(__dirname, "../../.env");
-  fs.writeFileSync(envPath, envResult, { encoding: "utf8", flag: "w" });
+  if (atomic) {
+    const temporaryPath = `${envPath}.${require("node:crypto").randomBytes(12).toString("hex")}.tmp`;
+    try {
+      fs.writeFileSync(temporaryPath, envResult, {
+        encoding: "utf8", flag: "wx", mode: 0o600,
+      });
+      try {
+        fs.renameSync(temporaryPath, envPath);
+      } catch (error) {
+        if (error.code !== "EBUSY") throw error;
+        // Docker can mount .env as a single file, preventing rename. Keep its
+        // original bytes and restore them if the compatible in-place write fails.
+        const previous = fs.readFileSync(envPath);
+        try {
+          fs.writeFileSync(envPath, envResult, { encoding: "utf8", flag: "r+" });
+          fs.truncateSync(envPath, Buffer.byteLength(envResult, "utf8"));
+        } catch {
+          try {
+            fs.writeFileSync(envPath, previous, { flag: "r+" });
+            fs.truncateSync(envPath, previous.length);
+          } catch {
+            throw Object.assign(new Error("환경 설정 파일을 복구하지 못했습니다."), {
+              code: "ENV_RESTORE_FAILED",
+            });
+          }
+          throw Object.assign(new Error("환경 설정 파일에 저장하지 못했습니다."), {
+            code: "ENV_WRITE_FAILED",
+          });
+        }
+      }
+    } finally {
+      try {
+        fs.unlinkSync(temporaryPath);
+      } catch { /* renamed or never created */ }
+    }
+  } else {
+    fs.writeFileSync(envPath, envResult, { encoding: "utf8", flag: "w" });
+  }
   return true;
 }
 
