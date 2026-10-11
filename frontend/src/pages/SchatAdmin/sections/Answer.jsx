@@ -329,20 +329,12 @@ function parseTemperature(value) {
   return Number.isFinite(next) && next >= 0 && next <= 2 ? next : null;
 }
 
-export function Advanced({ workspace, onSaved, settings }) {
+export function Advanced({ workspace, onSaved }) {
   const current = workspace?.openAiTemp ?? 0.7;
   const [value, setValue] = useState(current);
   const [saving, setSaving] = useState(false);
   useEffect(() => setValue(current), [workspace?.slug, current]);
   const next = parseTemperature(value);
-  const provider = workspace?.chatProvider || settings?.LLMProvider;
-  const model = workspace?.chatModel || settings?.GeminiLLMModelPref;
-  // Only this provider/model combination was checked on the Gemini-compatible
-  // connection. Other models remain unverified rather than declared unsupported.
-  const seedReason =
-    provider === "gemini" && model === "gemini-3.8-flash"
-      ? "현재 Gemini 호환 연결에서 seed 포함 요청이 거절되어 활성화하지 않음"
-      : "현재 연결에서 지원 미확인 — 지원이 확인되기 전에는 활성화하지 않음";
 
   async function save(e) {
     e.preventDefault();
@@ -373,28 +365,6 @@ export function Advanced({ workspace, onSaved, settings }) {
         <Loading />
       ) : (
         <form onSubmit={save} className="flex flex-col gap-y-3 mt-4">
-          <Field
-            label="반복 답변 기준값(seed) 사용"
-            htmlFor="schat-answer-seed"
-            help="seed는 같은 질문의 답변을 비슷하게 만드는 데 쓰는 기준값입니다. 같은 답변을 보장하지는 않습니다."
-          >
-            <div className="flex items-center gap-x-2 text-sm text-theme-text-secondary">
-              <input
-                id="schat-answer-seed"
-                type="checkbox"
-                checked={false}
-                disabled
-                aria-describedby="schat-answer-seed-reason"
-              />
-              <span>사용 안 함</span>
-            </div>
-          </Field>
-          <p
-            id="schat-answer-seed-reason"
-            className="text-xs leading-5 text-theme-text-secondary"
-          >
-            {seedReason}
-          </p>
           <InfoRow label="현재 적용 값(답변 표현 다양성)">{current}</InfoRow>
           <Field
             label="답변 표현 다양성"
@@ -413,18 +383,7 @@ export function Advanced({ workspace, onSaved, settings }) {
               onChange={(e) => setValue(e.target.value)}
             />
           </Field>
-          <Notice>
-            Google은 Gemini 3 모델의 답변 표현 다양성을 1.0으로 유지하도록
-            권장합니다. 현재 저장된 값과 비교한 뒤 필요할 때만 변경해 주세요.{" "}
-            <a
-              href="https://ai.google.dev/gemini-api/docs/gemini-3#temperature"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Google 공식 권장사항 보기
-            </a>
-          </Notice>
+          <p className="text-xs text-theme-text-secondary">보통은 바꿀 필요 없어요 (권장 0.7~1.0)</p>
           <div>
             <Button
               type="submit"

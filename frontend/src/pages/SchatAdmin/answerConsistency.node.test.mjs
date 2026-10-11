@@ -14,6 +14,8 @@ const require = createRequire(import.meta.url);
 // Only the React hook lifecycle and external operations are replaced. The
 // production component, handlers, JSX, and UI building blocks stay real.
 const hooks = `
+export default globalThis.__answerReact;
+export function useId(){return 'answer-test-help';}
 let slots=[], cursor=0, pending=[];
 export function begin(){cursor=0; pending=[];}
 export function flush(){for(const effect of pending) effect();}
@@ -105,6 +107,7 @@ function text(tree) {
 }
 
 function setup() {
+  globalThis.__answerReact = require('react');
   const calls = [];
   const state = {
     calls,
@@ -232,7 +235,7 @@ test("저장 실패는 성공으로 표시하지 않고 다시 저장할 수 있
   );
 });
 
-test("검증된 Gemini 연결은 seed 사용 안 함과 거절 이유를 표시하고 비활성화한다", async () => {
+test("고급 설정은 접혀 있고 쓰지 않는 seed 항목 없이 짧은 권장 안내만 표시한다", async () => {
   setup();
   const view = await loadAdvanced();
   const tree = view.render({
@@ -242,17 +245,15 @@ test("검증된 Gemini 연결은 seed 사용 안 함과 거절 이유를 표시�
   const control = elements(tree).find(
     (element) => element.props?.id === "schat-answer-seed"
   );
-  assert.equal(control?.props.disabled, true);
-  assert.match(text(tree), /사용 안 함/);
-  assert.match(
-    text(tree),
-    /현재 Gemini 호환 연결에서 seed 포함 요청이 거절되어 활성화하지 않음/
-  );
-  assert.match(text(tree), /1\.0/);
+  assert.equal(control, undefined);
+  assert.doesNotMatch(text(tree), /seed|지원 미확인/);
+  assert.equal(tree.type, 'details');
+  assert.equal(Boolean(tree.props.open), false);
+  assert.match(text(tree), /보통은 바꿀 필요 없어요 \(권장 0\.7~1\.0\)/);
   assert.match(text(tree), /낮춰도[\s\S]*정확[\s\S]*(같은|동일)/);
 });
 
-test("다른 모델이나 제공 서비스는 지원 미확인으로 안내한다", async () => {
+test("다른 모델과 미설정 상태에서도 seed 항목을 표시하지 않는다", async () => {
   setup();
   const view = await loadAdvanced();
   for (const workspace of [
@@ -264,17 +265,16 @@ test("다른 모델이나 제공 서비스는 지원 미확인으로 안내한�
     },
   ]) {
     const tree = view.render({ workspace, settings });
-    assert.match(text(tree), /현재 연결에서 지원 미확인/);
-    assert.doesNotMatch(text(tree), /seed 포함 요청이 거절/);
+    assert.doesNotMatch(text(tree), /seed|지원 미확인/);
     assert.equal(
       elements(tree).find(
         (element) => element.props?.id === "schat-answer-seed"
       )?.props.disabled,
-      true
+      undefined
     );
   }
-  assert.match(
+  assert.doesNotMatch(
     text(view.render({ workspace: { slug: "unknown" }, settings: null })),
-    /현재 연결에서 지원 미확인/
+    /seed|지원 미확인/
   );
 });
