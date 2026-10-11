@@ -15,7 +15,6 @@ import {
   Plugs,
   Pulse,
   Broom,
-  WarningOctagon,
 } from "@phosphor-icons/react";
 import useUser from "@/hooks/useUser";
 import { isMobile } from "react-device-detect";
@@ -161,7 +160,6 @@ const SECTION_ICONS = {
   connections: Plugs,
   status: Pulse,
   storage: Broom,
-  danger: WarningOctagon,
 };
 
 // SCHAT replaces the upstream settings tree with a single admin menu. The

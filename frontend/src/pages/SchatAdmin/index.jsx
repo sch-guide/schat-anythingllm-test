@@ -25,7 +25,6 @@ import UsageStatsSection from "./sections/UsageStats";
 import ConnectionsSection from "./sections/Connections";
 import StatusSection from "./sections/Status";
 import StorageSection from "./sections/Storage";
-import DangerSection from "./sections/Danger";
 import GeminiAvailabilityBanner from "./GeminiAvailabilityBanner";
 import ChatAdmissionPanel from "./ChatAdmissionPanel";
 
@@ -43,7 +42,6 @@ const SECTIONS = {
   connections: ConnectionsSection,
   status: StatusSection,
   storage: StorageSection,
-  danger: DangerSection,
 };
 
 // Sections that change one workspace show a picker when there is more than one.
@@ -53,7 +51,6 @@ const WORKSPACE_SECTIONS = [
   "answer",
   "answer-cache",
   "checklists",
-  "danger",
 ];
 // Table-heavy sections get more width so rows stay on one line.
 const WIDE_SECTIONS = [

@@ -77,11 +77,6 @@ export const SCHAT_ADMIN_SECTIONS = [
     description:
       "예전 업로드로 남은 페이지 기록과 이미지를 확인합니다. 현재 사용 중인 자료는 보호됩니다.",
   },
-  {
-    key: "danger",
-    label: "위험 설정",
-    description: "되돌릴 수 없는 작업입니다. 신중하게 사용하세요.",
-  },
 ];
 
 export function findSchatAdminSection(key) {
