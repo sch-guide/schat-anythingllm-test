@@ -83,9 +83,51 @@ function oppositeAction(question, checklist) {
   return own.length > 0 && !own.includes(asked[0]);
 }
 
+// A procedure name can also be a device name (PICC). "MRI는 PICC 사용
+// 가능해?" or "MRI PICC 가능해?" asks about using the device, not about doing the procedure, so
+// no checklist is offered when the question has a usage word and no
+// procedure word. "PICC", "PICC 삽입 준비", "PICC 드레싱" still match.
+const USAGE_WORDS = [
+  "사용",
+  "써도",
+  "쓸수",
+  "써야",
+  "채혈",
+  "주입",
+  "연결",
+  // "MRI PICC 가능해?", "CT PICC 괜찮아?"
+  "가능",
+  "괜찮",
+  "안전",
+  "허용",
+  // Dressing is care of a line already in place, not the insertion checklist.
+  "드레싱",
+];
+const PROCEDURE_WORDS = [
+  "삽입",
+  "거치",
+  "설치",
+  "시술",
+  "준비",
+  "간호",
+  "동의서",
+  "체크리스트",
+  "insertion",
+  "insert",
+];
+
+export function asksDeviceUseOnly(question = "") {
+  const normalized = normalizeChecklistQuestion(question);
+  const compact = normalized.replace(/ /g, "");
+  if (!USAGE_WORDS.some((word) => compact.includes(word))) return false;
+  if (PROCEDURE_WORDS.some((word) => compact.includes(word))) return false;
+  // 전/후 as their own word ("검사 전", "시술 후에"), not inside "전화".
+  return !/(^| )(전|후)(에|에는|부터|까지)?( |$)/u.test(normalized);
+}
+
 export function matchChecklists(question = "", checklists = []) {
   const normalizedQuestion = normalizeChecklistQuestion(question);
-  if (!normalizedQuestion) return [];
+  if (!normalizedQuestion || asksDeviceUseOnly(question)) return [];
 
   const matches = (Array.isArray(checklists) ? checklists : [])
     .filter((checklist) => checklist?.active !== false)

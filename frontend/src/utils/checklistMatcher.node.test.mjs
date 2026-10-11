@@ -171,3 +171,37 @@ test("checklist names match whatever the spacing", () => {
   assert.deepEqual(ids("투석관 삽입 술 준비"), ["hd"]);
   assert.deepEqual(ids("위 내시경 전 준비"), ["gfs"]);
 });
+
+test("questions about using a device do not open its procedure checklist", () => {
+  const picc = {
+    id: "picc",
+    title: "말초삽입형 중심정맥카테터 PICC",
+    aliases: ["PICC", "말초삽입형 중심정맥카테터"],
+  };
+  const shown = (q) => matchChecklists(q, [picc]).map((c) => c.id);
+  for (const question of [
+    "MRI는 PICC 사용 가능해?",
+    "PICC로 채혈 가능해?",
+    "PICC 조영제 주입 돼?",
+    "PICC 써도 돼?",
+    "PICC에 수액 연결해도 돼?",
+    "MRI PICC 가능해?",
+    "MRI 찍을 때 PICC 괜찮아?",
+    "CT 조영제 PICC로 가능?",
+    "PICC 있는 환자 MRI 안전해?",
+    "PICC 드레싱 주기",
+    "PICC 드레싱 교체 가능해?",
+  ])
+    assert.deepEqual(shown(question), [], question);
+  for (const question of [
+    "PICC",
+    "PICC 삽입 준비",
+    "PICC 시술 후 간호",
+    "PICC 동의서",
+    "PICC 삽입 후 MRI 사용 가능해?",
+    "검사 전 PICC 사용 확인",
+    "말초삽입형 중심정맥카테터 체크리스트",
+    "PICC 삽입 가능한 시간",
+  ])
+    assert.deepEqual(shown(question), ["picc"], question);
+});
