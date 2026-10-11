@@ -47,13 +47,15 @@ test("자동 생성은 날짜별 한 줄 요약과 접힌 기록이며 실패하
     startedAt: "2026-10-12T03:00:00Z",
     trigger: "upload",
     status: "done",
-    summary: { newGroups: 2, failed: 0 },
-    documents: [],
+    summary: { newGroups: 2, additions: 3, failed: 0 },
+    documents: [{ documentId: "one", status: "done" }],
   };
   const renderRuns = (item) =>
     renderToStaticMarkup(React.createElement(RunsCard, { runs: [item] }));
   const normal = renderRuns(run);
-  assert.match(normal, /마지막 자동 생성/);
+  assert.match(normal, /마지막 AI 후보 찾기:/);
+  assert.match(normal, /문서 1개.*새 제안 5개.*실패 0/);
+  assert.match(normal, /기록 보기 ›/);
   assert.doesNotMatch(normal, /<details[^>]*open|#77/);
   const failed = renderRuns({
     ...run,
@@ -200,7 +202,7 @@ function render(change = {}, props = {}) {
   );
 }
 
-test("표는 회색 사각 단어칩과 상태를 표시하며 기존 사용 중 묶음은 선택할 수 없다", () => {
+test("단어는 읽기 전용이고 검토 대기도 별도 수정 버튼으로 편집한다", () => {
   assert.match(render(), /<tr/);
   assert.match(render(), /synonym-chip/);
   assert.match(render(), /type="checkbox"[^>]*disabled=""/);
@@ -208,12 +210,16 @@ test("표는 회색 사각 단어칩과 상태를 표시하며 기존 사용 중
   assert.match(draft, /검토 대기/);
   assert.match(draft, />등록</);
   assert.match(draft, />제외</);
+  assert.match(draft, />수정</);
+  assert.doesNotMatch(draft, /<button[^>]*class="synonym-chip/);
+  assert.match(draft, /synonym-chip--procedure/);
+  assert.match(render({ kind: "drug" }), /synonym-kind--drug[^>]*>약물/);
   assert.doesNotMatch(draft, /type="checkbox"[^>]*disabled=""/);
   assert.match(render({ status: "off" }), /사용 안 함/);
 });
 
 test("표의 기본 작업은 수정이고 다른 행 편집 중에는 비활성이다", () => {
-  assert.match(render(), /<td[^>]*>용어/);
+  assert.match(render(), /synonym-kind--procedure[^>]*>용어/);
   assert.match(render(), />수정</);
   assert.doesNotMatch(render(), /role="switch"/);
   const locked = render({}, { editingElsewhere: true });
@@ -534,9 +540,7 @@ test("분류 수정 저장 후 등록만 실패해 편집행이 필터 밖으로
   const rowElement = nodes(tree).find((node) => node.type === module.GroupRow);
   let row = draw("row9", module.GroupRow, rowElement.props);
   nodes(row)
-    .find(
-      (node) => node.props.className === "synonym-chip" && node.props.onClick
-    )
+    .find((node) => node.type === "button" && node.props.children === "수정")
     .props.onClick();
   tree = drawSection();
   assert.equal(byLabel(tree, "분류 전체").props.disabled, true);

@@ -135,7 +135,7 @@
   width: 106px;
 }
 .synonym-table th:nth-child(5) {
-  width: 94px;
+  width: 186px;
 }
 .synonym-table input[type="checkbox"] {
   accent-color: #16857d;
@@ -159,8 +159,8 @@
   align-items: center;
   max-width: 100%;
   border-radius: 6px;
-  background: #f1f3f5;
-  border: 1px solid #e8ebed;
+  background: #fff;
+  border: 1px solid #e2e8f0;
   padding: 4px 8px;
   color: #3d4851;
   font-size: 14px;
@@ -226,8 +226,11 @@
 }
 .synonym-source-link {
   text-align: left;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration: none;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 2px 9px;
   overflow-wrap: anywhere;
 }
 .synonym-status {
@@ -270,6 +273,57 @@
 }
 .synonym-actions > button:not(.schat-admin-button) {
   color: #267f79;
+  background: #fff;
+  border: 1px solid #d6dfe6;
+  border-radius: 6px;
+  padding: 5px 10px;
+}
+.synonym-actions > button.synonym-register {
+  background: #0f766e;
+  color: #fff;
+  border-color: #0f766e;
+}
+.synonym-chip--procedure {
+  border-left: 3px solid #14b8a6;
+}
+.synonym-chip--drug {
+  border-left: 3px solid #8b5cf6;
+}
+.synonym-kind {
+  display: inline-block;
+  white-space: nowrap;
+  border-radius: 5px;
+  padding: 3px 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.synonym-kind--procedure {
+  background: #f0fdfa;
+  color: #0f766e;
+}
+.synonym-kind--drug {
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+.synonym-run-history > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #64748b;
+  font-weight: 400;
+  list-style: none;
+}
+.synonym-run-history > summary::-webkit-details-marker {
+  display: none;
+}
+.synonym-run-history-link {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.synonym-run-history--failed {
+  background: #fff7ed;
+  border-color: #fdba74;
 }
 .synonym-actions > button:disabled,
 .synonym-management button:disabled {

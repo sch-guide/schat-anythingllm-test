@@ -5,7 +5,6 @@ import PdfPageViewer from "@/components/WorkspaceChat/ChatContainer/ChatHistory/
 import { Button, Loading, Notice, inputClass } from "../ui";
 import { SCHAT_ADMIN_TITLE, findSchatAdminSection } from "../menu";
 import {
-  RUN_TRIGGER_LABELS,
   canOpenSource,
   cleanTerm,
   createdText,
@@ -68,7 +67,11 @@ function Sources({ group }) {
               >
                 원문 ↗
               </button>
-              <span className="synonym-source-tooltip" role="tooltip" style={hintPosition}>
+              <span
+                className="synonym-source-tooltip"
+                role="tooltip"
+                style={hintPosition}
+              >
                 {describeSources([item])}
                 {proposals
                   .map((proposal) => proposal.reason)
@@ -151,6 +154,9 @@ export function RunsCard({ runs, onRetried }) {
   const inFlight = useRef(false);
   if (!runs.length) return null;
   const run = runs.find((item) => item.id === selected) || runs[0];
+  const latest = runs[0];
+  const latestFailures =
+    (latest.summary?.failed || 0) + (latest.summary?.stopped || 0);
   const failed = (run.documents || []).filter((item) =>
     ["failed", "stopped"].includes(item.status)
   );
@@ -180,13 +186,19 @@ export function RunsCard({ runs, onRetried }) {
         failed.length > 0 ||
         ["persistence_failed", "retrying", "running"].includes(run.status)
       }
-      className="schat-admin-card rounded-xl p-4"
+      className={`schat-admin-card synonym-run-history rounded-xl p-4${latestFailures ? " synonym-run-history--failed" : ""}`}
     >
       <summary className="cursor-pointer text-sm font-medium text-theme-text-primary">
-        마지막 자동 생성 · {createdText(runs[0].startedAt) || "날짜 미기록"}
-        {" · "}새 묶음 {runs[0].summary?.newGroups || 0}개{" · "}실패{" "}
-        {(runs[0].summary?.failed || 0) + (runs[0].summary?.stopped || 0)}개 ·
-        기록 보기
+        <span>
+          마지막 AI 후보 찾기:{" "}
+          {createdText(latest.startedAt).slice(0, 10) || "날짜 미기록"}
+          {" · "}문서{" "}
+          {latest.summary?.documents ?? latest.documents?.length ?? 0}개{" · "}
+          새 제안{" "}
+          {(latest.summary?.newGroups || 0) + (latest.summary?.additions || 0)}
+          개{" · "}실패 {latestFailures}
+        </span>
+        <span className="synonym-run-history-link">기록 보기 ›</span>
         {["running", "retrying"].includes(runs[0].status) && " · 진행 중"}
         {runs[0].status === "persistence_failed" && " · 저장 확인 필요"}
       </summary>
@@ -200,8 +212,15 @@ export function RunsCard({ runs, onRetried }) {
         >
           {runs.map((item) => (
             <option key={item.id} value={item.id}>
-              {createdText(item.startedAt) || "날짜 미기록"}{" "}
-              {RUN_TRIGGER_LABELS[item.trigger] || "자동 생성"}
+              {item.startedAt &&
+              Number.isFinite(new Date(item.startedAt).getTime())
+                ? new Intl.DateTimeFormat("ko-KR", {
+                    month: "long",
+                    day: "numeric",
+                    timeZone: "Asia/Seoul",
+                  }).format(new Date(item.startedAt))
+                : "날짜 미기록"}{" "}
+              실행
               {" · "}
               {["running", "retrying"].includes(item.status)
                 ? "진행 중"
@@ -591,23 +610,14 @@ export function GroupRow({
         <>
           <td data-label="동의어">
             <div className="synonym-terms">
-              {group.terms.map((term, index) =>
-                pending ? (
-                  <button
-                    type="button"
-                    key={index}
-                    className="synonym-chip"
-                    disabled={locked}
-                    onClick={startEdit}
-                  >
-                    {term}
-                  </button>
-                ) : (
-                  <span key={index} className="synonym-chip">
-                    {term}
-                  </span>
-                )
-              )}
+              {group.terms.map((term, index) => (
+                <span
+                  key={index}
+                  className={`synonym-chip synonym-chip--${group.kind === "drug" ? "drug" : "procedure"}`}
+                >
+                  {term}
+                </span>
+              ))}
               {pending && group.source === "auto" && <Sources group={group} />}
             </div>
             {(group.pendingAdditions || [])
@@ -637,7 +647,11 @@ export function GroupRow({
               ))}
           </td>
           <td data-label="분류">
-            {SYNONYM_KIND_LABELS[group.kind] || group.kind}
+            <span
+              className={`synonym-kind synonym-kind--${group.kind === "drug" ? "drug" : "procedure"}`}
+            >
+              {SYNONYM_KIND_LABELS[group.kind] || "용어"}
+            </span>
           </td>
           <td data-label="상태">
             <span className={`synonym-status synonym-status--${label.tone}`}>
@@ -651,10 +665,14 @@ export function GroupRow({
                 <>
                   <button
                     type="button"
+                    className="synonym-register"
                     disabled={locked}
                     onClick={() => onReviewGroup(group, true)}
                   >
                     등록
+                  </button>
+                  <button type="button" disabled={locked} onClick={startEdit}>
+                    수정
                   </button>
                   <button
                     type="button"
