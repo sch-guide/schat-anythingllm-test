@@ -18,6 +18,9 @@ test("이름 호칭 뒤 조사도 가리고 지침 용어는 그대로 보존", 
   const masked = api.maskMemo("김민지님은 홍길동환자가 이름: 이영희는 확인 / 산소포화도 환자는 유지");
   assert.equal(masked,"김○지님은 홍○동환자가 이름: 이○희는 확인 / 산소포화도 환자는 유지");
 });
+test("호칭 뒤 복합 조사도 원래 이름을 남기지 않음", () => {
+  assert.equal(api.maskMemo("김민지님께서는 홍길동님에게도 이영희환자에게는 확인"),"김○지님께서는 홍○동님에게도 이○희환자에게는 확인");
+});
 test("한국 오전 평가도 같은 한국 날짜 범위에 포함", async t => {
   const {db} = setup(t);
   const store = api.createAnswerFeedbackStore(db, () => Date.parse("2026-10-12T08:00:00+09:00"));
