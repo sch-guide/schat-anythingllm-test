@@ -40,6 +40,96 @@ const { GroupRow, TermEditor, RunsCard } = load(
   "./sections/Synonyms.jsx",
   sectionDeps
 );
+test("질문 후보는 횟수·가린 예시를 표시하고 마지막 요약에는 직원 질문 후보 개수를 표시", () => {
+  const group = {
+    id: 1,
+    terms: ["산포도", "산소포화도"],
+    kind: "procedure",
+    status: "needs_review",
+    source: "auto",
+    suggestion: {
+      status: "pending",
+      sources: [
+        {
+          type: "staff_questions",
+          count: 3,
+          example: "김○지님은 산포도 확인",
+          pages: [],
+        },
+      ],
+    },
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(GroupRow, { group, groups: [group] })
+  );
+  assert.match(html, /직원 질문에서 · 3회/);
+  assert.match(html, /김○지님은 산포도 확인/);
+  assert.doesNotMatch(html, /원문 ↗/);
+  const runs = renderToStaticMarkup(
+    React.createElement(RunsCard, {
+      runs: [
+        {
+          id: 1,
+          status: "done",
+          summary: { staffQuestions: 2 },
+          documents: [],
+        },
+      ],
+    })
+  );
+  assert.match(runs, /직원 질문에서 2개/);
+});
+test("직원 질문 후보 설정은 접힌 상세 영역에 하루 한도와 중단 상태를 표시", () => {
+  const { QuestionSettings } = load("./sections/Synonyms.jsx", sectionDeps);
+  assert.equal(typeof QuestionSettings, "function");
+  const html = renderToStaticMarkup(
+    React.createElement(QuestionSettings, {
+      settings: {
+        limit: 20,
+        calls: 4,
+        status: "running",
+        day: "2026-10-12",
+        disabled: true,
+      },
+    })
+  );
+  assert.match(html, /직원 질문 후보 설정/);
+  assert.match(html, /하루 AI 호출 상한/);
+  assert.match(html, /value="20"/);
+  assert.match(html, /4회/);
+  assert.match(html, /시험 환경에서 자동 실행이 차단/);
+  assert.doesNotMatch(html, /<details[^>]*open/);
+});
+test("기존 묶음에 더하는 질문 후보에도 자기 횟수와 예시를 표시", () => {
+  const group = {
+    id: 1,
+    terms: ["반코마이신", "vancomycin"],
+    kind: "drug",
+    status: "active",
+    source: "draft",
+    pendingAdditions: [
+      {
+        id: 2,
+        terms: ["반코"],
+        status: "pending",
+        sources: [
+          {
+            type: "staff_questions",
+            count: 4,
+            example: "반코 확인",
+            pages: [],
+          },
+        ],
+      },
+    ],
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(GroupRow, { group, groups: [group] })
+  );
+  assert.match(html, /제안 반코 추가/);
+  assert.match(html, /직원 질문에서 · 4회/);
+  assert.match(html, /반코 확인/);
+});
 
 test("자동 생성은 날짜별 한 줄 요약과 접힌 기록이며 실패하면 이유·쪽·재시도를 펼친다", () => {
   const run = {
@@ -508,6 +598,10 @@ test("분류 수정 저장 후 등록만 실패해 편집행이 필터 밖으로
   const api = {
     list: async () => [{ ...stored }, ...otherGroups],
     runs: async () => [],
+    questionSettings: async () => ({
+      ok: true,
+      settings: { limit: 20, calls: 0 },
+    }),
     update: async (id, change) => {
       assert.equal(id, 9);
       stored = { ...stored, ...change };

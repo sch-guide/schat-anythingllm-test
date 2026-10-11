@@ -315,7 +315,7 @@ function addSource(sources = [], source) {
     ...item,
     pages: [...(item.pages || [])],
   }));
-  const found = list.find((item) => item.documentId === source.documentId);
+  const found = list.find((item) => item.documentId === source.documentId && item.type === source.type);
   if (!found) {
     list.push({ ...source, pages: [...(source.pages || [])] });
     return { sources: list, changed: true };
@@ -323,8 +323,13 @@ function addSource(sources = [], source) {
   const pages = [...new Set([...found.pages, ...(source.pages || [])])].sort(
     (a, b) => a - b
   );
-  const changed = pages.length !== found.pages.length;
+  let changed = pages.length !== found.pages.length;
   found.pages = pages;
+  if (source.type === "staff_questions") {
+    changed ||= found.count !== source.count || found.example !== source.example;
+    found.count = source.count;
+    found.example = source.example;
+  }
   return { sources: list, changed };
 }
 
@@ -1364,6 +1369,11 @@ async function liveDocumentIds(prisma, originalMetadata) {
 
 function publicSuggestion(row, liveIds, testRuns = new Set()) {
   const sources = (row.sources || []).map((source) => ({
+    ...(source.type === "staff_questions" ? {
+      type: "staff_questions",
+      count: Number.isSafeInteger(source.count) && source.count >= 2 ? source.count : 0,
+      example: require("./questionCandidates").safeExample(source.example),
+    } : {}),
     documentName: source.documentName || "",
     pages: source.pages || [],
     missing: !liveIds.has(String(source.documentId)),
@@ -1584,6 +1594,7 @@ module.exports = {
   validateCandidates,
   mergeCandidates,
   planSuggestions,
+  storePlan,
   loadDocuments,
   suggestForDocuments,
   retryRun,

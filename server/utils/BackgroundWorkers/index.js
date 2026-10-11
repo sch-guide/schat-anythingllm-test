@@ -16,6 +16,7 @@ class BackgroundService {
   memoryExtractionEnabled = false;
   #root = path.resolve(__dirname, "../../jobs");
   #scheduledJobTimers = new Map();
+  #questionCandidateTimer = null;
   #scheduledJobQueue = new PQueue({
     concurrency: Number(process.env.SCHEDULED_JOB_MAX_CONCURRENT) || 1,
   });
@@ -139,12 +140,16 @@ class BackgroundService {
     );
 
     await this.#bootScheduledJobs();
+    this.#questionCandidateTimer = require("../synonyms/questionCandidateService")
+      .installQuestionSchedule(later);
   }
 
   /**
    * Cleanup scheduled jobs (in-process cron timers + p-queue)
    */
   #cleanupScheduledJobs() {
+    this.#questionCandidateTimer?.clear();
+    this.#questionCandidateTimer = null;
     for (const [id, timer] of this.#scheduledJobTimers) {
       timer.clear();
       this.#scheduledJobTimers.delete(id);

@@ -41,6 +41,12 @@ const SchatSynonyms = {
     const result = await request("/runs");
     return result.ok ? result.runs || [] : [];
   },
+  questionSettings: () => request("/question-candidates/settings"),
+  saveQuestionLimit: (limit) =>
+    request("/question-candidates/settings", {
+      method: "PUT",
+      body: JSON.stringify({ limit }),
+    }),
   retryRun: (id, targets = null) =>
     request(`/runs/${encodeURIComponent(id)}/retry`, {
       method: "POST",

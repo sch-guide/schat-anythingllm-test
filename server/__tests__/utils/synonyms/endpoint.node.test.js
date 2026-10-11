@@ -41,6 +41,10 @@ function setup(role = "admin") {
   });
   let calls = 0;
   const deps = {
+    "../utils/synonyms/questionCandidateService": {
+      questionSettings: async () => { calls++; return {limit:20,calls:0,status:"idle",disabled:false}; },
+      saveQuestionLimit: async (limit) => { calls++; if(!Number.isInteger(limit)||limit<0||limit>200) throw Error("PRIVATE DRIVER ERROR"); return {limit}; },
+    },
     "node:crypto": require("node:crypto"),
     "../utils/middleware/validatedRequest": validated,
     "../utils/middleware/multiUserProtected": roles,
@@ -95,7 +99,7 @@ function setup(role = "admin") {
   load("endpoints/schatAdmin.js", deps).schatAdminEndpoints(app);
   return {
     calls: () => calls,
-    async invoke(route, token, id = "7") {
+    async invoke(route, token, id = "7", body = { ids: [7] }) {
       const res = {
         locals: {},
         statusCode: 200,
@@ -122,7 +126,7 @@ function setup(role = "admin") {
       for (const handler of routes[route]) {
         let next = false;
         await handler(
-          { header: () => token, params: { id }, body: { ids: [7] } },
+          { header: () => token, params: { id }, body },
           res,
           () => {
             next = true;
@@ -141,7 +145,19 @@ const routes = [
   "post /schat-admin/synonyms/suggestions/:id/dismiss",
   "post /schat-admin/synonyms/suggestions/bulk-approve",
   "post /schat-admin/synonyms/runs/:id/retry",
+  "get /schat-admin/synonyms/question-candidates/settings",
+  "put /schat-admin/synonyms/question-candidates/settings",
 ];
+
+test("질문 후보 한도는 관리자만 읽고 변경하며 오류 원문을 반환하지 않음", async () => {
+  const app=setup();
+  const path="/schat-admin/synonyms/question-candidates/settings";
+  assert.equal((await app.invoke(`get ${path}`,"Bearer synthetic")).body.settings.limit,20);
+  assert.equal((await app.invoke(`put ${path}`,"Bearer synthetic","7",{limit:0})).body.settings.limit,0);
+  const bad=await app.invoke(`put ${path}`,"Bearer synthetic","7",{limit:-1});
+  assert.equal(bad.statusCode,400);
+  assert.equal(JSON.stringify(bad.body).includes("PRIVATE DRIVER"),false);
+});
 
 test("관리자는 실행 기록의 실패 범위 재시도를 요청할 수 있다", async () => {
   const app = setup();

@@ -51,45 +51,60 @@ function Sources({ group }) {
   ].filter(Boolean);
   return (
     <div className="synonym-sources">
+      {sources
+        .filter((item) => item.type === "staff_questions")
+        .map((item, index) => (
+          <span
+            key={`question-${index}`}
+            className="text-xs text-theme-text-secondary"
+          >
+            직원 질문에서 · {item.count}회
+            {item.example && <span className="block">{item.example}</span>}
+          </span>
+        ))}
       {sources.length
-        ? sources.map((item, index) => (
-            <span className="synonym-source-hint" key={index}>
-              <button
-                type="button"
-                className="synonym-source-link"
-                onMouseEnter={placeHint}
-                onFocus={placeHint}
-                onClick={() => {
-                  setUnavailable(false);
-                  setSource(item);
-                }}
-                aria-label={`원문 보기: ${describeSources([item])}`}
-              >
-                원문 ↗
-              </button>
-              <span
-                className="synonym-source-tooltip"
-                role="tooltip"
-                style={hintPosition}
-              >
-                {describeSources([item])}
-                {proposals
-                  .map((proposal) => proposal.reason)
-                  .filter(Boolean)
-                  .join(" · ") && (
-                  <span>
-                    {proposals
-                      .map((proposal) => proposal.reason)
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                )}
-                {!canOpenSource(item) && (
-                  <span>원문을 열 수 없는 문서예요.</span>
-                )}
+        ? sources
+            .filter(
+              (item) => item.type !== "staff_questions" || canOpenSource(item)
+            )
+            .map((item, index) => (
+              <span className="synonym-source-hint" key={index}>
+                <button
+                  type="button"
+                  className="synonym-source-link"
+                  onMouseEnter={placeHint}
+                  onFocus={placeHint}
+                  onClick={() => {
+                    setUnavailable(false);
+                    setSource(item);
+                  }}
+                  aria-label={`원문 보기: ${describeSources([item])}`}
+                >
+                  원문 ↗
+                </button>
+                <span
+                  className="synonym-source-tooltip"
+                  role="tooltip"
+                  style={hintPosition}
+                >
+                  {describeSources([item])}
+                  {proposals
+                    .map((proposal) => proposal.reason)
+                    .filter(Boolean)
+                    .join(" · ") && (
+                    <span>
+                      {proposals
+                        .map((proposal) => proposal.reason)
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  )}
+                  {!canOpenSource(item) && (
+                    <span>원문을 열 수 없는 문서예요.</span>
+                  )}
+                </span>
               </span>
-            </span>
-          ))
+            ))
         : null}
       {source && (
         <div
@@ -197,6 +212,7 @@ export function RunsCard({ runs, onRetried }) {
           새 제안{" "}
           {(latest.summary?.newGroups || 0) + (latest.summary?.additions || 0)}
           개{" · "}실패 {latestFailures}
+          {" · "}직원 질문에서 {latest.summary?.staffQuestions || 0}개
         </span>
         <span className="synonym-run-history-link">기록 보기 ›</span>
         {["running", "retrying"].includes(runs[0].status) && " · 진행 중"}
@@ -643,6 +659,19 @@ export function GroupRow({
                   >
                     무시
                   </button>
+                  {(addition.sources || [])
+                    .filter((source) => source.type === "staff_questions")
+                    .map((source, index) => (
+                      <span
+                        key={index}
+                        className="text-xs text-theme-text-secondary"
+                      >
+                        직원 질문에서 · {source.count}회
+                        {source.example && (
+                          <span className="block">{source.example}</span>
+                        )}
+                      </span>
+                    ))}
                 </div>
               ))}
           </td>
@@ -695,6 +724,105 @@ export function GroupRow({
   );
 }
 
+export function QuestionSettings({ settings, onSaved }) {
+  const [limit, setLimit] = useState(settings?.limit ?? 20);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const inFlight = useRef(false);
+  useEffect(() => {
+    if (settings) setLimit(settings.limit);
+  }, [settings]);
+  async function save() {
+    if (inFlight.current) return;
+    const value = Number(limit);
+    if (
+      String(limit).trim() === "" ||
+      !Number.isInteger(value) ||
+      value < 0 ||
+      value > 200
+    ) {
+      setError("0~200 사이 정수를 입력해 주세요.");
+      return;
+    }
+    inFlight.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await SchatSynonyms.saveQuestionLimit(value);
+      if (!result.ok || !result.success)
+        setError(result.error || "한도를 저장하지 못했어요.");
+      else onSaved?.(result.settings);
+    } catch {
+      setError("서버에 연결하지 못했어요.");
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+  return (
+    <details className="schat-admin-card rounded-xl p-4 text-sm text-theme-text-secondary">
+      <summary className="cursor-pointer">직원 질문 후보 설정</summary>
+      <div className="mt-3 space-y-3">
+        <p>
+          한국 시간 매일 새벽 3시에 최근 7일의 최신 2,000개 질문을 살펴봐요.
+          서로 다른 질문에서 두 번 이상 나온 표현만 지침과 비교하며, 관리자 등록
+          전에는 검색에 쓰이지 않아요.
+        </p>
+        {settings ? (
+          <>
+            <label className="flex items-center gap-2">
+              하루 AI 호출 상한
+              <input
+                aria-label="하루 AI 호출 상한"
+                className={inputClass}
+                type="number"
+                min="0"
+                max="200"
+                step="1"
+                value={limit}
+                disabled={busy}
+                onChange={(event) => setLimit(event.target.value)}
+              />
+            </label>
+            <p>
+              기본 20회이며 0이면 꺼져요. 실패한 요청도 사용량에 포함될 수
+              있어요.
+            </p>
+            <p>
+              {settings.day || "아직 실행 안 함"} · 예약한 호출{" "}
+              {settings.calls || 0}회 · 직원 질문 후보{" "}
+              {settings.candidates || 0}개
+            </p>
+            {settings.status === "running" && (
+              <Notice tone="warning">
+                진행 중이거나 서버 중단 뒤 결과를 확인해야 해요. 같은 날짜에는
+                다시 실행하지 않고 다음 날을 기다려요.
+              </Notice>
+            )}
+            {["failed", "limited"].includes(settings.status) && (
+              <Notice tone="warning">
+                {settings.status === "limited"
+                  ? "하루 상한 또는 날짜 경계에서 멈췄어요."
+                  : "후보 찾기를 완료하지 못했어요."}{" "}
+                저장된 후보는 유지하며 다음 날 다시 실행해요.
+              </Notice>
+            )}
+            {settings.disabled && (
+              <Notice>시험 환경에서 자동 실행이 차단되어 있어요.</Notice>
+            )}
+            <Button disabled={busy} onClick={save}>
+              {busy ? "저장 중…" : "상한 저장"}
+            </Button>
+          </>
+        ) : (
+          <Notice>설정을 읽지 못했어요. 화면을 새로 열어 주세요.</Notice>
+        )}
+        {error && <Notice tone="error">{error}</Notice>}
+      </div>
+    </details>
+  );
+}
+
 export default function SynonymsSection() {
   const [groups, setGroups] = useState(null);
   const [filters, setFilters] = useState({
@@ -716,6 +844,7 @@ export default function SynonymsSection() {
   const [loadError, setLoadError] = useState(false);
   const [notice, setNotice] = useState(null);
   const [runs, setRuns] = useState([]);
+  const [questionSettings, setQuestionSettings] = useState(null);
   async function reload() {
     try {
       const list = await SchatSynonyms.list();
@@ -735,6 +864,11 @@ export default function SynonymsSection() {
     reload();
     SchatSynonyms.runs()
       .then(setRuns)
+      .catch(() => {});
+    SchatSynonyms.questionSettings()
+      .then((result) => {
+        if (result.ok) setQuestionSettings(result.settings);
+      })
       .catch(() => {});
   }, []);
   const view = useMemo(
@@ -1173,6 +1307,10 @@ export default function SynonymsSection() {
           setRuns(await SchatSynonyms.runs());
           await reload();
         }}
+      />
+      <QuestionSettings
+        settings={questionSettings}
+        onSaved={setQuestionSettings}
       />
     </div>
   );

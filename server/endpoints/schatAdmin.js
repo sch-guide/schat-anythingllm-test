@@ -432,6 +432,30 @@ function schatAdminEndpoints(app) {
 
   // 동의어 후보 자동 생성 실행 결과(문서별 후보 수, 중복, 실패, 텍스트 부족).
   app.get(
+    "/schat-admin/synonyms/question-candidates/settings",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (_request, response) => {
+      try {
+        const settings = await require("../utils/synonyms/questionCandidateService").questionSettings();
+        response.status(200).json({settings});
+      } catch {
+        response.status(500).json({error:"직원 질문 후보 설정을 읽지 못했어요.",code:"QUESTION_SETTINGS_FAILED"});
+      }
+    }
+  );
+  app.put(
+    "/schat-admin/synonyms/question-candidates/settings",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      try {
+        const settings = await require("../utils/synonyms/questionCandidateService").saveQuestionLimit(reqBody(request)?.limit);
+        response.status(200).json({success:true,settings});
+      } catch {
+        response.status(400).json({success:false,error:"하루 상한은 0~200 사이 정수로 입력해 주세요. 저장하지 못하면 기존 상한이 유지돼요.",code:"QUESTION_LIMIT_FAILED"});
+      }
+    }
+  );
+  app.get(
     "/schat-admin/synonyms/runs",
     [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (_request, response) => {
