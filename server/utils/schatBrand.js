@@ -1,4 +1,5 @@
 const MAX_LOGO_BYTES = 1024 * 1024;
+const { inflateSync } = require("node:zlib");
 const defaults = () => ({
   logo: null,
   subtitle: "병원 실무지침 AI",
@@ -32,30 +33,13 @@ function validateLogo(value) {
   if (bytes.toString("base64") !== match[2])
     throw Error("로고 파일이 올바르지 않습니다.");
   if (match[1] === "png") {
-    if (
-      bytes.length < 45 ||
-      bytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a" ||
-      bytes.subarray(12, 16).toString() !== "IHDR" ||
-      !bytes.readUInt32BE(16) ||
-      !bytes.readUInt32BE(20)
-    )
-      throw Error("PNG 파일을 확인해 주세요.");
-    let offset = 8,
-      data = false,
-      ended = false;
-    while (offset + 12 <= bytes.length) {
-      const length = bytes.readUInt32BE(offset),
-        type = bytes.subarray(offset + 4, offset + 8).toString();
-      if (offset + 12 + length > bytes.length)
-        throw Error("PNG 파일을 확인해 주세요.");
-      if (type === "IDAT") data = true;
-      offset += 12 + length;
-      if (type === "IEND") {
-        ended = length === 0 && offset === bytes.length;
-        break;
-      }
+    try {
+      validatePng(bytes);
+    } catch {
+      throw Error(
+        "PNG 파일이 손상되었거나 지원 크기를 넘었습니다. 다른 PNG를 선택해 주세요."
+      );
     }
-    if (!data || !ended) throw Error("PNG 파일을 확인해 주세요.");
   } else {
     const text = bytes.toString("utf8");
     if (/<!DOCTYPE|<!ENTITY|<\?|[\u0000-\u0008]/i.test(text))
@@ -63,6 +47,174 @@ function validateLogo(value) {
     validateSvg(text);
   }
   return value;
+}
+function pngCrc(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++)
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function validatePng(bytes) {
+  const fail = () => {
+    throw Error("Invalid PNG");
+  };
+  if (
+    bytes.length < 45 ||
+    bytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a"
+  )
+    fail();
+  let offset = 8,
+    header = null,
+    palette = 0,
+    ended = false,
+    afterData = false;
+  const data = [];
+  while (offset + 12 <= bytes.length) {
+    const length = bytes.readUInt32BE(offset),
+      type = bytes.subarray(offset + 4, offset + 8).toString();
+    if (
+      !/^[A-Za-z]{2}[A-Z][A-Za-z]$/.test(type) ||
+      length > bytes.length - offset - 12 ||
+      pngCrc(bytes.subarray(offset + 4, offset + 8 + length)) !==
+        bytes.readUInt32BE(offset + 8 + length)
+    )
+      fail();
+    const chunk = bytes.subarray(offset + 8, offset + 8 + length);
+    if (!header && type !== "IHDR") fail();
+    if (type === "IHDR") {
+      if (header || length !== 13) fail();
+      header = {
+        width: chunk.readUInt32BE(0),
+        height: chunk.readUInt32BE(4),
+        depth: chunk[8],
+        color: chunk[9],
+        interlace: chunk[12],
+      };
+      const depths = {
+        0: [1, 2, 4, 8, 16],
+        2: [8, 16],
+        3: [1, 2, 4, 8],
+        4: [8, 16],
+        6: [8, 16],
+      };
+      if (
+        !depths[header.color]?.includes(header.depth) ||
+        chunk[10] !== 0 ||
+        chunk[11] !== 0 ||
+        ![0, 1].includes(header.interlace) ||
+        !header.width ||
+        !header.height ||
+        header.width > 8192 ||
+        header.height > 8192 ||
+        header.width * header.height > 16777216
+      )
+        fail();
+    } else if (type === "PLTE") {
+      if (
+        palette ||
+        data.length ||
+        !length ||
+        length > 768 ||
+        length % 3 ||
+        [0, 4].includes(header.color)
+      )
+        fail();
+      palette = length / 3;
+      if (header.color === 3 && palette > 2 ** header.depth) fail();
+    } else if (type === "IDAT") {
+      if (afterData || (header.color === 3 && !palette)) fail();
+      data.push(chunk);
+    } else if (type === "IEND") {
+      if (length || !data.length || offset + 12 !== bytes.length) fail();
+      ended = true;
+      break;
+    } else {
+      // Unknown critical chunks cannot be interpreted as a valid PNG image.
+      if (type[0] === type[0].toUpperCase()) fail();
+      if (data.length) afterData = true;
+    }
+    offset += length + 12;
+  }
+  if (!ended) fail();
+  const channels = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[header.color],
+    pixelBits = channels * header.depth;
+  const passes = header.interlace
+    ? [
+        [0, 0, 8, 8],
+        [4, 0, 8, 8],
+        [0, 4, 4, 8],
+        [2, 0, 4, 4],
+        [0, 2, 2, 4],
+        [1, 0, 2, 2],
+        [0, 1, 1, 2],
+      ]
+    : [[0, 0, 1, 1]];
+  const rows = passes
+    .map(([x, y, dx, dy]) => ({
+      width: Math.max(0, Math.ceil((header.width - x) / dx)),
+      height: Math.max(0, Math.ceil((header.height - y) / dy)),
+    }))
+    .filter((pass) => pass.width && pass.height);
+  const expected = rows.reduce(
+    (sum, pass) =>
+      sum + (Math.ceil((pass.width * pixelBits) / 8) + 1) * pass.height,
+    0
+  );
+  if (expected > 64 * 1024 * 1024) fail();
+  const raw = inflateSync(Buffer.concat(data), {
+    maxOutputLength: expected + 1,
+    info: true,
+  });
+  // Reject trailing compressed bytes and decoded rows of the wrong length.
+  if (
+    raw.buffer.length !== expected ||
+    raw.engine.bytesWritten !==
+      data.reduce((sum, chunk) => sum + chunk.length, 0)
+  )
+    fail();
+  let position = 0;
+  const bpp = Math.max(1, Math.ceil(pixelBits / 8));
+  for (const pass of rows) {
+    const rowLength = Math.ceil((pass.width * pixelBits) / 8);
+    let previous = Buffer.alloc(rowLength);
+    for (let y = 0; y < pass.height; y++) {
+      const filter = raw.buffer[position++];
+      if (filter > 4) fail();
+      const row = Buffer.from(
+        raw.buffer.subarray(position, position + rowLength)
+      );
+      position += rowLength;
+      for (let x = 0; x < rowLength; x++) {
+        const a = x >= bpp ? row[x - bpp] : 0,
+          b = previous[x],
+          c = x >= bpp ? previous[x - bpp] : 0;
+        let predictor = 0;
+        if (filter === 1) predictor = a;
+        if (filter === 2) predictor = b;
+        if (filter === 3) predictor = Math.floor((a + b) / 2);
+        if (filter === 4) {
+          const p = a + b - c,
+            pa = Math.abs(p - a),
+            pb = Math.abs(p - b),
+            pc = Math.abs(p - c);
+          predictor = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+        }
+        row[x] = (row[x] + predictor) & 255;
+      }
+      if (header.color === 3)
+        for (let x = 0; x < pass.width; x++) {
+          const bit = x * header.depth,
+            sample =
+              (row[bit >> 3] >> (8 - header.depth - (bit % 8))) &
+              ((1 << header.depth) - 1);
+          if (sample >= palette) fail();
+        }
+      previous = row;
+    }
+  }
 }
 // Accept a deliberately small, balanced SVG drawing subset. No entities,
 // namespaces, CSS, active elements or URLs other than local paint references.

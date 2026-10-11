@@ -196,7 +196,8 @@ export function BrandEditorView({ controller, state }) {
       )}
       <Card
         title="병원 로고"
-        description="PNG·SVG 파일, 1MB 이하. 화면 크기에 자동으로 맞춥니다. SVG의 실행 기능·외부 참조·스타일 정의는 사용할 수 없습니다."
+        description="병원 로고를 바꾸고 저장 전에 미리 확인합니다."
+        help="PNG·SVG 파일, 1MB 이하. 화면 크기에 자동으로 맞춥니다. SVG의 실행 기능·외부 참조·스타일 정의는 사용할 수 없습니다."
       >
         <form {...form("logo")}>
           <Field label="로고 파일" htmlFor="brand-logo">
@@ -226,7 +227,8 @@ export function BrandEditorView({ controller, state }) {
       </Card>
       <Card
         title="로그인 부제목"
-        description="로그인 화면에 표시되는 짧은 소개입니다. 최대 80자까지 입력할 수 있습니다."
+        description="로그인 화면에 표시되는 짧은 소개입니다."
+        help="최대 80자까지 입력할 수 있습니다. 원래대로를 누르면 병원 실무지침 AI로 돌아갑니다."
       >
         <form {...form("subtitle")}>
           <Field label="로그인 부제목" htmlFor="brand-subtitle">
@@ -245,7 +247,8 @@ export function BrandEditorView({ controller, state }) {
       </Card>
       <Card
         title="직원 화면 공지"
-        description="직원 화면 맨 위에 한 줄로 표시됩니다. 시작·종료 일시는 한국 시간입니다. 비워 두면 해당 시간 제한이 없습니다. 켜진 공지는 열린 화면에서도 종료 일시에 숨겨집니다."
+        description="직원 화면 맨 위에 한 줄 공지를 표시합니다."
+        help="시작·종료 일시는 한국 시간입니다. 비워 두면 해당 시간 제한이 없습니다. 켜진 공지는 열린 화면에서도 종료 일시에 숨겨집니다."
       >
         <form {...form("announcement")}>
           <label className="flex items-center gap-2 text-sm text-theme-text-primary">
@@ -295,7 +298,8 @@ export function BrandEditorView({ controller, state }) {
       </Card>
       <Card
         title="새 대화 첫 화면"
-        description="짧은 안내는 160자, 예시 질문은 한 줄에 하나씩 최대 5개·각 200자까지 입력합니다. 예시를 비우면 기존 작업 공간의 예시 질문을 사용합니다."
+        description="새 대화에 보이는 안내와 예시 질문을 바꿉니다."
+        help="짧은 안내는 160자, 예시 질문은 한 줄에 하나씩 최대 5개·각 200자까지 입력합니다. 예시를 비우면 기존 작업 공간의 예시 질문을 사용합니다."
       >
         <form {...form("welcome")}>
           <Field label="짧은 안내" htmlFor="brand-welcome">

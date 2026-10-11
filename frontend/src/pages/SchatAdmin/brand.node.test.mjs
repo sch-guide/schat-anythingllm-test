@@ -142,7 +142,7 @@ test("실제 관리자 React 화면의 파일선택·공지·저장·초기화�
   const html = renderToStaticMarkup(tree());
   assert.match(html, /accept="\.png,\.svg,image\/png,image\/svg\+xml"/);
   assert.match(html, /한국 시간/);
-  assert.equal((html.match(/원래대로/g) || []).length, 4);
+  assert.equal((html.match(/>원래대로<\/button>/g) || []).length, 4);
   find(tree(), (el) => el.props.id === "brand-subtitle").props.onChange({
     target: { value: "시험 부제목" },
   });
@@ -253,4 +253,33 @@ test("로그인 양쪽 부제목에 관리자 문구가 일반 글자로 표시�
   });
   const html = renderToStaticMarkup(React.createElement(view.default));
   assert.equal((html.match(/수술 안내 &amp; 근거/g) || []).length, 2);
+});
+test("브랜드 상세 조건은 짧은 소개와 분리된 키보드 도움말에 표시됨", async () => {
+  const c = controller();
+  await c.start();
+  const ui = load("./ui.jsx");
+  const view = load("./sections/Brand.jsx", {
+    "@/models/admin": { default: {} },
+    "@/models/system": { default: {} },
+    "@/models/workspace": { default: {} },
+    "@/utils/toast": { default() {} },
+    "@/components/SchLogo": { default: () => null },
+    "@/components/Sidebar/ActiveWorkspaces": {
+      REFETCH_WORKSPACES_EVENT: "test",
+    },
+    "../ui": ui,
+    "../brandController": { createBrandEditor() {} },
+    "@/models/schatBrand": { default: {} },
+    "@/utils/schatBrand": rules(),
+  });
+  const html = renderToStaticMarkup(
+    view.BrandEditorView({ controller: c, state: c.getSnapshot() })
+  );
+  assert.equal((html.match(/aria-describedby=/g) || []).length, 4);
+  const sections = html.split("<section").slice(1);
+  for (const section of sections) {
+    assert.match(section, /role="tooltip"/);
+    const description = section.match(/<p[^>]*>(.*?)<\/p>/s)?.[1] || "";
+    assert.ok(description.length <= 55);
+  }
 });

@@ -8,7 +8,7 @@ function core() {
   return require("../../utils/schatBrand");
 }
 const png =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j5ZkAAAAASUVORK5CYII=";
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
 const svg = (text) =>
   `data:image/svg+xml;base64,${Buffer.from(text).toString("base64")}`;
 test("실제 PNG와 실행 기능 없는 SVG만 받아 크기·위장파일·외부참조를 거부함", () => {
@@ -241,4 +241,77 @@ test("로고 저장 재조회·악성파일 실패 보존과 공지·로고·첫
     (await s.invoke("GET")).body.brand.welcome.text,
     "오늘 어떻게 도와드릴까요?"
   );
+});
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++)
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function pngWith({
+  depth = 8,
+  color = 6,
+  raw = Buffer.from([0, 255, 0, 0, 255]),
+  compressed,
+  interlace = 0,
+} = {}) {
+  const chunk = (type, data) => {
+    const result = Buffer.alloc(data.length + 12);
+    result.writeUInt32BE(data.length);
+    result.write(type, 4);
+    data.copy(result, 8);
+    result.writeUInt32BE(crc32(result.subarray(4, -4)), result.length - 4);
+    return result;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(1);
+  header.writeUInt32BE(1, 4);
+  header[8] = depth;
+  header[9] = color;
+  header[12] = interlace;
+  return Buffer.concat([
+    Buffer.from("89504e470d0a1a0a", "hex"),
+    chunk("IHDR", header),
+    chunk("IDAT", compressed || require("node:zlib").deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+const pngUrl = (bytes) => `data:image/png;base64,${bytes.toString("base64")}`;
+test("PNG 비트깊이·색상·CRC·압축데이터·픽셀길이·필터 손상을 거부하고 이전 로고를 보존함", async () => {
+  const s = setup();
+  await s.invoke("PUT", { section: "logo", value: png });
+  const previous = s.raw();
+  const corruptCrc = pngWith();
+  corruptCrc[29] ^= 1;
+  const invalid = [
+    pngWith({ depth: 0 }),
+    pngWith({ color: 1 }),
+    corruptCrc,
+    pngWith({ compressed: Buffer.from([1, 2, 3]) }),
+    pngWith({ raw: Buffer.from([0]) }),
+    pngWith({ raw: Buffer.from([5, 255, 0, 0, 255]) }),
+    pngWith({ depth: 1, color: 3, raw: Buffer.from([0, 0]) }),
+  ];
+  for (const bytes of invalid) {
+    assert.throws(() => core().validateLogo(pngUrl(bytes)), /PNG/);
+    assert.equal(
+      (await s.invoke("PUT", { section: "logo", value: pngUrl(bytes) }))
+        .statusCode,
+      400
+    );
+    assert.equal(s.raw(), previous);
+  }
+  assert.equal(core().validateLogo(pngUrl(pngWith())), pngUrl(pngWith()));
+  assert.equal(
+    core().validateLogo(pngUrl(pngWith({ interlace: 1 }))),
+    pngUrl(pngWith({ interlace: 1 }))
+  );
+  const original = fs.readFileSync(
+    path.resolve(__dirname, "../../../frontend/src/media/logo/sch-logo.png")
+  );
+  assert.equal(core().validateLogo(pngUrl(original)), pngUrl(original));
 });
