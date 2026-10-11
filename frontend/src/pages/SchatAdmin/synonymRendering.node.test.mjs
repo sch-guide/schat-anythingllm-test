@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { transformSync } = require("esbuild");
-function load(file, deps) {
+function load(file, deps, globals = {}) {
   const module = { exports: {} };
   const { code } = transformSync(
     readFileSync(new URL(file, import.meta.url), "utf8"),
@@ -21,6 +21,7 @@ function load(file, deps) {
     module,
     exports: module.exports,
     require: (name) => (name in deps ? deps[name] : require(name)),
+    ...globals,
   });
   return module.exports;
 }
@@ -35,7 +36,150 @@ const sectionDeps = {
   "../synonymReview": review,
   "../synonymTable.css": {},
 };
-const { GroupRow, TermEditor } = load("./sections/Synonyms.jsx", sectionDeps);
+const { GroupRow, TermEditor, RunsCard } = load(
+  "./sections/Synonyms.jsx",
+  sectionDeps
+);
+
+test("자동 생성은 날짜별 한 줄 요약과 접힌 기록이며 실패하면 이유·쪽·재시도를 펼친다", () => {
+  const run = {
+    id: 77,
+    startedAt: "2026-10-12T03:00:00Z",
+    trigger: "upload",
+    status: "done",
+    summary: { newGroups: 2, failed: 0 },
+    documents: [],
+  };
+  const renderRuns = (item) =>
+    renderToStaticMarkup(React.createElement(RunsCard, { runs: [item] }));
+  const normal = renderRuns(run);
+  assert.match(normal, /마지막 자동 생성/);
+  assert.doesNotMatch(normal, /<details[^>]*open|#77/);
+  const failed = renderRuns({
+    ...run,
+    summary: { failed: 1 },
+    documents: [
+      {
+        documentId: "fake",
+        documentName: "가짜.pdf",
+        status: "failed",
+        error: "timeout",
+        retryVersion: 1,
+        retryable: true,
+        batches: [
+          { index: 1, pages: [7, 8], status: "failed", retryable: true },
+        ],
+      },
+    ],
+  });
+  assert.match(failed, /<details[^>]*open/);
+  assert.match(failed, /응답이 늦어/);
+  assert.match(failed, /7, 8쪽/);
+  assert.match(failed, /실패한 부분 다시 시도|전체 실패 다시 시도/);
+  assert.doesNotMatch(failed, /timeout|#77/);
+  const legacy = renderRuns({
+    ...run,
+    summary: { failed: 1 },
+    documents: [{ documentName: "과거.pdf", status: "failed" }],
+  });
+  assert.match(legacy, /과거 기록.*다시 시도할 수 없/);
+});
+
+test("재시도 버튼은 선택한 실패 범위만 보내고 대기 중 중복 클릭을 막으며 서버 실패를 알린다", async () => {
+  const slots = [];
+  let cursor = 0;
+  let release;
+  const requests = [];
+  let reloads = 0;
+  const hooks = {
+    ...React,
+    useState(initial) {
+      const index = cursor++;
+      if (!(index in slots)) slots[index] = initial;
+      return [
+        slots[index],
+        (value) => {
+          slots[index] = value;
+        },
+      ];
+    },
+    useRef(initial) {
+      const index = cursor++;
+      return (slots[index] ||= { current: initial });
+    },
+  };
+  const { RunsCard: Card } = load(
+    "./sections/Synonyms.jsx",
+    {
+      ...sectionDeps,
+      react: hooks,
+      "@/models/schatSynonyms": {
+        retryRun: async (id, targets) => {
+          requests.push({ id, targets });
+          return new Promise((resolve) => {
+            release = resolve;
+          });
+        },
+      },
+    },
+    { Event, window: { dispatchEvent() {} } }
+  );
+  const props = {
+    runs: [
+      {
+        id: 41,
+        status: "done",
+        documents: [
+          {
+            documentId: "fake-doc",
+            documentName: "가짜.pdf",
+            status: "failed",
+            retryVersion: 1,
+            retryable: true,
+            batches: [
+              { index: 2, pages: [6], status: "failed", retryable: true },
+            ],
+          },
+        ],
+      },
+    ],
+    onRetried: async () => {
+      reloads++;
+    },
+  };
+  const draw = () => {
+    cursor = 0;
+    return Card(props);
+  };
+  const nodes = (tree) =>
+    !React.isValidElement(tree)
+      ? []
+      : [tree, ...React.Children.toArray(tree.props.children).flatMap(nodes)];
+  const button = nodes(draw()).find(
+    (node) => node.props.children === "실패한 부분 다시 시도"
+  );
+  const pending = button.props.onClick();
+  await button.props.onClick();
+  assert.equal(requests.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(requests[0])), {
+    id: 41,
+    targets: [{ documentId: "fake-doc", batchIndices: [2] }],
+  });
+  assert.ok(
+    nodes(draw())
+      .filter((node) => node.type === ui.Button)
+      .every((node) => node.props.disabled)
+  );
+  release({ ok: false, error: "가짜 저장 실패" });
+  await pending;
+  assert.equal(reloads, 1);
+  assert.ok(
+    nodes(draw()).some(
+      (node) =>
+        node.type === ui.Notice && node.props.children === "가짜 저장 실패"
+    )
+  );
+});
 function render(change = {}, props = {}) {
   const group = {
     id: 1,
@@ -126,10 +270,7 @@ test("검토 대기 편집은 저장 후 등록이라고 표시하고 안전한 
       ],
     },
   });
-  assert.match(
-    safe,
-    /원문 ↗/
-  );
+  assert.match(safe, /원문 ↗/);
   assert.doesNotMatch(safe, /원문을 열 수 없는/);
 });
 
@@ -148,13 +289,13 @@ test("사용 중인 묶음의 추가 제안은 출처와 내부 표식을 표시
       },
     ],
   });
-  for (const value of [
-    "제안 catheter 추가",
-    "무시",
-  ])
+  for (const value of ["제안 catheter 추가", "무시"])
     assert.ok(html.includes(value), value);
   assert.match(html, /synonym-proposal-chip/);
-  assert.doesNotMatch(html, /검증용|missing.pdf|테스트 근거|synonym-source-link/);
+  assert.doesNotMatch(
+    html,
+    /검증용|missing.pdf|테스트 근거|synonym-source-link/
+  );
   assert.doesNotMatch(html, /제안 정보|추가 후보/);
 });
 
@@ -166,7 +307,14 @@ function loadedSynonyms(selected = [], notice = null) {
     ...React,
     useState(initial) {
       const index = stateIndex++;
-      const value = index === 0 ? [] : index === 2 ? selected : index === 11 ? notice : initial;
+      const value =
+        index === 0
+          ? []
+          : index === 2
+            ? selected
+            : index === 11
+              ? notice
+              : initial;
       return React.useState(value);
     },
   };
@@ -219,9 +367,15 @@ function renderAdmin(sectionKey, SynonymsSection = loadedSynonyms()) {
 }
 
 test("상단 성공 안내는 공간을 차지하지 않고 실패 안내는 유지한다", () => {
-  const success = renderAdmin("synonyms", loadedSynonyms([], { error: false, text: "저장했어요." }));
+  const success = renderAdmin(
+    "synonyms",
+    loadedSynonyms([], { error: false, text: "저장했어요." })
+  );
   assert.doesNotMatch(success, /저장했어요\.|role="status"/);
-  const failure = renderAdmin("synonyms", loadedSynonyms([], { error: true, text: "저장하지 못했어요." }));
+  const failure = renderAdmin(
+    "synonyms",
+    loadedSynonyms([], { error: true, text: "저장하지 못했어요." })
+  );
   assert.match(failure, /role="alert"/);
   assert.match(failure, /저장하지 못했어요\./);
 });

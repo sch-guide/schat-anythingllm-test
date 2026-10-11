@@ -58,9 +58,10 @@ function memoryPrisma(groups = [], documentIds = ["doc-a"]) {
       return { ...row };
     },
     updateMany: async ({ where, data }) => {
-      for (const row of rows().filter((item) => match(item, where)))
-        Object.assign(row, data);
+      const matching = rows().filter((item) => match(item, where));
+      for (const row of matching) Object.assign(row, data);
       db.writes.push([name, "updateMany"]);
+      return { count: matching.length };
     },
     delete: async ({ where }) => {
       const index = rows().findIndex((item) => item.id === where.id);
@@ -76,6 +77,20 @@ function memoryPrisma(groups = [], documentIds = ["doc-a"]) {
     },
   });
   const prisma = {
+    users: {
+      findMany: async ({ where }) =>
+        [
+          { id: 91, role: "admin", suspended: 0 },
+          { id: 92, role: "default", suspended: 0 },
+          { id: 93, role: "admin", suspended: 1 },
+        ].filter((row) => match(row, where)),
+    },
+    schat_user_notifications: {
+      create: async ({ data }) => {
+        db.notifications ||= [];
+        db.notifications.push(data);
+      },
+    },
     schat_synonym_groups: table(
       () => db.groups,
       "groups",
@@ -1021,4 +1036,244 @@ test("a dry run stores nothing at all", async () => {
     ["중심정맥카테터", "CVC"],
   ]);
   assert.equal(db.writes.length, 0);
+});
+
+function retryFixture() {
+  const documents = [
+    {
+      documentId: "doc-a",
+      documentName: "가짜 재시도.pdf",
+      pages: Array.from({ length: 60 }, (_, i) => ({
+        page: i + 1,
+        pageContent:
+          `가짜용어${i} TEST${i} 문서의 동의어를 확인하는 긴 제목 줄입니다\n` +
+          `가짜절차${i} STEP${i} 문서의 동의어를 확인하는 긴 제목 줄입니다\n` +
+          `가짜약물${i} DRUG${i} 문서의 동의어를 확인하는 긴 제목 줄입니다`,
+      })),
+    },
+  ];
+  const fixture = memoryPrisma([]);
+  let calls = 0;
+  const llm = {
+    model: "fake-only",
+    getChatCompletion: async (messages) => {
+      calls++;
+      if (calls === 2) throw new Error("timeout");
+      const text = messages[1].content;
+      const [, page, term, alias] = text.match(
+        /p\.(\d+): (가짜용어\d+) (TEST\d+)/
+      );
+      return {
+        textResponse: JSON.stringify({
+          groups: [candidate([term, alias], { pages: [Number(page)] })],
+        }),
+      };
+    },
+  };
+  return {
+    ...fixture,
+    documents,
+    llm,
+    calls: () => calls,
+    options: {
+      prisma: fixture.prisma,
+      llm,
+      logger: null,
+      logEvent: async () => null,
+      delays: [],
+    },
+  };
+}
+
+test("부분 실패는 성공 결과와 실패 쪽을 보존하고 실패 묶음만 다시 호출한다", async () => {
+  const f = retryFixture();
+  const first = await Suggestions.suggestForDocuments(f.documents, f.options);
+  const saved = JSON.parse(f.db.runs[0].documents)[0];
+  assert.equal(saved.documentId, "doc-a");
+  assert.match(saved.documentDigest, /^[a-f0-9]{64}$/);
+  assert.equal(saved.batches[0].status, "succeeded");
+  assert.equal(saved.batches[0].candidates.length, 1);
+  assert.equal(saved.batches[1].status, "failed");
+  assert.ok(saved.batches[1].pages.length > 0);
+  assert.equal(f.db.notifications[0].user_id, 91);
+  assert.equal(f.db.notifications[0].kind, "synonym_generation_failed");
+  assert.equal(f.db.notifications.length, 1);
+  const [publicRun] = await Suggestions.listRuns(f.prisma);
+  assert.equal("candidates" in publicRun.documents[0].batches[0], false);
+  assert.equal(publicRun.documents[0].retryable, true);
+  const before = f.calls();
+  const retried = await Suggestions.retryRun(first.runId, {
+    ...f.options,
+    loadCurrentDocuments: async () => f.documents,
+    targets: [{ documentId: "doc-a", batchIndices: [1] }],
+  });
+  assert.equal(f.calls() - before, 1);
+  assert.equal(retried.rows[0].batches[0].status, "succeeded");
+  assert.equal(retried.rows[0].batches[1].status, "succeeded");
+  assert.ok(f.db.groups.length >= 2);
+});
+
+test("과거 기록과 변경 또는 삭제된 문서는 외부 호출 전에 재시도를 거절한다", async () => {
+  for (const kind of ["legacy", "changed", "deleted", "successful_target"]) {
+    const f = retryFixture();
+    const first = await Suggestions.suggestForDocuments(f.documents, f.options);
+    const before = f.calls();
+    if (kind === "legacy")
+      f.db.runs[0].documents = JSON.stringify([{ status: "failed" }]);
+    const current = structuredClone(f.documents);
+    if (kind === "changed") current[0].pages[0].pageContent += "변경";
+    if (kind === "deleted") current.splice(0);
+    await assert.rejects(
+      () =>
+        Suggestions.retryRun(first.runId, {
+          ...f.options,
+          loadCurrentDocuments: async () => current,
+          ...(kind === "successful_target"
+            ? { targets: [{ documentId: "doc-a", batchIndices: [0] }] }
+            : {}),
+        }),
+      /과거|변경|삭제|실패/
+    );
+    assert.equal(f.calls(), before);
+  }
+});
+
+test("같은 실행의 동시 재시도는 한 번만 외부 호출한다", async () => {
+  const f = retryFixture();
+  const first = await Suggestions.suggestForDocuments(f.documents, f.options);
+  const options = {
+    ...f.options,
+    loadCurrentDocuments: async () => f.documents,
+    targets: [{ documentId: "doc-a", batchIndices: [1] }],
+  };
+  const before = f.calls();
+  const results = await Promise.allSettled([
+    Suggestions.retryRun(first.runId, options),
+    Suggestions.retryRun(first.runId, options),
+  ]);
+  assert.equal(results.filter((item) => item.status === "fulfilled").length, 1);
+  assert.equal(f.calls() - before, 1);
+});
+
+test("기록 생성 및 성공 결과 저장 실패는 호출을 멈추고 성공을 반환하지 않는다", async () => {
+  for (const stage of ["create", "checkpoint", "finish"]) {
+    const f = retryFixture();
+    if (stage === "create")
+      f.prisma.schat_synonym_suggestion_runs.create = async () => {
+        throw new Error("disk");
+      };
+    else {
+      const update = f.prisma.schat_synonym_suggestion_runs.update;
+      f.prisma.schat_synonym_suggestion_runs.update = async (args) => {
+        const docs = JSON.parse(args.data.documents || "[]");
+        if (
+          (stage === "checkpoint" &&
+            docs.some((row) =>
+              row.batches?.some((batch) => batch.status === "succeeded")
+            )) ||
+          (stage === "finish" && args.data.status === "done")
+        )
+          throw new Error("disk");
+        return update(args);
+      };
+    }
+    await assert.rejects(
+      () => Suggestions.suggestForDocuments(f.documents, f.options),
+      /저장/
+    );
+    assert.ok(
+      f.calls() <= (stage === "create" ? 0 : stage === "checkpoint" ? 1 : 2)
+    );
+    assert.notEqual(f.db.runs[0]?.status, "done");
+    assert.equal(f.db.notifications[0].kind, "synonym_generation_failed");
+  }
+});
+
+test("재시도 중 성공 기록 저장이 실패하면 추가 호출과 후속 재시도를 막는다", async () => {
+  const f = retryFixture();
+  const first = await Suggestions.suggestForDocuments(f.documents, f.options);
+  const before = f.calls();
+  const update = f.prisma.schat_synonym_suggestion_runs.update;
+  f.prisma.schat_synonym_suggestion_runs.update = async (args) => {
+    if (
+      JSON.parse(args.data.documents || "[]")[0]?.batches[1]?.status ===
+      "succeeded"
+    )
+      throw new Error("disk");
+    return update(args);
+  };
+  const options = {
+    ...f.options,
+    loadCurrentDocuments: async () => f.documents,
+  };
+  await assert.rejects(
+    () => Suggestions.retryRun(first.runId, options),
+    /저장/
+  );
+  assert.equal(f.calls() - before, 1);
+  assert.equal(f.db.runs[0].status, "persistence_failed");
+  await assert.rejects(
+    () => Suggestions.retryRun(first.runId, options),
+    /저장/
+  );
+  assert.equal(f.calls() - before, 1);
+});
+
+test("재시도 순서를 기다리는 사이 문서가 바뀌면 외부 호출 직전 다시 확인한다", async () => {
+  const f = retryFixture();
+  const first = await Suggestions.suggestForDocuments(f.documents, f.options);
+  const before = f.calls();
+  let reads = 0;
+  const result = await Suggestions.retryRun(first.runId, {
+    ...f.options,
+    loadCurrentDocuments: async () => (++reads === 1 ? f.documents : []),
+  });
+  assert.equal(f.calls(), before);
+  assert.equal(result.rows[0].error, "document_changed");
+});
+
+test("후보 반영과 반영 완료 기록은 함께 저장되며 재시도 요약이 성공분을 중복으로 세지 않는다", async () => {
+  const f = retryFixture();
+  const first = await Suggestions.suggestForDocuments(f.documents, f.options);
+  const result = await Suggestions.retryRun(first.runId, {
+    ...f.options,
+    loadCurrentDocuments: async () => f.documents,
+    targets: [{ documentId: "doc-a", batchIndices: [1] }],
+  });
+  assert.equal(result.rows[0].duplicates, 0);
+  assert.equal(result.rows[0].batches[0].applied, true);
+  const broken = retryFixture();
+  const update = broken.prisma.schat_synonym_suggestion_runs.update;
+  broken.prisma.schat_synonym_suggestion_runs.update = async (args) => {
+    if (
+      JSON.parse(args.data.documents || "[]")[0]?.batches.some(
+        (batch) => batch.applied
+      )
+    )
+      throw new Error("disk");
+    return update(args);
+  };
+  await assert.rejects(
+    () => Suggestions.suggestForDocuments(broken.documents, broken.options),
+    /저장/
+  );
+  assert.equal(broken.db.groups.length, 0);
+});
+
+test("AI 응답을 기다리는 동안 문서가 바뀌면 이전 문서의 결과를 새 후보에 반영하지 않는다", async () => {
+  const f = retryFixture();
+  const first = await Suggestions.suggestForDocuments(f.documents, f.options);
+  const count = f.db.groups.length;
+  const llm = { ...f.llm, getChatCompletion: async (...args) => {
+    const response = await f.llm.getChatCompletion(...args);
+    f.documents[0].pages[0].pageContent += "변경";
+    return response;
+  } };
+  const result = await Suggestions.retryRun(first.runId, { ...f.options, llm,
+    loadCurrentDocuments: async () => f.documents,
+    targets: [{ documentId: "doc-a", batchIndices: [1] }],
+  });
+  assert.equal(result.rows[0].error, "document_changed");
+  assert.equal(f.db.groups.length, count);
+  assert.equal(result.rows[0].batches[1].status, "succeeded");
 });

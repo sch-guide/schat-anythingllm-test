@@ -22,6 +22,8 @@ const {
 } = require("./index");
 
 const METHOD = "gemini-titles-v1";
+const { createHash } = require("node:crypto");
+const activeRetries = new Set();
 const MIN_CONFIDENCE = 0.5;
 const LOW_CONFIDENCE = 0.7;
 const MAX_TERMS = 6;
@@ -454,30 +456,28 @@ async function storePlan(
 ) {
   const now = new Date();
   for (const candidate of plan.newGroups) {
-    await prisma.$transaction(async (tx) => {
-      const group = await tx.schat_synonym_groups.create({
-        data: {
-          terms: JSON.stringify(candidate.terms),
-          kind: candidate.kind,
-          status: "needs_review",
-          source: "auto",
-          note: null,
-        },
-      });
-      await tx.schat_synonym_suggestions.create({
-        data: {
-          type: "group",
-          group_id: group.id,
-          terms: JSON.stringify(candidate.terms),
-          category: candidate.category,
-          confidence: candidate.confidence,
-          reason: candidate.reason || null,
-          method,
-          sources: JSON.stringify([{ ...source, pages: candidate.pages }]),
-          status: "pending",
-          run_id: runId,
-        },
-      });
+    const group = await prisma.schat_synonym_groups.create({
+      data: {
+        terms: JSON.stringify(candidate.terms),
+        kind: candidate.kind,
+        status: "needs_review",
+        source: "auto",
+        note: null,
+      },
+    });
+    await prisma.schat_synonym_suggestions.create({
+      data: {
+        type: "group",
+        group_id: group.id,
+        terms: JSON.stringify(candidate.terms),
+        category: candidate.category,
+        confidence: candidate.confidence,
+        reason: candidate.reason || null,
+        method,
+        sources: JSON.stringify([{ ...source, pages: candidate.pages }]),
+        status: "pending",
+        run_id: runId,
+      },
     });
   }
   for (const addition of plan.additions)
@@ -632,6 +632,8 @@ function textIsShort({ chars, pages, lineCount }) {
 }
 
 const DOCUMENT_STATUS = Object.freeze({
+  pending: "처리 대기",
+  running: "처리 중",
   created: "후보 생성",
   no_new: "새 후보 없음",
   text_short: "텍스트 부족",
@@ -641,13 +643,23 @@ const DOCUMENT_STATUS = Object.freeze({
 
 function emptyRow(document) {
   return {
+    retryVersion: 1,
+    documentId: String(document.documentId),
+    documentDigest: documentDigest(document),
+    batches: collectSnippets(document.pages).batches.map((batch, index) => ({
+      index,
+      pages: batch.pages,
+      status: "pending",
+      candidates: [],
+      error: null,
+    })),
     documentName: document.documentName,
     pages: document.pages.length,
     chars: document.pages.reduce(
       (sum, page) => sum + page.pageContent.length,
       0
     ),
-    status: "no_new",
+    status: "pending",
     candidates: 0,
     newGroups: 0,
     additions: 0,
@@ -661,15 +673,72 @@ function emptyRow(document) {
   };
 }
 
+function documentDigest(document) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        id: String(document.documentId),
+        name: document.documentName,
+        pages: [...document.pages]
+          .map((page) => ({
+            page: page.page,
+            section: page.section || "",
+            text: page.pageContent,
+          }))
+          .sort((a, b) => Number(a.page) - Number(b.page)),
+      })
+    )
+    .digest("hex");
+}
+
+function storageError() {
+  return Object.assign(
+    new Error(
+      "실행 기록을 저장하지 못해 안전하게 중단했어요. 관리자에게 확인해 주세요."
+    ),
+    { code: "persistence_failed" }
+  );
+}
+
+async function saveProgress(prisma, runId, rows, extra = {}) {
+  if (!runId) return;
+  try {
+    await prisma.schat_synonym_suggestion_runs.update({
+      where: { id: runId },
+      data: {
+        documents: JSON.stringify(rows),
+        summary: JSON.stringify(summarize(rows)),
+        ...extra,
+      },
+    });
+  } catch {
+    throw storageError();
+  }
+}
+
 async function processDocument(
   document,
-  { llm, prisma, logEvent, logger, sleep, delays, runId, test, dryRun }
+  {
+    llm,
+    prisma,
+    logEvent,
+    logger,
+    sleep,
+    delays,
+    runId,
+    test,
+    dryRun,
+    row = emptyRow(document),
+    checkpoint = async () => {},
+    batchIndices = null,
+    validateCurrent = async () => {},
+  }
 ) {
   const source = {
     documentId: document.documentId,
     documentName: document.documentName,
   };
-  const row = emptyRow(document);
+  row.error = null;
   try {
     const snippets = collectSnippets(document.pages, document);
     row.linesNotSent = snippets.omitted;
@@ -686,43 +755,87 @@ async function processDocument(
       return row;
     }
     const client = llm || defaultLlm();
+    row.status = "running";
     const method = `${METHOD}:${client.model || "gemini"}`;
-    const candidates = [];
-    for (const batch of snippets.batches) {
+    for (const [index, batch] of snippets.batches.entries()) {
+      const saved = row.batches[index];
+      if (
+        saved.status === "succeeded" ||
+        (batchIndices && !batchIndices.includes(index))
+      )
+        continue;
+      await validateCurrent();
+      saved.status = "running";
+      saved.error = null;
+      await checkpoint(); // 외부 호출 전에 기록을 남겨 불확실한 중복 호출을 막는다.
       row.geminiCalls += 1;
-      const output = await askGemini(client, batch, {
-        sleep,
-        delays,
-        onRetry: () => {
-          row.retries += 1;
-        },
-      });
-      candidates.push(...validateCandidates(output, batch));
+      try {
+        const output = await askGemini(client, batch, {
+          sleep,
+          delays,
+          onRetry: () => {
+            row.retries += 1;
+          },
+        });
+        saved.candidates = validateCandidates(output, batch);
+        saved.status = "succeeded";
+      } catch (error) {
+        saved.status = "failed";
+        saved.error = errorCode(error);
+        row.error = saved.error;
+      }
+      await checkpoint(); // 성공 결과를 다음 묶음 호출보다 먼저 보존한다.
+      if (saved.status === "failed") break;
     }
+    await validateCurrent(); // 응답 대기 중 변경·삭제된 문서의 후보는 반영하지 않는다.
+    const candidates = row.batches
+      .filter((batch) => batch.status === "succeeded")
+      .flatMap((batch) => batch.candidates);
     const merged = mergeCandidates(candidates);
     row.candidates = merged.length;
+    const unapplied = row.batches.filter(
+      (batch) => batch.status === "succeeded" && !batch.applied
+    );
     // AI 대기가 끝난 뒤 최신 자료 조회부터 저장까지만 관리자 변경과 묶는다.
-    const plan = await serialized(async () => {
-      const groups = (
-        await prisma.schat_synonym_groups.findMany({ orderBy: [{ id: "asc" }] })
-      ).map((item) => ({
-        id: item.id,
-        terms: parseJson(item.terms, []),
-        status: item.status,
-      }));
-      const suggestions = (
-        await prisma.schat_synonym_suggestions.findMany()
-      ).map(toSuggestionRow);
-      const plan = planSuggestions(merged, { groups, suggestions, source });
-      if (!dryRun)
-        await storePlan(plan, { prisma, method, source, runId, test });
-      return plan;
+    const plan = await serialized(() =>
+      prisma.$transaction(async (tx) => {
+        const groups = (
+          await tx.schat_synonym_groups.findMany({ orderBy: [{ id: "asc" }] })
+        ).map((item) => ({
+          id: item.id,
+          terms: parseJson(item.terms, []),
+          status: item.status,
+        }));
+        const suggestions = (await tx.schat_synonym_suggestions.findMany()).map(
+          toSuggestionRow
+        );
+        const plan = planSuggestions(
+          mergeCandidates(unapplied.flatMap((batch) => batch.candidates)),
+          { groups, suggestions, source }
+        );
+        if (!dryRun) {
+          await storePlan(plan, { prisma: tx, method, source, runId, test });
+        }
+        row.newGroups += plan.newGroups.length;
+        row.additions += plan.additions.length;
+        row.duplicates += plan.duplicates;
+        row.excluded += plan.unclear + plan.dismissed;
+        for (const batch of unapplied) batch.applied = true;
+        const incomplete = row.batches.find(
+          (batch) => batch.status !== "succeeded"
+        );
+        row.status = incomplete
+          ? "failed"
+          : row.newGroups + row.additions > 0
+            ? "created"
+            : "no_new";
+        row.error = incomplete?.error || (incomplete ? "pending" : null);
+        await checkpoint(tx); // 후보 반영과 완료 기록을 같은 저장 작업으로 묶는다.
+        return plan;
+      })
+    ).catch(() => {
+      throw storageError();
     });
-    row.newGroups = plan.newGroups.length;
-    row.additions = plan.additions.length;
-    row.duplicates = plan.duplicates;
-    row.excluded = plan.unclear + plan.dismissed;
-    row.status = row.newGroups + row.additions > 0 ? "created" : "no_new";
     if (dryRun)
       row.preview = {
         newGroups: plan.newGroups.map((item) => item.terms),
@@ -732,17 +845,26 @@ async function processDocument(
         })),
       };
     else
-      await logEvent("schat_synonym_suggestions_created", {
-        documentName: document.documentName,
-        newGroups: row.newGroups,
-        additions: row.additions,
-        duplicates: row.duplicates,
-        geminiCalls: row.geminiCalls,
-        retries: row.retries,
-        privateLinesExcluded: row.privateLinesExcluded,
-        linesNotSent: row.linesNotSent,
-      }).catch(() => null);
+      await logEvent(
+        row.status === "failed"
+          ? "schat_synonym_suggestion_failed"
+          : "schat_synonym_suggestions_created",
+        {
+          ...(row.status === "failed"
+            ? { message: "동의어 후보 자동 생성 실패", reason: row.error }
+            : {}),
+          documentName: document.documentName,
+          newGroups: row.newGroups,
+          additions: row.additions,
+          duplicates: row.duplicates,
+          geminiCalls: row.geminiCalls,
+          retries: row.retries,
+          privateLinesExcluded: row.privateLinesExcluded,
+          linesNotSent: row.linesNotSent,
+        }
+      ).catch(() => null);
   } catch (error) {
+    if (error?.code === "persistence_failed") throw error;
     row.status = "failed";
     row.error = errorCode(error);
     logger?.error?.(
@@ -785,30 +907,40 @@ async function startRun(prisma, { trigger, test }) {
     });
     return run.id;
   } catch {
-    return null;
+    throw storageError();
   }
 }
 
 async function finishRun(prisma, runId, rows, summary) {
-  if (!runId) return;
-  try {
-    await prisma.schat_synonym_suggestion_runs.update({
-      where: { id: runId },
+  await saveProgress(prisma, runId, rows, {
+    status: "done",
+    summary: JSON.stringify(summary),
+    finishedAt: new Date(),
+  });
+}
+
+async function notifyFailures(prisma, rows) {
+  const count = rows.filter((row) =>
+    ["failed", "stopped"].includes(row.status)
+  ).length;
+  if (!count) return;
+  const admins = await prisma.users.findMany({
+    where: { role: "admin", suspended: 0 },
+    select: { id: true },
+  });
+  for (const admin of admins)
+    await prisma.schat_user_notifications.create({
       data: {
-        status: "done",
-        summary: JSON.stringify(summary),
-        documents: JSON.stringify(rows),
-        finishedAt: new Date(),
+        user_id: admin.id,
+        kind: "synonym_generation_failed",
+        message: `동의어 자동 생성에서 ${count}개 문서가 완료되지 않았어요. 관리자 화면의 동의어 관리에서 실패한 부분을 확인해 주세요.`,
       },
     });
-  } catch {
-    // The run record is for the administrator screen only.
-  }
 }
 
 /**
  * Creates "검토 필요" suggestions for already loaded documents, one document
- * at a time. Never throws; failures are listed per document and logged.
+ * at a time. AI failures are listed; persistence failures stop the run.
  * trigger: upload | document_update | backfill. test: a verification run
  * whose rows can be removed later. dryRun: nothing is stored at all.
  */
@@ -828,49 +960,75 @@ async function suggestForDocuments(
   } = {}
 ) {
   const startedAt = Date.now();
-  const runId = dryRun ? null : await startRun(prisma, { trigger, test });
-  const rows = [];
-  let stopped = false;
-  for (const document of loaded) {
-    if (stopped) {
-      rows.push({ ...emptyRow(document), status: "stopped" });
-      continue;
+  let runId = null;
+  const rows = loaded.map(emptyRow);
+  try {
+    runId = dryRun ? null : await startRun(prisma, { trigger, test });
+    const checkpoint = (client = prisma) =>
+      dryRun ? Promise.resolve() : saveProgress(client, runId, rows);
+    await checkpoint();
+    let stopped = false;
+    for (const [index, document] of loaded.entries()) {
+      if (stopped) {
+        rows[index].status = "stopped";
+        await checkpoint();
+        continue;
+      }
+      const row = await serializeGeneration(() =>
+        processDocument(document, {
+          llm,
+          prisma,
+          logEvent,
+          logger,
+          sleep,
+          delays,
+          runId,
+          test,
+          dryRun,
+          row: rows[index],
+          checkpoint,
+        })
+      );
+      onDocument?.(row);
+      // The quota is used up: the rest would fail the same way. Running again
+      // later is safe because duplicates are never created.
+      if (row.status === "failed" && row.error === "rate_limited")
+        stopped = true;
     }
-    const row = await serializeGeneration(() =>
-      processDocument(document, {
-        llm,
-        prisma,
-        logEvent,
-        logger,
-        sleep,
-        delays,
-        runId,
-        test,
-        dryRun,
-      })
-    );
-    rows.push(row);
-    onDocument?.(row);
-    // The quota is used up: the rest would fail the same way. Running again
-    // later is safe because duplicates are never created.
-    if (row.status === "failed" && row.error === "rate_limited") stopped = true;
+    const summary = {
+      ...summarize(rows),
+      seconds: Math.round((Date.now() - startedAt) / 1000),
+    };
+    if (!dryRun) {
+      await finishRun(prisma, runId, rows, summary);
+      await notifyFailures(prisma, rows).catch(() =>
+        logger?.error?.("[SchatSynonymSuggestions] 관리자 실패 알림 저장 실패")
+      );
+    }
+    return {
+      runId,
+      trigger,
+      test,
+      dryRun,
+      ...summary,
+      failedDocuments: rows
+        .filter((row) => row.status === "failed")
+        .map((row) => ({ documentName: row.documentName, code: row.error })),
+      rows,
+    };
+  } catch (error) {
+    if (!dryRun) {
+      if (runId)
+        await prisma.schat_synonym_suggestion_runs
+          .update({
+            where: { id: runId },
+            data: { status: "persistence_failed" },
+          })
+          .catch(() => null);
+      await notifyFailures(prisma, [{ status: "failed" }]).catch(() => null);
+    }
+    throw error;
   }
-  const summary = {
-    ...summarize(rows),
-    seconds: Math.round((Date.now() - startedAt) / 1000),
-  };
-  if (!dryRun) await finishRun(prisma, runId, rows, summary);
-  return {
-    runId,
-    trigger,
-    test,
-    dryRun,
-    ...summary,
-    failedDocuments: rows
-      .filter((row) => row.status === "failed")
-      .map((row) => ({ documentName: row.documentName, code: row.error })),
-    rows,
-  };
 }
 
 /**
@@ -903,6 +1061,181 @@ async function registeredDocuments(prisma = prismaClient()) {
   return [...new Set(rows.map((row) => row.docpath))].map((location) => ({
     location,
   }));
+}
+
+async function retryRun(runId, options = {}) {
+  const id = Number(runId);
+  if (!Number.isSafeInteger(id) || id <= 0)
+    throw new Error("실행 기록을 확인해 주세요.");
+  if (activeRetries.has(id))
+    throw new Error("이미 다시 시도하고 있어요. 완료될 때까지 기다려 주세요.");
+  activeRetries.add(id);
+  const {
+    prisma = prismaClient(),
+    llm = null,
+    logEvent = defaultLogEvent,
+    logger = console,
+    sleep = wait,
+    delays = RETRY_DELAYS_MS,
+    targets = null,
+    loadCurrentDocuments = async () =>
+      loadDocuments(await registeredDocuments(prisma)),
+  } = options;
+  let claimed = false;
+  let rows;
+  try {
+    const run = await prisma.schat_synonym_suggestion_runs.findUnique({
+      where: { id },
+    });
+    if (!run) throw new Error("실행 기록을 찾지 못했어요.");
+    if (run.status !== "done")
+      throw new Error(
+        "진행 중이거나 저장을 확인해야 하는 실행은 다시 시도할 수 없어요."
+      );
+    rows = parseJson(run.documents, []);
+    if (
+      !rows.length ||
+      rows.some(
+        (row) =>
+          row.retryVersion !== 1 ||
+          !row.documentId ||
+          !row.documentDigest ||
+          !Array.isArray(row.batches)
+      )
+    )
+      throw new Error(
+        "과거 기록에는 실패한 범위가 없어 다시 시도할 수 없어요. 새 실행부터 지원해요."
+      );
+    if (
+      targets !== null &&
+      (!Array.isArray(targets) ||
+        !targets.length ||
+        targets.length > rows.length)
+    )
+      throw new Error("실패한 범위를 선택해 주세요.");
+    const requested =
+      targets ??
+      rows
+        .filter((row) => ["failed", "stopped"].includes(row.status))
+        .map((row) => ({
+          documentId: row.documentId,
+          batchIndices: row.batches
+            .filter((batch) => ["failed", "pending"].includes(batch.status))
+            .map((batch) => batch.index),
+        }));
+    if (!requested.length) throw new Error("다시 시도할 실패 범위가 없어요.");
+    const current = await loadCurrentDocuments();
+    const seen = new Set();
+    const work = requested.map((target) => {
+      const row = rows.find((row) => row.documentId === target.documentId);
+      if (
+        !row ||
+        seen.has(row.documentId) ||
+        !["failed", "stopped"].includes(row.status)
+      )
+        throw new Error("실패한 문서만 한 번씩 선택해 주세요.");
+      seen.add(row.documentId);
+      if (
+        !Array.isArray(target.batchIndices) ||
+        !target.batchIndices.length ||
+        new Set(target.batchIndices).size !== target.batchIndices.length ||
+        target.batchIndices.some(
+          (index) =>
+            !Number.isInteger(index) ||
+            !row.batches.some(
+              (batch) =>
+                batch.index === index &&
+                ["failed", "pending"].includes(batch.status)
+            )
+        )
+      )
+        throw new Error(
+          "실패한 범위만 선택해 주세요. 성공한 범위는 다시 호출하지 않아요."
+        );
+      const document = current.find(
+        (doc) => String(doc.documentId) === row.documentId
+      );
+      if (!document)
+        throw new Error(
+          "문서가 삭제되었거나 읽을 수 없어 다시 시도할 수 없어요."
+        );
+      if (documentDigest(document) !== row.documentDigest)
+        throw new Error(
+          "문서 내용이 변경되어 다시 시도할 수 없어요. 새 실행이 필요해요."
+        );
+      const batches = collectSnippets(document.pages).batches;
+      if (
+        batches.length !== row.batches.length ||
+        row.batches.some(
+          (batch, index) =>
+            batch.index !== index ||
+            JSON.stringify(batch.pages) !== JSON.stringify(batches[index].pages)
+        )
+      )
+        throw new Error("문서 처리 범위가 변경되어 다시 시도할 수 없어요.");
+      return {
+        row,
+        document,
+        batchIndices: target.batchIndices,
+        validateCurrent: async () => {
+          const live = (await loadCurrentDocuments()).find(
+            (doc) => String(doc.documentId) === row.documentId
+          );
+          if (!live || documentDigest(live) !== row.documentDigest)
+            throw Object.assign(
+              new Error("문서가 변경되거나 삭제되어 재시도를 중단했어요."),
+              { code: "document_changed" }
+            );
+        },
+      };
+    });
+    try {
+      const claim = await prisma.schat_synonym_suggestion_runs.updateMany({
+        where: { id, status: "done" },
+        data: { status: "retrying", finishedAt: null },
+      });
+      if (claim.count !== 1) throw new Error("이미 다시 시도하고 있어요.");
+      claimed = true;
+    } catch (error) {
+      if (/이미/.test(error.message)) throw error;
+      throw storageError();
+    }
+    const checkpoint = (client = prisma) => saveProgress(client, id, rows);
+    for (const item of work) {
+      const row = await serializeGeneration(() =>
+        processDocument(item.document, {
+          ...item,
+          llm,
+          prisma,
+          logEvent,
+          logger,
+          sleep,
+          delays,
+          runId: id,
+          test: Boolean(run.test),
+          dryRun: false,
+          checkpoint,
+        })
+      );
+      if (row.error === "rate_limited") break;
+    }
+    const summary = summarize(rows);
+    await finishRun(prisma, id, rows, summary);
+    await notifyFailures(prisma, rows).catch(() =>
+      logger?.error?.("[SchatSynonymSuggestions] 관리자 실패 알림 저장 실패")
+    );
+    return { runId: id, ...summary, rows };
+  } catch (error) {
+    if (claimed) {
+      // 저장 불확실 상태는 재호출 금지. 복구 전에는 완료로 표시하지 않는다.
+      await prisma.schat_synonym_suggestion_runs
+        .update({ where: { id }, data: { status: "persistence_failed" } })
+        .catch(() => null);
+    }
+    throw error;
+  } finally {
+    activeRetries.delete(id);
+  }
 }
 
 /**
@@ -961,6 +1294,20 @@ async function listRuns(prisma = prismaClient(), limit = 10) {
       summary: parseJson(row.summary, {}),
       documents: parseJson(row.documents, []).map((item) => ({
         ...item,
+        batches: item.batches?.map(({ candidates, ...batch }) => ({
+          ...batch,
+          retryable:
+            row.status === "done" &&
+            item.retryVersion === 1 &&
+            ["failed", "pending"].includes(batch.status),
+        })),
+        retryable:
+          row.status === "done" &&
+          item.retryVersion === 1 &&
+          ["failed", "stopped"].includes(item.status) &&
+          item.batches?.some((batch) =>
+            ["failed", "pending"].includes(batch.status)
+          ),
         statusText: DOCUMENT_STATUS[item.status] || item.status,
       })),
       startedAt: row.startedAt,
@@ -1229,6 +1576,7 @@ module.exports = {
   planSuggestions,
   loadDocuments,
   suggestForDocuments,
+  retryRun,
   scheduleSynonymSuggestions,
   registeredDocuments,
   removeTestRun,

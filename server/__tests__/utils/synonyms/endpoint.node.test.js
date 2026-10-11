@@ -53,6 +53,10 @@ function setup(role = "admin") {
         calls++;
         return [{ id: 7 }];
       },
+      retryRun: async (id, { targets }) => {
+        calls++;
+        return { runId: Number(id), targets };
+      },
       approveAddition: async (id) => {
         calls++;
         return id === "7" ? { id: 3 } : null;
@@ -136,7 +140,19 @@ const routes = [
   "post /schat-admin/synonyms/suggestions/:id/approve",
   "post /schat-admin/synonyms/suggestions/:id/dismiss",
   "post /schat-admin/synonyms/suggestions/bulk-approve",
+  "post /schat-admin/synonyms/runs/:id/retry",
 ];
+
+test("관리자는 실행 기록의 실패 범위 재시도를 요청할 수 있다", async () => {
+  const app = setup();
+  const result = await app.invoke(
+    "post /schat-admin/synonyms/runs/:id/retry",
+    "Bearer synthetic"
+  );
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.body.runId, 7);
+  assert.equal(app.calls(), 1);
+});
 test("employees and anonymous callers cannot read or change candidates", async () => {
   for (const role of ["admin", "default"]) {
     const app = setup(role);

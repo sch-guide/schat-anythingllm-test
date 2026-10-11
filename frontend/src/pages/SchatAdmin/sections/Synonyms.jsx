@@ -8,6 +8,7 @@ import {
   RUN_TRIGGER_LABELS,
   canOpenSource,
   cleanTerm,
+  createdText,
   describeSources,
   groupSources,
   isNewAiGroup,
@@ -130,34 +131,85 @@ function Sources({ group }) {
   );
 }
 
-function RunsCard({ runs }) {
+const FAILURE_REASONS = {
+  rate_limited: "AI 사용 제한으로 멈췄어요. 잠시 후 다시 시도해 주세요.",
+  timeout: "AI 응답이 늦어 완료하지 못했어요. 잠시 뒤 다시 시도해 주세요.",
+  unavailable: "AI 서비스가 잠시 바빠요. 잠시 뒤 다시 시도해 주세요.",
+  no_api_key: "AI 연결 설정을 확인해야 해요.",
+  unauthorized: "AI 연결 권한을 확인해야 해요.",
+  invalid_json: "AI 답변을 읽지 못했어요. 다시 시도해 주세요.",
+  empty: "AI 답변이 비어 있어요. 다시 시도해 주세요.",
+  document_changed:
+    "문서가 변경되거나 삭제되어 중단했어요. 새 실행이 필요해요.",
+  pending: "앞선 요청이 중단되어 아직 처리하지 못한 범위예요.",
+};
+
+export function RunsCard({ runs, onRetried }) {
   const [selected, setSelected] = useState(runs[0]?.id);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState("");
+  const inFlight = useRef(false);
   if (!runs.length) return null;
   const run = runs.find((item) => item.id === selected) || runs[0];
-  const failed = (run.documents || []).filter(
-    (item) => item.status === "failed"
+  const failed = (run.documents || []).filter((item) =>
+    ["failed", "stopped"].includes(item.status)
   );
+  async function retry(targets = null) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setRetrying(true);
+    setRetryError("");
+    try {
+      const result = await SchatSynonyms.retryRun(run.id, targets);
+      if (!result.ok)
+        setRetryError(
+          result.error || "다시 시도하지 못했어요. 잠시 뒤 확인해 주세요."
+        );
+      await onRetried?.();
+      window.dispatchEvent(new Event("schat-notifications-refresh"));
+    } catch {
+      setRetryError("결과를 확인하지 못했어요. 기록을 새로 확인해 주세요.");
+    } finally {
+      inFlight.current = false;
+      setRetrying(false);
+    }
+  }
   return (
-    <details className="schat-admin-card rounded-xl p-4">
+    <details
+      open={
+        failed.length > 0 ||
+        ["persistence_failed", "retrying", "running"].includes(run.status)
+      }
+      className="schat-admin-card rounded-xl p-4"
+    >
       <summary className="cursor-pointer text-sm font-medium text-theme-text-primary">
-        자동 생성 결과
+        마지막 자동 생성 · {createdText(runs[0].startedAt) || "날짜 미기록"}
+        {" · "}새 묶음 {runs[0].summary?.newGroups || 0}개{" · "}실패{" "}
+        {(runs[0].summary?.failed || 0) + (runs[0].summary?.stopped || 0)}개 ·
+        기록 보기
+        {["running", "retrying"].includes(runs[0].status) && " · 진행 중"}
+        {runs[0].status === "persistence_failed" && " · 저장 확인 필요"}
       </summary>
       <div className="mt-3 flex flex-col gap-3">
         <select
           aria-label="자동 생성 실행 기록"
+          disabled={retrying}
           value={run.id}
           onChange={(event) => setSelected(Number(event.target.value))}
           className={inputClass}
         >
           {runs.map((item) => (
             <option key={item.id} value={item.id}>
-              #{item.id} {RUN_TRIGGER_LABELS[item.trigger] || item.trigger}
+              {createdText(item.startedAt) || "날짜 미기록"}{" "}
+              {RUN_TRIGGER_LABELS[item.trigger] || "자동 생성"}
               {" · "}
-              {item.status === "running"
+              {["running", "retrying"].includes(item.status)
                 ? "진행 중"
                 : item.status === "removed"
                   ? "삭제됨"
-                  : "완료"}
+                  : item.status === "persistence_failed"
+                    ? "저장 확인 필요"
+                    : "완료"}
             </option>
           ))}
         </select>
@@ -176,12 +228,81 @@ function RunsCard({ runs }) {
           ))}
         </div>
         {failed.length > 0 && (
-          <p className="text-xs text-red-500">
-            실패한 문서:{" "}
-            {failed
-              .map((item) => `${item.documentName} (${item.error || "실패"})`)
-              .join(", ")}
-          </p>
+          <div
+            className="rounded-lg border border-orange-400 bg-orange-500/10 p-3 text-sm text-theme-text-primary"
+            role="status"
+          >
+            <p>
+              자동 생성에서 {failed.length}개 문서가 완료되지 않았어요. 성공한
+              범위는 보존되어 다시 호출하지 않아요.
+            </p>
+            {failed.some((item) => item.retryable) && (
+              <Button disabled={retrying} onClick={() => retry()}>
+                {retrying ? "다시 시도 중…" : "전체 실패 다시 시도"}
+              </Button>
+            )}
+            <ul className="mt-2 space-y-3">
+              {failed.map((item, index) => (
+                <li key={item.documentId || index}>
+                  <b>{item.documentName}</b>
+                  <p>
+                    {FAILURE_REASONS[item.error] ||
+                      "후보 생성을 완료하지 못했어요. 연결 상태와 실행 기록을 확인해 주세요."}
+                  </p>
+                  {item.retryVersion !== 1 ? (
+                    <p>
+                      과거 기록은 실패 범위가 없어 다시 시도할 수 없어요. 새
+                      실행부터 지원해요.
+                    </p>
+                  ) : (
+                    (item.batches || [])
+                      .filter((batch) => batch.status !== "succeeded")
+                      .map((batch) => (
+                        <div
+                          key={batch.index}
+                          className="mt-1 flex flex-wrap items-center gap-2"
+                        >
+                          <span>
+                            {batch.pages?.length
+                              ? `${batch.pages.join(", ")}쪽`
+                              : "쪽 정보 없음"}{" "}
+                            ·{" "}
+                            {batch.status === "pending"
+                              ? "미처리"
+                              : batch.status === "running"
+                                ? "결과 확인 필요"
+                                : "실패"}
+                          </span>
+                          {batch.retryable && (
+                            <Button
+                              variant="secondary"
+                              disabled={retrying}
+                              onClick={() =>
+                                retry([
+                                  {
+                                    documentId: item.documentId,
+                                    batchIndices: [batch.index],
+                                  },
+                                ])
+                              }
+                            >
+                              실패한 부분 다시 시도
+                            </Button>
+                          )}
+                        </div>
+                      ))
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {retryError && <Notice tone="error">{retryError}</Notice>}
+        {["running", "retrying", "persistence_failed"].includes(run.status) && (
+          <Notice tone="warning">
+            진행 중이거나 저장 확인이 필요한 기록이에요. 결과가 불확실한 범위는
+            중복 호출을 막기 위해 다시 시도할 수 없어요.
+          </Notice>
         )}
         <div className="overflow-x-auto">
           <table
@@ -218,7 +339,7 @@ function RunsCard({ runs }) {
                     item.newGroups,
                     item.additions,
                     item.duplicates,
-                    `${item.statusText || item.status}${item.error ? ` (${item.error})` : ""}`,
+                    `${item.statusText || item.status}${item.error ? ` · ${FAILURE_REASONS[item.error] || "완료하지 못했어요"}` : ""}`,
                   ].map((value, i) => (
                     <td key={i} className="p-1">
                       {value}
@@ -1027,7 +1148,14 @@ export default function SynonymsSection() {
           이름이 비슷해도 다를 수 있어요. 확실하지 않으면 원문을 확인해 주세요.
         </p>
       </details>
-      <RunsCard key={runs[0]?.id ?? "none"} runs={runs} />
+      <RunsCard
+        key={runs[0]?.id ?? "none"}
+        runs={runs}
+        onRetried={async () => {
+          setRuns(await SchatSynonyms.runs());
+          await reload();
+        }}
+      />
     </div>
   );
 }

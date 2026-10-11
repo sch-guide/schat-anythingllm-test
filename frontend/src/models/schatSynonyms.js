@@ -41,6 +41,11 @@ const SchatSynonyms = {
     const result = await request("/runs");
     return result.ok ? result.runs || [] : [];
   },
+  retryRun: (id, targets = null) =>
+    request(`/runs/${encodeURIComponent(id)}/retry`, {
+      method: "POST",
+      body: JSON.stringify({ targets }),
+    }),
   dismissAddition: (id) =>
     request(`/suggestions/${encodeURIComponent(id)}/dismiss`, {
       method: "POST",

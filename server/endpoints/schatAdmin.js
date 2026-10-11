@@ -443,6 +443,22 @@ function schatAdminEndpoints(app) {
 
   // 자동 후보 중 "기존 묶음에 추가할 단어": 관리자가 승인해야 묶음에 들어간다.
   app.post(
+    "/schat-admin/synonyms/runs/:id/retry",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      try {
+        const result = await SynonymSuggestions.retryRun(request.params.id, {
+          targets: reqBody(request)?.targets ?? null,
+        });
+        // 내부 성공 후보와 문서 지문은 응답에 포함하지 않는다.
+        response.status(200).json({ success: true, runId: result.runId });
+      } catch (e) {
+        synonymError(response, e);
+      }
+    }
+  );
+
+  app.post(
     "/schat-admin/synonyms/suggestions/bulk-approve",
     [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (request, response) => {
