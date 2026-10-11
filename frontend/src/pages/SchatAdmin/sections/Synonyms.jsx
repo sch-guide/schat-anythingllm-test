@@ -786,9 +786,9 @@ export default function SynonymsSection() {
           </button>
         </Notice>
       )}
-      {notice && (
-        <div role={notice.error ? "alert" : "status"}>
-          <Notice tone={notice.error ? "warning" : "info"}>
+      {notice?.error && (
+        <div role="alert">
+          <Notice tone="warning">
             {notice.text}
           </Notice>
         </div>

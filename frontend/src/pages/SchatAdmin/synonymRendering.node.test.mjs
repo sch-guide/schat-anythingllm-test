@@ -161,7 +161,7 @@ test("suggestion safety badges, document pages and unsupported-source notice sur
   assert.doesNotMatch(html, /제안 정보|추가 후보/);
 });
 
-function loadedSynonyms(selected = []) {
+function loadedSynonyms(selected = [], notice = null) {
   // 서버 렌더링은 비동기 목록 읽기를 실행하지 않으므로 첫 상태에 빈 목록만 공급한다.
   // 나머지 hooks와 실제 화면/하위 구성요소는 React 그대로 렌더링한다.
   let stateIndex = 0;
@@ -169,7 +169,7 @@ function loadedSynonyms(selected = []) {
     ...React,
     useState(initial) {
       const index = stateIndex++;
-      const value = index === 0 ? [] : index === 2 ? selected : initial;
+      const value = index === 0 ? [] : index === 2 ? selected : index === 11 ? notice : initial;
       return React.useState(value);
     },
   };
@@ -220,6 +220,14 @@ function renderAdmin(sectionKey, SynonymsSection = loadedSynonyms()) {
   const { default: SchatAdmin } = load("./index.jsx", deps);
   return renderToStaticMarkup(React.createElement(SchatAdmin));
 }
+
+test("상단 성공 안내는 공간을 차지하지 않고 실패 안내는 유지한다", () => {
+  const success = renderAdmin("synonyms", loadedSynonyms([], { error: false, text: "저장했어요." }));
+  assert.doesNotMatch(success, /저장했어요\.|role="status"/);
+  const failure = renderAdmin("synonyms", loadedSynonyms([], { error: true, text: "저장하지 못했어요." }));
+  assert.match(failure, /role="alert"/);
+  assert.match(failure, /저장하지 못했어요\./);
+});
 
 test("실제 동의어 관리 화면은 제목과 안내를 한 번만 표시하고 넓은 표 영역을 쓴다", () => {
   const section = findSchatAdminSection("synonyms");
