@@ -1,0 +1,80 @@
+.schat-help {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.schat-help__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.schat-help__heading > :first-child {
+  min-width: 0;
+}
+
+.schat-help__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  border: 1px solid #0f766e;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: #0f766e;
+  font: 600 12px/1 sans-serif;
+  cursor: pointer;
+}
+
+.schat-help__toggle[aria-expanded="true"] {
+  background: #0f766e;
+  color: #fff;
+}
+
+.schat-help__toggle:focus-visible,
+.schat-help__close:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 3px;
+}
+
+.schat-help__panel {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 8px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #eff6ff;
+  color: #1e3a5f;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.7;
+  text-align: left;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.schat-help__panel ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.schat-help__close {
+  display: block;
+  margin-left: auto;
+  border: 0;
+  padding: 0 2px;
+  background: transparent;
+  color: #1e3a5f;
+  font: inherit;
+  cursor: pointer;
+}

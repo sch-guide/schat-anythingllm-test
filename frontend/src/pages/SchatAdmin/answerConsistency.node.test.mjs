@@ -16,6 +16,7 @@ const require = createRequire(import.meta.url);
 const hooks = `
 export default globalThis.__answerReact;
 export function useId(){return 'answer-test-help';}
+export function useRef(initial){return {current:initial};}
 let slots=[], cursor=0, pending=[];
 export function begin(){cursor=0; pending=[];}
 export function flush(){for(const effect of pending) effect();}

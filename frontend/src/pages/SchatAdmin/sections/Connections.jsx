@@ -172,7 +172,11 @@ export function ConnectionCard({ target, info, revision, onSaved }) {
     <Card
       title={config.title}
       description={config.description}
-      help="거의 안 씀. 모델과 열쇠는 평소 바꿀 필요가 없습니다. 열쇠(API 키)는 Gemini 서비스에 연결하는 비밀번호 같은 값입니다. 저장 전에 서버가 새 값으로 모델 정보를 확인합니다. 병원 문서나 질문은 보내지 않습니다."
+      help={[
+        "모델과 열쇠는 평소 바꿀 필요가 없어요.",
+        "열쇠(API 키)는 Gemini에 연결하는 비밀번호 같은 값이에요.",
+        "저장 전 새 열쇠로 모델 정보만 확인해요. 병원 문서·질문은 보내지 않아요.",
+      ]}
     >
       <Notice tone="warning">
         거의 안 씀. 변경하면 직원 답변이나 문서 검색에 바로 영향을 줍니다.

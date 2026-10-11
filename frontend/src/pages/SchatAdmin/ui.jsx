@@ -1,21 +1,54 @@
 // Small building blocks shared by the SCHAT admin sections. Wording on these
 // screens is written for non-developer hospital administrators.
-import React, { useId } from "react";
+import React, { useId, useRef, useState } from "react";
 
 export const inputClass =
   "schat-admin-input w-full rounded-lg px-3 py-2 text-sm outline-none bg-theme-settings-input-bg text-theme-text-primary placeholder:text-theme-settings-input-placeholder border border-transparent focus:border-sky-500";
 
-export function Help({ children }) {
+export function Help({ children, heading, label = "자세한 설명" }) {
   const id = useId();
+  const [open, setOpen] = useState(false);
+  const toggle = useRef(null);
   return (
-    <span className="group relative ml-1 inline-flex text-xs text-theme-text-secondary">
-      <button type="button" aria-label="자세한 설명" aria-describedby={id}
-        className="cursor-help rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500">(?)</button>
-      <span id={id} role="tooltip"
-        className="absolute right-0 top-full z-50 hidden w-64 max-w-[80vw] whitespace-normal rounded-lg border border-theme-sidebar-border bg-theme-bg-primary p-3 text-left font-normal shadow-lg group-hover:block group-focus-within:block">
-        {children}
-      </span>
-    </span>
+    <div className="schat-help">
+      <div className="schat-help__heading">
+        {heading}
+        <button
+          ref={toggle}
+          type="button"
+          aria-label={label}
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => setOpen((current) => !current)}
+          className="schat-help__toggle"
+        >
+          i
+        </button>
+      </div>
+      <div
+        id={id}
+        hidden={!open}
+        className="schat-help__panel"
+        role="region"
+        aria-label={`${label} 설명`}
+      >
+        <button
+          type="button"
+          className="schat-help__close"
+          onClick={() => {
+            setOpen(false);
+            toggle.current?.focus();
+          }}
+        >
+          닫기 <span aria-hidden="true">✕</span>
+        </button>
+        <ul>
+          {React.Children.toArray(children).map((line, index) => (
+            <li key={index}>{line}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }
 
@@ -26,12 +59,23 @@ export function Card({ title, description, help, children, tone = "default" }) {
     >
       {(title || description) && (
         <header className="flex flex-col gap-y-1">
-          {title && (
-            <h2 className="text-base font-semibold text-theme-text-primary">
-              {title}
-              {help && <Help>{help}</Help>}
-            </h2>
-          )}
+          {title &&
+            (help ? (
+              <Help
+                label={`${title} 도움말`}
+                heading={
+                  <h2 className="text-base font-semibold text-theme-text-primary">
+                    {title}
+                  </h2>
+                }
+              >
+                {help}
+              </Help>
+            ) : (
+              <h2 className="text-base font-semibold text-theme-text-primary">
+                {title}
+              </h2>
+            ))}
           {description && (
             <p className="text-xs leading-5 text-theme-text-secondary">
               {description}

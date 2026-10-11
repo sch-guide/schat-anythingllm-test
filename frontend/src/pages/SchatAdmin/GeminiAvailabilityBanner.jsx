@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { API_BASE } from "@/utils/constants";
 import { baseHeaders } from "@/utils/request";
-import { Help } from './ui';
+import { LegacyHelp as Help } from './LegacyHelp';
 
 export default function GeminiAvailabilityBanner() {
   const { data, error } = useGeminiAvailability();

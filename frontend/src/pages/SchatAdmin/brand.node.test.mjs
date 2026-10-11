@@ -285,10 +285,14 @@ test("브랜드 상세 조건은 짧은 소개와 분리된 키보드 도움말�
   const html = renderToStaticMarkup(
     view.BrandEditorView({ controller: c, state: c.getSnapshot() })
   );
-  assert.equal((html.match(/aria-describedby=/g) || []).length, 4);
+  assert.equal((html.match(/aria-expanded="false"/g) || []).length, 4);
+  assert.equal((html.match(/aria-controls=/g) || []).length, 4);
   const sections = html.split("<section").slice(1);
   for (const section of sections) {
-    assert.match(section, /role="tooltip"/);
+    assert.match(section, /role="region"/);
+    assert.match(section, /hidden=""/);
+    assert.ok((section.match(/<li>/g) || []).length >= 2);
+    assert.ok((section.match(/<li>/g) || []).length <= 3);
     const description = section.match(/<p[^>]*>(.*?)<\/p>/s)?.[1] || "";
     assert.ok(description.length <= 55);
   }

@@ -158,7 +158,10 @@ export default function StatusSection() {
       <ChatAdmissionPanel onState={setAdmission} showDaily={false} />
       <Card
         title="등록 지침과 체크리스트"
-        help="지침 추가·삭제는 문서 관리 화면에서 합니다."
+        help={[
+          "등록된 지침과 체크리스트 현황을 확인해요.",
+          "지침 추가·삭제는 문서 관리 화면에서 해요.",
+        ]}
       >
         {workspaces.map((ws) => (
           <div key={ws.slug}>
@@ -190,7 +193,10 @@ export default function StatusSection() {
         {details && <div className="mt-4 flex flex-col gap-4">
           <GeminiBudgetPanel />
           <RecentEvents />
-          <Card title="AI 설정" help="거의 안 씀. 연결 정보를 바꾸면 직원 답변에 영향을 줄 수 있습니다.">
+          <Card title="AI 설정" help={[
+            "연결 정보는 평소 바꿀 필요가 없어요.",
+            "바꾸면 직원 답변에 영향을 줄 수 있어요.",
+          ]}>
             <ConnectionsSection onSaved={connectionSaved} />
           </Card>
         </div>}
@@ -211,7 +217,10 @@ function RecentEvents() {
   return (
     <Card
       title="시스템 기록"
-      help="로그인, 문서 업로드, 설정 변경 같은 최근 기록입니다. 오류가 의심되면 이 기록을 기술 담당자에게 알려 주세요."
+      help={[
+        "로그인·문서 업로드·설정 변경 같은 최근 기록을 확인해요.",
+        "오류가 의심되면 이 기록을 기술 담당자에게 알려 주세요.",
+      ]}
     >
       {!data ? (
         <Loading />

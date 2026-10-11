@@ -12,6 +12,7 @@ import {
   findSchatAdminSection,
 } from "./menu";
 import { inputClass } from "./ui";
+import "./uiHelp.css";
 import BrandSection from "./sections/Brand";
 import AnswerSection from "./sections/Answer";
 import AnswerCacheSection from "./sections/AnswerCache";

@@ -52,6 +52,11 @@ test("budget presentation shows unavailable instead of zero and independent 80/9
   assert.doesNotMatch(m.exports.warning, /한도가 소진됨/);
   assert.match(m.exports.high, /높은 사용량 경고/);
   assert.equal(m.exports.low, "");
+  // 작업 9 전까지 예산·배너의 기존 도움말 표시를 그대로 보존해요.
+  assert.equal((m.exports.missing.match(/role="tooltip"/g) || []).length, 2);
+  assert.equal((m.exports.warning.match(/role="tooltip"/g) || []).length, 1);
+  assert.match(m.exports.warning, />\(\?\)<\/button>/);
+  assert.doesNotMatch(m.exports.missing + m.exports.warning, /schat-help__|aria-expanded=/);
 });
 test("administrator banner renders Korean first-occurrence time and disappears without alerts", async () => {
   const result = await build({

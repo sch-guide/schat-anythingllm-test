@@ -20,8 +20,8 @@ const empty = { items: [], hasMore: false, nextOffset: null };
 test("도움말은 키보드로 접근할 버튼과 연결된 설명을 제공함", () => {
   const ui = load("./ui.jsx");
   const html = renderToStaticMarkup(React.createElement(ui.Help, null, "목록 순서 설명"));
-  assert.match(html, /<button[^>]*aria-describedby=/);
-  assert.match(html, /role="tooltip"/);
+  assert.match(html, /<button[^>]*aria-expanded="false"[^>]*aria-controls=/);
+  assert.match(html, /hidden=""[^>]*role="region"/);
   assert.match(html, /목록 순서 설명/);
 });
 const docs = { ...empty, items: [{ documentId: "doc-a", name: "시험 문서" }] };

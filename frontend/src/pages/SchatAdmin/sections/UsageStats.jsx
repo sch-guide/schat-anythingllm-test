@@ -132,7 +132,11 @@ export default function UsageStatsSection() {
           <label>종료일 <input aria-label="종료일" type="date" value={endDate} min={startDate} max={today} onChange={e=>setEndDate(e.target.value)} className="rounded border border-theme-sidebar-border bg-theme-bg-primary p-2" /></label>
         </div>
       )}
-      <div>대상 부서 <Help>여러 부서를 고를 수 있습니다. 부서는 현재 계정 정보 기준이며 질문 목록은 최근 90일 이내 최대 100건입니다. 5명 미만 부서의 통계는 숨깁니다. 기존 기록은 삭제하지 않습니다.</Help></div>
+      <Help label="대상 부서 도움말" heading={<span>대상 부서</span>}>{[
+        "현재 계정의 부서 기준으로 여러 부서를 골라요.",
+        "질문 목록은 최근 90일 이내 최대 100건까지 보여요.",
+        "5명 미만 부서의 통계는 숨기고, 기존 기록은 유지해요.",
+      ]}</Help>
       <DepartmentPicker departments={departments} selected={departmentIds} onChange={setDepartmentIds} />
       {validation && <p role="alert" className="text-red-500">{validation}</p>}
       </div>
@@ -152,7 +156,10 @@ export default function UsageStatsSection() {
           <div className="md:col-span-2">
             <Card
               title={`질문 수 ${n(stats.questions.total)}건`}
-            help="직원이 SCHAT에 물어본 질문 수입니다. 시간은 한국 시간 기준입니다."
+            help={[
+              "직원이 SCHAT에 물어본 질문 수를 표시해요.",
+              "시간은 한국 시간을 기준으로 해요.",
+            ]}
             >
               <p className="m-0 text-sm font-medium text-theme-text-primary">
                 날짜별
@@ -182,7 +189,10 @@ export default function UsageStatsSection() {
 
           <Card
             title="많이 검색된 주제"
-            help="답변에 인용된 지침 문서의 목차(없으면 쪽) 기준, 상위 10개입니다."
+            help={[
+              "답변에 인용된 지침 문서의 목차를 기준으로 해요. 목차가 없으면 쪽을 사용해요.",
+              "많이 인용된 주제 10개를 보여요.",
+            ]}
           >
             {stats.topics.length ? (
               <div>
@@ -201,7 +211,10 @@ export default function UsageStatsSection() {
 
           <Card
             title="많이 인용된 지침 문서"
-            help="답변의 근거로 쓰인 질문 수입니다."
+            help={[
+              "문서별로 답변의 근거로 쓰인 질문 수를 보여요.",
+              "이 기간에 한 번도 인용되지 않은 문서도 확인해요.",
+            ]}
           >
             {stats.documents.cited.length ? (
               <div>
@@ -232,7 +245,11 @@ export default function UsageStatsSection() {
 
           <Card
             title={`검색 실패 질문 ${n(stats.searchFailures.total)}건`}
-            help="답변에 인용된 근거가 한 건도 없었던 질문입니다. 질문 내용과 날짜만 보여주며, 환자 정보로 보이는 숫자는 ***로 가립니다."
+            help={[
+              "답변에 인용된 근거가 한 건도 없었던 질문이에요.",
+              "질문 내용과 날짜만 보여요.",
+              "환자 정보로 보이는 숫자는 ***로 가려요.",
+            ]}
           >
             <QuestionList
               items={stats.searchFailures.items}
@@ -243,7 +260,10 @@ export default function UsageStatsSection() {
 
           <Card
             title={`근거 없음 응답 ${n(stats.notFoundAnswers.total)}건`}
-            help="근거는 찾았지만 챗봇이 '지침에서 확인되지 않는다'는 취지로 답한 질문입니다. 검색 실패 질문과 겹치지 않습니다."
+            help={[
+              "근거를 찾았지만 ‘지침에서 확인되지 않는다’고 답한 질문이에요.",
+              "검색 실패 질문과 겹치지 않아요.",
+            ]}
           >
             <QuestionList
               items={stats.notFoundAnswers.items}
@@ -254,7 +274,10 @@ export default function UsageStatsSection() {
 
           <Card
             title="부서별 사용량"
-            help="부서별 질문 수입니다(가나다순). 이 기간 사용자가 5명 미만인 부서는 표시하지 않습니다."
+            help={[
+              "부서별 질문 수를 가나다순으로 보여요.",
+              "이 기간 사용자가 5명 미만인 부서는 숨겨요.",
+            ]}
           >
             {stats.departments.length ? (
               <div>
@@ -275,7 +298,11 @@ export default function UsageStatsSection() {
 
           <Card
             title="대략적인 AI 사용량"
-            help="기록된 AI 입력·출력 분량의 합계입니다. 글자 수나 실제 요금이 아니며 일부 사용량은 빠질 수 있습니다."
+            help={[
+              "기록된 AI 입력·출력 분량을 합해서 보여요.",
+              "글자 수나 실제 요금과는 달라요.",
+              "일부 사용량은 빠질 수 있어요.",
+            ]}
           >
             <div>
               <InfoRow label="질문 수">{n(stats.aiUsage.questions)}건</InfoRow>

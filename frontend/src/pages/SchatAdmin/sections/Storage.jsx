@@ -525,7 +525,10 @@ export function OriginalPdfCard({ groups, onDone }) {
   return (
     <Card
       title="아직 쓰이고 있을 수 있는 옛 원본 PDF"
-      help="선택하면 연결된 자료를 다시 확인합니다. 원본을 삭제하면 이전 대화·퀴즈에서 그 PDF를 열 수 없습니다."
+      help={[
+        "선택하면 연결된 자료를 다시 확인해요.",
+        "원본을 삭제하면 이전 대화·퀴즈에서 그 PDF를 열 수 없어요.",
+      ]}
     >
       {outcome && (
         <Notice tone={outcome.deleted > 0 ? "info" : "warning"}>

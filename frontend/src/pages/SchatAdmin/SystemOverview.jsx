@@ -18,7 +18,10 @@ export function SystemLights({ ai, aiError, daily, connections, connectionResult
   ];
   return <div className="grid gap-3 sm:grid-cols-3" aria-live="polite">
     {values.map(([label,value,color]) => <div key={label} className="rounded-lg border border-theme-sidebar-border p-3 text-theme-text-primary">
-      <p className="text-sm font-medium">{label}{label === '오늘 사용량' && <Help>이 서버에서 기록한 하루 답변 호출 수를 10,000건 기준으로 표시합니다. 다른 서버의 사용량과 실제 잔액은 포함하지 않습니다.</Help>}</p>
+      {label === '오늘 사용량' ? <Help label="오늘 사용량 도움말" heading={<p className="text-sm font-medium">{label}</p>}>{[
+        '이 서버의 하루 답변 호출 수를 10,000건 기준으로 표시해요.',
+        '다른 서버의 사용량과 실제 잔액은 포함하지 않아요.',
+      ]}</Help> : <p className="text-sm font-medium">{label}</p>}
       <p className="mt-2 flex items-center gap-2"><span aria-hidden="true" className={`inline-block h-3 w-3 rounded-full ${color}`} />{value}</p>
     </div>)}
   </div>;

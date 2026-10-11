@@ -28,7 +28,10 @@ export function ChatEvidence({ detail }) {
   return (
     <Card
       title="저장된 답변 근거"
-      help="답할 때 참고한 내용과 현재 조회 가능한 근거 문단을 구분합니다. 참고한 내용이 원문 전체를 뜻하지는 않습니다."
+      help={[
+        "답할 때 참고한 내용과 지금 볼 수 있는 근거 문단을 구분해요.",
+        "참고한 내용은 원문 전체를 뜻하지 않아요.",
+      ]}
     >
       <p className="text-sm text-theme-text-primary">{detail.question}</p>
       {detail.notice && <Notice tone="warning">{detail.notice}</Notice>}
@@ -111,8 +114,11 @@ export function ChunksView({
   return (
     <div className="flex flex-col gap-5">
       <Notice>
-        근거를 확인하는 화면이며 지침은 바뀌지 않습니다.
-        <Help>관리자만 볼 수 있으며 질문의 전화번호와 긴 숫자는 가립니다. 이전 버전은 현재 검색 대상이 아닙니다.</Help>
+        <Help label="근거 조회 도움말" heading={<span>근거를 확인하는 화면이며 지침은 바뀌지 않습니다.</span>}>{[
+          "관리자만 볼 수 있어요.",
+          "질문의 전화번호와 긴 숫자는 가려요.",
+          "이전 버전은 현재 검색 대상에서 제외해요.",
+        ]}</Help>
       </Notice>
       <div
         className="flex flex-wrap gap-2"
@@ -140,7 +146,10 @@ export function ChunksView({
         <>
           <Card
             title={`${workspace.name} 지침`}
-            help="PDF는 페이지별 자료로 나뉠 수 있습니다. 근거 문단은 한 번에 최대 50개씩 확인합니다."
+            help={[
+              "PDF는 페이지별 자료로 나뉠 수 있어요.",
+              "근거 문단은 한 번에 최대 50개씩 확인해요.",
+            ]}
           >
             {state.loading.documents && (
               <p role="status">문서 목록을 불러오는 중입니다.</p>
@@ -201,7 +210,10 @@ export function ChunksView({
             <Card
               title="근거 문단"
               description="단어로 찾기"
-              help="등록 순서로 보여 줍니다. ‘몇 번째’는 현재 표시된 목록의 순서이며 원문의 문단 번호가 아닙니다."
+              help={[
+                "근거 문단은 등록 순서로 보여요.",
+                "‘몇 번째’는 목록 순서이며 원문의 문단 번호와 달라요.",
+              ]}
             >
               <form
                 className="flex flex-wrap gap-2"
@@ -292,7 +304,10 @@ export function ChunksView({
         <>
           <Card
             title="질문 기록"
-            help="질문을 누르면 답할 때 참고한 내용을 확인할 수 있습니다. 직원 이름과 계정은 표시하지 않습니다."
+            help={[
+              "질문을 누르면 답할 때 참고한 내용을 확인해요.",
+              "직원 이름과 계정은 표시하지 않아요.",
+            ]}
           >
             <Button
               variant="secondary"

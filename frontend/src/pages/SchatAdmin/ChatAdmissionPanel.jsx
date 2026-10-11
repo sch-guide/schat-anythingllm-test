@@ -58,7 +58,11 @@ export default function ChatAdmissionPanel({ onState, showDaily = true }) {
   }
   return (
     <section className="rounded-xl border border-theme-sidebar-border p-4 text-theme-text-primary">
-      <h2 className="font-bold mb-2">동시 답변 수 <Help>로그인 인원이 아닌 답변 처리 수입니다. 한 사람은 한 번에 한 질문만 처리하거나 기다릴 수 있습니다. 대기는 최대 15초, 처리는 최대 80초입니다. 기본값은 4건입니다.</Help></h2>
+      <Help label="동시 답변 수 도움말" heading={<h2 className="font-bold mb-2">동시 답변 수</h2>}>{[
+        "로그인 인원과 별개로, 동시에 처리하는 답변 수를 정해요. 기본값은 4건이에요.",
+        "한 사람은 한 번에 질문 하나만 처리하거나 기다릴 수 있어요.",
+        "대기는 최대 15초, 답변 처리는 최대 80초예요.",
+      ]}</Help>
       <p className="text-sm mb-3">
         {state
           ? `현재 답변 중 ${state.active}건 / 대기 중 ${state.waiting}건 (최대 10건)`

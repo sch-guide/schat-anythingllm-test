@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { API_BASE } from "@/utils/constants";
 import { baseHeaders } from "@/utils/request";
-import { Card, Field, Help, Button, inputClass } from "./ui";
+import { Field, Button, inputClass } from "./ui";
+import { LegacyCard as Card, LegacyHelp as Help } from "./LegacyHelp";
 import {
   BUDGET_NOTICE,
   useGeminiAvailability,
