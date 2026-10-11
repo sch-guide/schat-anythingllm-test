@@ -24,22 +24,38 @@ export default function ChecklistPopup() {
     resetCheckedItems,
     leftover,
     dismissLeftover,
-    patientInfo, otherMemo, setMemoField, flush, disabled, error, reload, remaining,
-  } = useChecklistPersonalState(checklistId);
+    patientInfo,
+    otherMemo,
+    setMemoField,
+    flush,
+    disabled,
+    error,
+    reload,
+    remaining,
+    localOnly,
+    savedChecklist,
+    rememberChecklist,
+  } = useChecklistPersonalState(checklistId, true, true);
   const [expandedSections, setExpandedSections] = useState({});
 
   useEffect(() => {
+    if (localOnly) {
+      setChecklist(savedChecklist || null);
+      setStatus(savedChecklist ? "ready" : "unavailable");
+      return;
+    }
     let active = true;
     Checklist.list(slug).then((items) => {
       if (!active) return;
       const found = items.find((item) => item.id === checklistId) || null;
       setChecklist(found);
+      if (found) rememberChecklist(found);
       setStatus(found ? "ready" : "unavailable");
     });
     return () => {
       active = false;
     };
-  }, [slug, checklistId]);
+  }, [slug, checklistId, localOnly]);
 
   useEffect(() => {
     document.title = checklist
@@ -55,6 +71,11 @@ export default function ChecklistPopup() {
       {status === "ready" ? (
         <>
           <header className="shrink-0 border-b border-zinc-700 px-4 py-3 light:border-slate-200">
+            {localOnly && (
+              <p className="m-0 mb-1 text-xs text-zinc-400 light:text-slate-500">
+                로그아웃됨 · 이 PC에만 저장
+              </p>
+            )}
             <div className="flex items-center gap-2">
               <h1 className="m-0 min-w-0 flex-1 text-base font-semibold text-zinc-50 light:text-slate-900">
                 {checklist.title} 체크리스트
@@ -76,8 +97,15 @@ export default function ChecklistPopup() {
               />
             </div>
           )}
-          <ChecklistPersonalStatus error={error} reload={reload} remaining={remaining} />
-          <fieldset disabled={disabled} className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto border-0 px-3 py-4">
+          <ChecklistPersonalStatus
+            error={error}
+            reload={reload}
+            remaining={remaining}
+          />
+          <fieldset
+            disabled={disabled}
+            className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto border-0 px-3 py-4"
+          >
             <ChecklistMemo
               id="patient"
               title="환자정보"

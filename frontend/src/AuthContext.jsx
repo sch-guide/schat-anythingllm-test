@@ -8,6 +8,7 @@ import {
 import System from "./models/system";
 import { useNavigate } from "react-router-dom";
 import { safeJsonParse } from "@/utils/request";
+import { hasSavedPopup } from "@/utils/checklistPopupSession";
 
 export const AuthContext = createContext(null);
 export function AuthProvider(props) {
@@ -58,7 +59,9 @@ export function AuthProvider(props) {
         localStorage.removeItem(AUTH_TIMESTAMP);
         localStorage.removeItem(USER_PROMPT_INPUT_MAP);
         setStore({ user: null, authToken: null });
-        navigate("/login");
+        window.dispatchEvent(new Event("schat-personal-logout"));
+        if (!hasSavedPopup(window.location.pathname, localStorage))
+          navigate("/login");
         return;
       }
 

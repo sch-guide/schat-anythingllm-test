@@ -4,6 +4,11 @@ import useUser from "@/hooks/useUser";
 import { API_BASE, AUTH_TOKEN } from "@/utils/constants";
 import { baseHeaders } from "@/utils/request";
 import {
+  createPopupSession,
+  popupStorageKey,
+  readPopupSnapshot,
+} from "@/utils/checklistPopupSession";
+import {
   createPersonalSession,
   clearLegacyChecklistCopies,
 } from "@/utils/checklistPersonalSession";
@@ -16,22 +21,36 @@ const blank = () => ({
   error: null,
   expiresAt: null,
 });
-export default function useChecklistPersonalState(checklistId, isOpen = true) {
+export default function useChecklistPersonalState(
+  checklistId,
+  isOpen = true,
+  popup = false
+) {
   const { slug } = useParams();
   const { user } = useUser();
-  const [state, setState] = useState(blank);
+  const identity = `${popup ? "popup" : user?.id}:${slug}:${checklistId}`;
+  const [state, setState] = useState(() =>
+    popup
+      ? readPopupSnapshot(
+          window.localStorage,
+          popupStorageKey(slug, checklistId),
+          window.localStorage.getItem(AUTH_TOKEN)
+            ? String(user?.id || "")
+            : null
+        ) || blank()
+      : blank()
+  );
   const [leftover, setLeftover] = useState(null);
   const sessionRef = useRef(null);
   const timer = useRef(null);
-  const identity = `${user?.id}:${slug}:${checklistId}`;
-  const [loadedIdentity, setLoadedIdentity] = useState(null);
+  const [loadedIdentity, setLoadedIdentity] = useState(identity);
   const visible = loadedIdentity === identity ? state : blank();
   useEffect(() => {
     clearLegacyChecklistCopies(window.localStorage);
-    setState(blank());
+    if (!popup) setState(blank());
     setLoadedIdentity(identity);
     setLeftover(null);
-    if (!user?.id || !slug || !checklistId || !isOpen) return;
+    if ((!popup && !user?.id) || !slug || !checklistId || !isOpen) return;
     const token = window.localStorage.getItem(AUTH_TOKEN);
     const controller = new AbortController();
     const url = `${API_BASE}/workspace/${encodeURIComponent(slug)}/checklists/${encodeURIComponent(checklistId)}/personal-state`;
@@ -51,30 +70,38 @@ export default function useChecklistPersonalState(checklistId, isOpen = true) {
       if (!res.ok) throw Object.assign(Error(), { code: result.code });
       return result.state;
     };
-    const session = createPersonalSession(
-      { read: () => request("GET"), write: (b) => request("PUT", b) },
-      (next) => {
-        if (!alive) return;
-        setState(next);
-        if (first && next.ready) {
-          first = false;
-          if (Object.values(next.checks).some(Boolean))
-            setLeftover({ updatedAt: next.updatedAt });
-        }
+    const api = { read: () => request("GET"), write: (b) => request("PUT", b) };
+    const notify = (next) => {
+      if (!alive) return;
+      setState(next);
+      if (first && next.ready) {
+        first = false;
+        if (Object.values(next.checks).some(Boolean))
+          setLeftover({ updatedAt: next.updatedAt });
       }
-    );
+    };
+    const session = popup
+      ? createPopupSession({
+          api,
+          notify,
+          storage: window.localStorage,
+          key: popupStorageKey(slug, checklistId),
+          owner: token ? String(user?.id || "") : null,
+        })
+      : createPersonalSession(api, notify);
     sessionRef.current = session;
     void session.load();
-    const checkAuth = () => {
-      if (window.localStorage.getItem(AUTH_TOKEN) !== token) {
+    const checkAuth = (event) => {
+      if (window.localStorage.getItem(AUTH_TOKEN) !== token ||
+          (event?.key === AUTH_TOKEN && event.newValue !== token)) {
         controller.abort();
-        session.dispose();
+        popup ? session.detach() : session.dispose();
         setLeftover(null);
       }
     };
     const logout = () => {
       controller.abort();
-      session.dispose();
+      popup ? session.detach() : session.dispose();
       setLeftover(null);
     };
     const beforeUnload = (event) => {
@@ -148,5 +175,8 @@ export default function useChecklistPersonalState(checklistId, isOpen = true) {
     remaining: visible.expiresAt
       ? `${Math.max(1, Math.ceil((visible.expiresAt - Date.now()) / 3600000))}시간 후 삭제`
       : null,
+    localOnly: !!visible.localOnly,
+    savedChecklist: visible.checklist,
+    rememberChecklist: (value) => sessionRef.current?.setChecklist?.(value),
   };
 }
