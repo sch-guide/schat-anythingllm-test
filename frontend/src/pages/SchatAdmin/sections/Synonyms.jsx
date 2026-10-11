@@ -36,6 +36,14 @@ export function splitTerms(value = "") {
 function Sources({ group }) {
   const [source, setSource] = useState(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [hintPosition, setHintPosition] = useState({ left: 12, top: 12 });
+  function placeHint(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setHintPosition({
+      left: Math.max(12, Math.min(rect.left, window.innerWidth - 332)),
+      top: Math.min(rect.bottom + 6, window.innerHeight - 160),
+    });
+  }
   const sources = groupSources(group);
   const proposals = [
     group.suggestion,
@@ -49,6 +57,8 @@ function Sources({ group }) {
               <button
                 type="button"
                 className="synonym-source-link"
+                onMouseEnter={placeHint}
+                onFocus={placeHint}
                 onClick={() => {
                   setUnavailable(false);
                   setSource(item);
@@ -57,7 +67,7 @@ function Sources({ group }) {
               >
                 원문 ↗
               </button>
-              <span className="synonym-source-tooltip" role="tooltip">
+              <span className="synonym-source-tooltip" role="tooltip" style={hintPosition}>
                 {describeSources([item])}
                 {proposals
                   .map((proposal) => proposal.reason)

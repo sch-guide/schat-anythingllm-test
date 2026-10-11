@@ -193,6 +193,9 @@
   display: inline-block;
 }
 .synonym-source-tooltip {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
   display: none;
   background: #20262b;
   color: #fff;
@@ -202,6 +205,10 @@
   font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+.synonym-source-tooltip--open {
+  position: static;
+  margin-bottom: 12px;
 }
 .synonym-source-tooltip > span {
   display: block;
