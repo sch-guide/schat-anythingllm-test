@@ -11,6 +11,7 @@
     "build": "vite build && node scripts/postbuild.js",
     "lint:check": "eslint src",
     "lint": "eslint --fix src",
+    "test:admin-help:browser": "node --test src/pages/SchatAdmin/inlineHelp.browser.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
