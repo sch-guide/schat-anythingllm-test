@@ -83,12 +83,11 @@ function validateSynonymGroup(input = {}) {
     if (!term) continue;
     if (term.length > 40) throw new Error("단어는 40자 이하로 입력해 주세요.");
     const key = termKey(term);
-    if (seen.has(key)) continue;
+    if (seen.has(key)) throw new Error("같은 단어를 두 번 넣을 수 없어요.");
     seen.add(key);
     terms.push(term);
   }
-  if (terms.length < 2)
-    throw new Error("같은 뜻의 단어를 2개 이상 입력해 주세요.");
+  if (terms.length < 2) throw new Error("단어를 2개 이상 넣어 주세요.");
   if (terms.length > 20)
     throw new Error("한 묶음에는 20개까지 넣을 수 있습니다.");
   const actions = new Set(terms.flatMap((term) => [...actionOf(term)]));
@@ -129,6 +128,56 @@ function toPublicGroup(row = {}) {
 
 let activeCache = null;
 let version = 0;
+let mutationQueue = Promise.resolve();
+
+// SCHAT의 단일 서버 안에서 자동 생성과 관리자 저장을 같은 순서로 처리한다.
+function serialized(task) {
+  const run = mutationQueue.then(task, task);
+  mutationQueue = run.catch(() => null);
+  return run;
+}
+
+async function validateStoredGroup(input, prisma, existing = null) {
+  const checked = validateSynonymGroup(input);
+  const oldKeys = new Set(
+    existing ? parseTerms(existing.terms).map(termKey) : []
+  );
+  const introduced = checked.terms.filter(
+    (term) => !oldKeys.has(termKey(term))
+  );
+  if (introduced.length) {
+    const groups = await prisma.schat_synonym_groups.findMany({
+      orderBy: [{ id: "asc" }],
+    });
+    const rejectedIds = new Set();
+    if (
+      groups.some((group) => group.source === "auto" && group.status === "off")
+    ) {
+      const rejected = await prisma.schat_synonym_suggestions.findMany({
+        where: { type: "group", status: "dismissed" },
+      });
+      for (const row of rejected) rejectedIds.add(row.group_id);
+    }
+    for (const other of groups) {
+      if (other.id === existing?.id) continue;
+      // 거절 이력만 남은 새 AI 묶음은 사람이 다시 직접 등록할 수 있다.
+      if (
+        other.source === "auto" &&
+        other.status === "off" &&
+        rejectedIds.has(other.id)
+      )
+        continue;
+      const terms = parseTerms(other.terms);
+      if (
+        introduced.some((term) =>
+          terms.some((value) => termKey(value) === termKey(term))
+        )
+      )
+        throw new Error(`${terms[0] || "다른"} 묶음에 이미 있어요.`);
+    }
+  }
+  return checked;
+}
 
 function invalidate() {
   activeCache = null;
@@ -177,52 +226,78 @@ async function listGroups(prisma = prismaClient()) {
 }
 
 async function createGroup(input, prisma = prismaClient()) {
-  const group = validateSynonymGroup(input);
-  const row = await prisma.schat_synonym_groups.create({
-    data: {
-      terms: JSON.stringify(group.terms),
-      kind: group.kind,
-      status: group.status,
-      source: "admin",
-      note: group.note,
-    },
-  });
+  const row = await serialized(() =>
+    prisma.$transaction(async (tx) => {
+      const group = await validateStoredGroup(input, tx);
+      return tx.schat_synonym_groups.create({
+        data: {
+          terms: JSON.stringify(group.terms),
+          kind: group.kind,
+          status: group.status,
+          source: "admin",
+          note: group.note,
+        },
+      });
+    })
+  );
   invalidate();
   return toPublicGroup(row);
 }
 
 async function updateGroup(id, input, prisma = prismaClient()) {
-  const existing = await prisma.schat_synonym_groups.findUnique({
-    where: { id: Number(id) },
-  });
-  if (!existing) return null;
-  const group = validateSynonymGroup({
-    terms: input.terms ?? parseTerms(existing.terms),
-    kind: input.kind ?? existing.kind,
-    status: input.status ?? existing.status,
-    note: input.note ?? existing.note,
-  });
-  const row = await prisma.schat_synonym_groups.update({
-    where: { id: existing.id },
-    data: {
-      terms: JSON.stringify(group.terms),
-      kind: group.kind,
-      status: group.status,
-      note: group.note,
-      lastUpdatedAt: new Date(),
-    },
-  });
+  const row = await serialized(() =>
+    prisma.$transaction(async (tx) => {
+      const existing = await tx.schat_synonym_groups.findUnique({
+        where: { id: Number(id) },
+      });
+      if (!existing) return null;
+      const group = await validateStoredGroup(
+        {
+          terms: input.terms ?? parseTerms(existing.terms),
+          kind: input.kind ?? existing.kind,
+          status: input.status ?? existing.status,
+          note: input.note ?? existing.note,
+        },
+        tx,
+        existing
+      );
+      const row = await tx.schat_synonym_groups.update({
+        where: { id: existing.id },
+        data: {
+          terms:
+            input.terms == null ? existing.terms : JSON.stringify(group.terms),
+          kind: group.kind,
+          status: group.status,
+          note: group.note,
+          lastUpdatedAt: new Date(),
+        },
+      });
+      if (existing.source === "auto" && group.status === "active")
+        await tx.schat_synonym_suggestions.updateMany({
+          where: { group_id: existing.id, type: "group", status: "pending" },
+          data: { status: "approved", lastUpdatedAt: new Date() },
+        });
+      return row;
+    })
+  );
+  if (!row) return null;
   invalidate();
   return toPublicGroup(row);
 }
 
 async function deleteGroup(id, prisma = prismaClient()) {
-  const existing = await prisma.schat_synonym_groups.findUnique({
-    where: { id: Number(id) },
-  });
-  if (!existing) return false;
-  await prisma.schat_synonym_groups.delete({ where: { id: existing.id } });
-  await require("./suggestions").closeSuggestionsOfGroup(existing.id, prisma);
+  const removed = await serialized(() =>
+    prisma.$transaction(async (tx) => {
+      const existing = await tx.schat_synonym_groups.findUnique({
+        where: { id: Number(id) },
+      });
+      if (!existing) return false;
+      await tx.schat_synonym_groups.delete({ where: { id: existing.id } });
+      await require("./suggestions").closeSuggestionsOfGroup(existing.id, tx);
+      return true;
+    })
+  );
+  if (!removed) return false;
   invalidate();
   return true;
 }
@@ -333,6 +408,9 @@ module.exports = {
   SYNONYM_STATUSES,
   actionOf,
   validateSynonymGroup,
+  validateStoredGroup,
+  serialized,
+  termKey,
   toPublicGroup,
   ensureDraftGroups,
   listGroups,

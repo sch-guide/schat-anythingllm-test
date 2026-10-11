@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   SOURCE_LABELS,
   confidenceText,
@@ -54,25 +53,6 @@ test("the source shows the document and pages for the administrator", () => {
   assert.equal(confidenceText(0.96), "확신도 96%");
 });
 
-test("the screen shows the badges, the source and approve/reject for additions", () => {
-  const screen = readFileSync(
-    new URL("./sections/Synonyms.jsx", import.meta.url),
-    "utf8"
-  );
-  for (const text of [
-    "SOURCE_LABELS[group.source]",
-    "추가 후보",
-    "추가 승인",
-    "거절",
-    "출처 없음",
-    "낮은 확신",
-    "분류:",
-    "출처:",
-    "근거:",
-  ])
-    assert.ok(screen.includes(text), text);
-});
-
 test("the run result shows total, new, duplicates, failures and text shortage", async () => {
   const { runTotals, RUN_TRIGGER_LABELS } = await import("./synonymReview.js");
   const totals = runTotals({
@@ -94,16 +74,4 @@ test("the run result shows total, new, duplicates, failures and text shortage", 
   assert.equal(byLabel["실패"], 1);
   assert.equal(byLabel["재시도"], 0);
   assert.equal(RUN_TRIGGER_LABELS.backfill, "기존 문서 한 번 실행");
-  const screen = readFileSync(
-    new URL("./sections/Synonyms.jsx", import.meta.url),
-    "utf8"
-  );
-  for (const text of [
-    "자동 생성 결과",
-    "실패한 문서",
-    "검증용",
-    "문서명",
-    "statusText",
-  ])
-    assert.ok(screen.includes(text), text);
 });

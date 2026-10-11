@@ -32,6 +32,11 @@ const SchatSynonyms = {
     request(`/suggestions/${encodeURIComponent(id)}/approve`, {
       method: "POST",
     }),
+  approveVisible: (ids) =>
+    request("/suggestions/bulk-approve", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
   runs: async () => {
     const result = await request("/runs");
     return result.ok ? result.runs || [] : [];

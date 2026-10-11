@@ -13,7 +13,13 @@
 //    검색과 체크리스트는 "active" 묶음만 읽으므로 승인 전에는 쓰이지 않는다.
 // 실패해도 문서 등록에는 영향이 없다(시스템 기록만 남김).
 // 저장하지 않는 것: 보낸 원문 줄, 프롬프트, Gemini 응답 원문, API 키.
-const { validateSynonymGroup, toPublicGroup, invalidate } = require("./index");
+const {
+  validateSynonymGroup,
+  validateStoredGroup,
+  serialized,
+  toPublicGroup,
+  invalidate,
+} = require("./index");
 
 const METHOD = "gemini-titles-v1";
 const MIN_CONFIDENCE = 0.5;
@@ -437,15 +443,6 @@ function toSuggestionRow(row = {}) {
     terms: parseJson(row.terms, []),
     sources: parseJson(row.sources, []),
   };
-}
-
-let queue = Promise.resolve();
-// One document at a time, Gemini calls included: documents registered
-// together never send many requests at once or create the same group twice.
-function serialized(task) {
-  const run = queue.then(task, task);
-  queue = run.catch(() => null);
-  return run;
 }
 
 // A verification run only adds rows tagged with its run id, so they can be
@@ -970,14 +967,34 @@ async function listRuns(prisma = prismaClient(), limit = 10) {
 
 // ---- administrator screen ---------------------------------------------------------
 
-async function liveDocumentIds(prisma) {
+async function liveDocumentIds(prisma, originalMetadata) {
   const rows = await prisma.workspace_documents.findMany({
-    select: { metadata: true },
+    select: { metadata: true, workspace: { select: { slug: true } } },
   });
-  const ids = new Set();
+  const ids = new Map();
   for (const row of rows) {
-    const id = parseJson(row.metadata, {})?.document_id;
-    if (id) ids.add(String(id));
+    const metadata = parseJson(row.metadata, {});
+    const id = metadata?.document_id;
+    if (!id) continue;
+    let reference = {};
+    try {
+      if (row.workspace?.slug) {
+        const original = originalMetadata(metadata);
+        if (
+          original.originalPdfAvailable &&
+          /^[A-Za-z0-9_-]{43}$/.test(original.pdfRef || "")
+        )
+          reference = {
+            workspaceSlug: row.workspace.slug,
+            pdfRef: original.pdfRef,
+            originalPdfAvailable: true,
+          };
+      }
+    } catch {
+      /* 원문이 없거나 지원하지 않는 문서는 근거 이름만 남긴다. */
+    }
+    if (!ids.has(String(id)) || reference.pdfRef)
+      ids.set(String(id), reference);
   }
   return ids;
 }
@@ -987,6 +1004,7 @@ function publicSuggestion(row, liveIds, testRuns = new Set()) {
     documentName: source.documentName || "",
     pages: source.pages || [],
     missing: !liveIds.has(String(source.documentId)),
+    ...(liveIds.get(String(source.documentId)) || {}),
   }));
   return {
     id: row.id,
@@ -1013,7 +1031,14 @@ function publicSuggestion(row, liveIds, testRuns = new Set()) {
  * Adds review information to the admin list: where an automatic group came
  * from, and the words waiting to be added to an existing group.
  */
-async function withSuggestions(groups = [], prisma = prismaClient()) {
+async function withSuggestions(
+  groups = [],
+  prisma = prismaClient(),
+  {
+    originalMetadata = (metadata) =>
+      require("../originalDocuments").publicOriginalPdfMetadata(metadata),
+  } = {}
+) {
   let rows = [];
   try {
     rows = (
@@ -1025,7 +1050,9 @@ async function withSuggestions(groups = [], prisma = prismaClient()) {
     return groups;
   }
   if (!rows.length) return groups;
-  const liveIds = await liveDocumentIds(prisma).catch(() => new Set());
+  const liveIds = await liveDocumentIds(prisma, originalMetadata).catch(
+    () => new Map()
+  );
   const testRuns = new Set(
     (
       await prisma.schat_synonym_suggestion_runs
@@ -1057,49 +1084,119 @@ async function findPendingAddition(id, prisma) {
   const row = await prisma.schat_synonym_suggestions.findUnique({
     where: { id: Number(id) },
   });
-  if (!row || row.type !== "addition" || row.status !== "pending") return null;
+  if (
+    !row ||
+    !["group", "addition"].includes(row.type) ||
+    row.status !== "pending"
+  )
+    return null;
   return toSuggestionRow(row);
 }
 
-/** The administrator accepts new words for an existing group. */
+/** 기존 자동 후보를 승인한다. 승인할 때 새 묶음은 만들지 않는다. */
 async function approveAddition(id, prisma = prismaClient()) {
-  const saved = await prisma.$transaction(async (tx) => {
-    const row = await findPendingAddition(id, tx);
-    if (!row) return null;
-    const group = await tx.schat_synonym_groups.findUnique({
-      where: { id: row.group_id },
-    });
-    if (!group)
-      throw new Error("추가할 묶음이 없습니다. 후보를 거절해 주세요.");
-    const checked = validateSynonymGroup({
-      ...group,
-      terms: [...parseJson(group.terms, []), ...row.terms],
-    });
-    const saved = await tx.schat_synonym_groups.update({
-      where: { id: group.id },
-      data: { terms: JSON.stringify(checked.terms), lastUpdatedAt: new Date() },
-    });
-    await tx.schat_synonym_suggestions.update({
-      where: { id: row.id },
-      data: { status: "approved", lastUpdatedAt: new Date() },
-    });
-    return toPublicGroup(saved);
-  });
+  const saved = await serialized(() =>
+    prisma.$transaction(async (tx) => {
+      const row = await findPendingAddition(id, tx);
+      if (!row) return null;
+      const group = await tx.schat_synonym_groups.findUnique({
+        where: { id: row.group_id },
+      });
+      if (!group)
+        throw new Error("추가할 묶음이 없습니다. 후보를 거절해 주세요.");
+      if (
+        row.type === "group" &&
+        (group.source !== "auto" || group.status !== "needs_review")
+      )
+        return null;
+      const oldTerms = parseJson(group.terms, []);
+      const terms = row.type === "group" ? oldTerms : [...oldTerms];
+      if (row.type === "addition")
+        for (const term of row.terms)
+          if (!terms.some((value) => termKey(value) === termKey(term)))
+            terms.push(term);
+      const checked = await validateStoredGroup(
+        {
+          ...group,
+          terms,
+          status: row.type === "group" ? "active" : group.status,
+        },
+        tx,
+        group
+      );
+      const saved = await tx.schat_synonym_groups.update({
+        where: { id: group.id },
+        data: {
+          terms: JSON.stringify(checked.terms),
+          status: checked.status,
+          lastUpdatedAt: new Date(),
+        },
+      });
+      await tx.schat_synonym_suggestions.update({
+        where: { id: row.id },
+        data: { status: "approved", lastUpdatedAt: new Date() },
+      });
+      return toPublicGroup(saved);
+    })
+  );
   if (saved) invalidate();
   return saved;
 }
 
 /** The administrator rejects the words; they are not suggested again. */
 async function dismissAddition(id, prisma = prismaClient()) {
-  return prisma.$transaction(async (tx) => {
-    const row = await findPendingAddition(id, tx);
-    if (!row) return false;
-    await tx.schat_synonym_suggestions.update({
-      where: { id: row.id },
-      data: { status: "dismissed", lastUpdatedAt: new Date() },
-    });
-    return true;
-  });
+  const dismissed = await serialized(() =>
+    prisma.$transaction(async (tx) => {
+      const row = await findPendingAddition(id, tx);
+      if (!row) return false;
+      if (row.type === "group") {
+        const group = await tx.schat_synonym_groups.findUnique({
+          where: { id: row.group_id },
+        });
+        if (
+          !group ||
+          group.source !== "auto" ||
+          group.status !== "needs_review"
+        )
+          return false;
+        await tx.schat_synonym_groups.update({
+          where: { id: group.id },
+          data: { status: "off", lastUpdatedAt: new Date() },
+        });
+      }
+      await tx.schat_synonym_suggestions.update({
+        where: { id: row.id },
+        data: { status: "dismissed", lastUpdatedAt: new Date() },
+      });
+      return true;
+    })
+  );
+  if (dismissed) invalidate();
+  return dismissed;
+}
+
+async function approveVisible(ids, prisma = prismaClient()) {
+  if (
+    !Array.isArray(ids) ||
+    ids.length > 1000 ||
+    ids.some((id) => !Number.isSafeInteger(id) || id <= 0)
+  )
+    throw new Error("넣을 제안을 다시 선택해 주세요.");
+  const result = { approved: [], skipped: [], failed: [] };
+  for (const id of new Set(ids)) {
+    try {
+      const saved = await approveAddition(id, prisma);
+      result[saved ? "approved" : "skipped"].push(id);
+    } catch (error) {
+      result.failed.push({
+        id,
+        error: /[가-힣]/.test(error.message || "")
+          ? error.message
+          : "제안을 넣지 못했어요.",
+      });
+    }
+  }
+  return result;
 }
 
 /** A deleted group's suggestions are kept as "dismissed" so they do not return. */
@@ -1134,6 +1231,7 @@ module.exports = {
   RETRY_DELAYS_MS,
   withSuggestions,
   approveAddition,
+  approveVisible,
   dismissAddition,
   closeSuggestionsOfGroup,
 };

@@ -45,6 +45,10 @@ function setup(role = "admin") {
     "../utils/middleware/validatedRequest": validated,
     "../utils/middleware/multiUserProtected": roles,
     "../utils/synonyms/suggestions": {
+      approveVisible: async (ids) => {
+        calls++;
+        return { approved: ids, failed: [], skipped: [] };
+      },
       listRuns: async () => {
         calls++;
         return [{ id: 7 }];
@@ -64,14 +68,19 @@ function setup(role = "admin") {
     "../models/documents",
     "../models/eventLogs",
     "../utils/helpers",
-    "../utils/http",
     "../utils/synonyms",
     "../utils/schatAdmin/usageStats",
     "../utils/documentChecklists/repository",
     "../utils/schatAdmin",
     "../utils/schatAdmin/storageCleanup",
+    "../utils/schatAdmin/originalReviewApi",
   ])
     deps[dependency] = {};
+  deps["../utils/http"] = { reqBody: (request) => request.body };
+  deps["../utils/schatAdmin/originalReviewApi"] = {
+    createOriginalReviewApi: () => ({ preview: async () => {} }),
+  };
+  deps["../utils/schatAdmin/aiSettings"] = { createAiSettingsApi: () => ({}) };
   const routes = {};
   const app = {};
   for (const method of ["get", "post", "put", "delete"]) {
@@ -108,9 +117,13 @@ function setup(role = "admin") {
       };
       for (const handler of routes[route]) {
         let next = false;
-        await handler({ header: () => token, params: { id } }, res, () => {
-          next = true;
-        });
+        await handler(
+          { header: () => token, params: { id }, body: { ids: [7] } },
+          res,
+          () => {
+            next = true;
+          }
+        );
         if (!next) break;
       }
       return res;
@@ -122,6 +135,7 @@ const routes = [
   "get /schat-admin/synonyms/runs",
   "post /schat-admin/synonyms/suggestions/:id/approve",
   "post /schat-admin/synonyms/suggestions/:id/dismiss",
+  "post /schat-admin/synonyms/suggestions/bulk-approve",
 ];
 test("employees and anonymous callers cannot read or change candidates", async () => {
   for (const role of ["admin", "default"]) {
@@ -142,7 +156,7 @@ test("admins receive results and unknown candidate IDs return 404", async () => 
     (await app.invoke(routes[0], "Bearer synthetic")).body.runs[0].id,
     7
   );
-  for (const route of routes.slice(1)) {
+  for (const route of routes.slice(1, 3)) {
     assert.equal(
       (await app.invoke(route, "Bearer synthetic")).body.success,
       true
@@ -152,4 +166,8 @@ test("admins receive results and unknown candidate IDs return 404", async () => 
       404
     );
   }
+  assert.deepEqual(
+    Array.from((await app.invoke(routes[3], "Bearer synthetic")).body.approved),
+    [7]
+  );
 });

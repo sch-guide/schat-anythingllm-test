@@ -13,6 +13,106 @@ export function hasPendingAdditions(group = {}) {
   return (group.pendingAdditions || []).length > 0;
 }
 
+export function isNewAiGroup(group = {}) {
+  return (
+    group.source === "auto" &&
+    group.status === "needs_review" &&
+    group.suggestion?.status === "pending"
+  );
+}
+
+function isRejectedAiGroup(group) {
+  return (
+    group.source === "auto" &&
+    group.status === "off" &&
+    group.suggestion?.status === "dismissed"
+  );
+}
+
+export function managementView(groups = [], query = "", aiOnly = false) {
+  const listed = groups.filter((group) => !isRejectedAiGroup(group));
+  const key = termKey(query);
+  const hasAi = (group) => isNewAiGroup(group) || hasPendingAdditions(group);
+  const shown = listed.filter(
+    (group) =>
+      (!aiOnly || hasAi(group)) &&
+      (!key ||
+        [
+          ...group.terms,
+          ...(group.pendingAdditions || []).flatMap((item) => item.terms),
+        ].some((term) => termKey(term).includes(key)))
+  );
+  return {
+    total: listed.length,
+    aiCount: listed.filter(hasAi).length,
+    newGroups: shown.filter(isNewAiGroup),
+    mainGroups: shown.filter((group) => !isNewAiGroup(group)),
+    proposalIds: [
+      ...new Set(
+        shown.flatMap((group) => [
+          ...(isNewAiGroup(group) ? [group.suggestion.id] : []),
+          ...(group.pendingAdditions || [])
+            .filter((item) => !item.status || item.status === "pending")
+            .map((item) => item.id),
+        ])
+      ),
+    ],
+  };
+}
+
+export function cleanTerm(value) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function termKey(value) {
+  return cleanTerm(value).toLowerCase().replace(/\s+/g, "");
+}
+
+export function validateTerms(raw, groups = [], original = null) {
+  const terms = raw.map(cleanTerm).filter(Boolean);
+  const keys = terms.map(termKey);
+  if (new Set(keys).size !== keys.length)
+    return "같은 단어를 두 번 넣을 수 없어요.";
+  if (terms.length < 2) return "단어를 2개 이상 넣어 주세요.";
+  if (terms.length > 20) return "한 묶음에는 20개까지 넣을 수 있습니다.";
+  if (terms.some((term) => term.length > 40))
+    return "단어는 40자 이하로 입력해 주세요.";
+  const text = terms.join(" ").toLowerCase();
+  if (
+    ["삽입", "거치", "설치", "insertion", "insert"].some((word) =>
+      text.includes(word)
+    ) &&
+    ["제거", "발거", "remove", "removal"].some((word) => text.includes(word))
+  )
+    return "삽입과 제거처럼 서로 다른 시술 동작은 한 묶음에 넣을 수 없습니다.";
+  const previous = new Set((original?.terms || []).map(termKey));
+  for (const group of groups) {
+    if (group.id === original?.id) continue;
+    if (isRejectedAiGroup(group)) continue;
+    if (
+      keys.some(
+        (key) =>
+          !previous.has(key) &&
+          group.terms.some((term) => termKey(term) === key)
+      )
+    )
+      return `${group.terms[0] || "다른"} 묶음에 이미 있어요.`;
+  }
+  return "";
+}
+
+export function canOpenSource(source = {}) {
+  return Boolean(
+    !source.missing &&
+      source.originalPdfAvailable &&
+      source.workspaceSlug &&
+      /^[A-Za-z0-9_-]{43}$/.test(source.pdfRef || "")
+  );
+}
+
 export function inFilter(group = {}, filter = "all") {
   if (filter === "all") return true;
   if (filter === "needs_review")

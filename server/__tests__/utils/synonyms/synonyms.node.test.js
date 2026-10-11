@@ -10,9 +10,13 @@ const catheter = { id: 1, terms: ["카테터", "cath", "catheter"] };
 const hd = { id: 2, terms: ["HD", "혈액투석", "hemodialysis"] };
 
 test("groups are validated; insertion and removal can never share a group", () => {
+  assert.throws(
+    () =>
+      Synonyms.validateSynonymGroup({ terms: "카테터, cath, catheter, CATH" }),
+    /같은 단어/
+  );
   assert.deepEqual(
-    Synonyms.validateSynonymGroup({ terms: "카테터, cath, catheter, cath" })
-      .terms,
+    Synonyms.validateSynonymGroup({ terms: " 카테터 , cath, catheter" }).terms,
     ["카테터", "cath", "catheter"]
   );
   assert.throws(
