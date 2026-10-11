@@ -28,6 +28,11 @@ export const SCHAT_ADMIN_SECTIONS = [
       "직원 개인계정(부서·사번·이름)을 추가·일괄등록하고 부서, 권한, 사용 상태와 비밀번호를 관리합니다.",
   },
   {
+    key: "chunks",
+    label: "검색 조각 조회",
+    description: "문서별 검색 조각과 질문에 저장된 답변 근거를 읽기 전용으로 확인합니다.",
+  },
+  {
     key: "reports",
     label: "문제 신고",
     description: "직원이 보낸 문제 신고를 처리하고 통계와 FAQ를 관리합니다.",

@@ -15,6 +15,7 @@ import { inputClass } from "./ui";
 import BrandSection from "./sections/Brand";
 import AnswerSection from "./sections/Answer";
 import AnswerCacheSection from "./sections/AnswerCache";
+import ChunksSection from "./sections/Chunks";
 import UsersSection from "./sections/Users";
 import ReportsSection from "./sections/Reports";
 import QuizSection from "./sections/Quiz";
@@ -32,6 +33,7 @@ const SECTIONS = {
   brand: BrandSection,
   answer: AnswerSection,
   "answer-cache": AnswerCacheSection,
+  chunks: ChunksSection,
   users: UsersSection,
   reports: ReportsSection,
   quiz: QuizSection,
@@ -46,6 +48,7 @@ const SECTIONS = {
 
 // Sections that change one workspace show a picker when there is more than one.
 const WORKSPACE_SECTIONS = [
+  "chunks",
   "brand",
   "answer",
   "answer-cache",
@@ -54,6 +57,7 @@ const WORKSPACE_SECTIONS = [
 ];
 // Table-heavy sections get more width so rows stay on one line.
 const WIDE_SECTIONS = [
+  "chunks",
   "answer-cache",
   "users",
   "reports",

@@ -93,6 +93,7 @@ schatAdminEndpoints(apiRouter);
 require("./endpoints/geminiAvailability").geminiAvailabilityEndpoints(apiRouter);
 require("./endpoints/chatAdmission").chatAdmissionEndpoints(apiRouter);
 require("./endpoints/answerCache").answerCacheEndpoints(apiRouter);
+require("./endpoints/chunkViewer").chunkViewerEndpoints(apiRouter);
 schatAccountEndpoints(apiRouter);
 schatQuizEndpoints(apiRouter);
 schatQuizGenerationEndpoints(apiRouter);

@@ -151,6 +151,7 @@ const SECTION_ICONS = {
   brand: PaintBrush,
   answer: ChatText,
   "answer-cache": Swap,
+  chunks: List,
   users: UsersThree,
   reports: Megaphone,
   quiz: Exam,
