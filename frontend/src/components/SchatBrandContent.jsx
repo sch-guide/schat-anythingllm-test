@@ -45,7 +45,12 @@ function NoticeText({ text }) {
   const viewport = useRef(null);
   const measure = useRef(null);
   const [size, setSize] = useState({ text: 0, box: 0 });
-  const [paused, setPaused] = useState(false);
+  // Paused while a mouse is over it or while it is pressed. Hover comes from
+  // a real mouse only: a finger tap also sends mouse-like events, which would
+  // otherwise leave it paused after the finger is lifted.
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  const paused = hovered || pressed;
   const [expanded, setExpanded] = useState(false);
   const reduced = usePrefersReducedMotion();
 
@@ -105,20 +110,19 @@ function NoticeText({ text }) {
     );
 
   const shift = size.text + NOTICE_SCROLL_GAP;
-  const stop = () => setPaused(true);
-  const go = () => setPaused(false);
   return (
     <div
       ref={viewport}
       className="relative min-w-0 flex-1 overflow-hidden"
       style={{ maskImage: EDGE_FADE, WebkitMaskImage: EDGE_FADE }}
-      onMouseEnter={stop}
-      onMouseLeave={go}
-      onPointerDown={stop}
-      onPointerUp={go}
-      onPointerCancel={go}
-      onTouchStart={stop}
-      onTouchEnd={go}
+      onPointerEnter={(e) => e.pointerType === "mouse" && setHovered(true)}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse") setHovered(false);
+        setPressed(false);
+      }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
     >
       {measuring}
       <div
