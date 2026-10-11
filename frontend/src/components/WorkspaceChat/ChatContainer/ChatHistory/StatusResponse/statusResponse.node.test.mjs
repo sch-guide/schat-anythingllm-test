@@ -92,11 +92,14 @@ async function renderStatus({ isThinking, phase = "search", stopped = null }) {
   return module.renderFixture();
 }
 
-test("active agent work shows the friendly step, the time and a stop button only", async () => {
+test("active agent work shows the friendly step and a spinning indicator, without seconds", async () => {
   const html = await renderStatus({ isThinking: true });
 
-  assert.match(html, /문서를 찾는 중… · 1초/);
-  assert.match(html, />멈추기</);
+  assert.match(html, /문서를 찾는 중…/);
+  assert.doesNotMatch(html, /[0-9]+초/);
+  assert.doesNotMatch(html, /멈추기|<button/);
+  assert.match(html, /animate-spin/);
+  assert.match(html, /aria-hidden="true"/);
   assert.doesNotMatch(html, /rag-memory|executing|private/);
   // The slow notice appears only after 20 seconds.
   assert.doesNotMatch(html, /오래 걸리고 있습니다/);

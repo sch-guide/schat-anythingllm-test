@@ -274,10 +274,6 @@ export default forwardRef(function (
               <div role="status" aria-live="polite" className="py-4 text-sm text-theme-text-primary">
                 SCHAT 답변 대기 중 · {queuePosition}번째입니다. 최대 15초 동안 기다립니다.
               </div>
-            ) : isWaitingForAnswer && admittedAt === null ? (
-              <div role="status" className="py-4 text-sm text-theme-text-primary">
-                답변 연결을 준비하고 있습니다.
-              </div>
             ) : <StatusResponse
               key={waitingTurn}
               isThinking={isWaitingForAnswer}

@@ -10,7 +10,7 @@ import {
 /**
  * Keeps internal agent/tool activity out of the employee-facing chat while
  * still showing which step SCHAT is on ("문서를 찾는 중…" …), a notice after
- * 20 seconds, a [멈추기] button, and an automatic stop after 70 seconds.
+ * 20 seconds, a spinning indicator, and an automatic stop after 70 seconds.
  */
 export default function StatusResponse({
   isThinking = false,
@@ -24,6 +24,8 @@ export default function StatusResponse({
   const [now, setNow] = useState(mountedAt);
   const stoppedRef = useRef(false);
   const since = startedAt || mountedAt;
+  // Counted only for the 20-second notice and the 70-second stop; the
+  // seconds themselves are not shown to staff.
   const elapsed = Math.max(1, Math.floor((now - since) / 1000) + 1);
 
   useEffect(() => {
@@ -52,21 +54,11 @@ export default function StatusResponse({
       data-schat-waiting={phase}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span>
-          {label} · {elapsed}초
-        </span>
-        {onStop && (
-          <button
-            type="button"
-            onClick={() => {
-              stoppedRef.current = true;
-              onStop("user");
-            }}
-            className="rounded-md border border-zinc-600 px-2 py-0.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-700 light:border-slate-300 light:text-slate-600 light:hover:bg-slate-100"
-          >
-            멈추기
-          </button>
-        )}
+        <span>{label}</span>
+        <span
+          aria-hidden="true"
+          className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+        />
       </div>
       {elapsed >= SLOW_NOTICE_SECONDS && (
         <p className="m-0 text-xs text-amber-400 light:text-amber-700">
