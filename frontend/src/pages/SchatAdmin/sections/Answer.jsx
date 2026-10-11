@@ -2,16 +2,7 @@ import { useEffect, useState } from "react";
 import System from "@/models/system";
 import Workspace from "@/models/workspace";
 import showToast from "@/utils/toast";
-import {
-  Badge,
-  Button,
-  Card,
-  Field,
-  InfoRow,
-  Loading,
-  Notice,
-  inputClass,
-} from "../ui";
+import { Badge, Button, Card, Field, Loading, Notice, inputClass } from "../ui";
 import { promptInheritance } from "../promptInheritance";
 
 export default function AnswerSection({ workspace, reload }) {
@@ -19,7 +10,6 @@ export default function AnswerSection({ workspace, reload }) {
     <div className="flex flex-col gap-y-5">
       <HistoryCount workspace={workspace} onSaved={reload} />
       <AnswerRules workspace={workspace} onSaved={reload} />
-      <Advanced workspace={workspace} onSaved={reload} />
     </div>
   );
 }
@@ -217,80 +207,5 @@ function AnswerRules({ workspace, onSaved }) {
         </div>
       )}
     </Card>
-  );
-}
-
-function parseTemperature(value) {
-  if (String(value).trim() === "") return null;
-  const next = Number(value);
-  return Number.isFinite(next) && next >= 0 && next <= 2 ? next : null;
-}
-
-export function Advanced({ workspace, onSaved }) {
-  const current = workspace?.openAiTemp ?? 0.7;
-  const [value, setValue] = useState(current);
-  const [saving, setSaving] = useState(false);
-  useEffect(() => setValue(current), [workspace?.slug, current]);
-  const next = parseTemperature(value);
-
-  async function save(e) {
-    e.preventDefault();
-    if (next === null)
-      return showToast("0에서 2 사이의 숫자를 입력해 주세요.", "error");
-    setSaving(true);
-    let updated;
-    try {
-      ({ workspace: updated } = await Workspace.update(workspace.slug, {
-        openAiTemp: next,
-      }));
-    } catch {
-      return showToast("저장하지 못했습니다.", "error");
-    } finally {
-      setSaving(false);
-    }
-    if (!updated) return showToast("저장하지 못했습니다.", "error");
-    showToast("답변 표현 다양성을 저장했습니다.", "success");
-    onSaved?.();
-  }
-
-  return (
-    <details className="schat-admin-card rounded-xl p-5 group">
-      <summary className="cursor-pointer text-base font-semibold text-theme-text-primary">
-        고급 설정
-      </summary>
-      {!workspace ? (
-        <Loading />
-      ) : (
-        <form onSubmit={save} className="flex flex-col gap-y-3 mt-4">
-          <InfoRow label="현재 적용 값(답변 표현 다양성)">{current}</InfoRow>
-          <Field
-            label="답변 표현 다양성"
-            htmlFor="schat-answer-temperature"
-            help="0에서 2 사이의 숫자를 입력합니다. AI가 표현을 고르는 방식에 영향을 줍니다. 값을 낮춰도 반드시 더 정확하거나 같은 답변이 되는 것은 아닙니다. 기존 값은 자동으로 바뀌지 않습니다."
-          >
-            <input
-              id="schat-answer-temperature"
-              type="number"
-              min={0}
-              max={2}
-              step="any"
-              className={`${inputClass} max-w-[160px]`}
-              value={value}
-              onWheel={(e) => e.currentTarget.blur()}
-              onChange={(e) => setValue(e.target.value)}
-            />
-          </Field>
-          <p className="text-xs text-theme-text-secondary">보통은 바꿀 필요 없어요 (권장 0.7~1.0)</p>
-          <div>
-            <Button
-              type="submit"
-              disabled={saving || next === null || next === Number(current)}
-            >
-              {saving ? "저장 중..." : "저장"}
-            </Button>
-          </div>
-        </form>
-      )}
-    </details>
   );
 }

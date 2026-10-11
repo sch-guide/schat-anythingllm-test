@@ -28,13 +28,11 @@ const NO_SYSTEM_PROMPT_MODELS = [
 function buildGeminiChatRequest({
   model,
   messages,
-  temperature,
   responseSchema = null,
 }) {
   return {
     model,
     messages,
-    temperature,
     ...(responseSchema && typeof responseSchema === "object"
       ? {
           response_format: {
@@ -415,7 +413,7 @@ class GeminiLLM {
 
   async getChatCompletion(
     messages = null,
-    { temperature = 0.7, responseSchema = null }
+    { responseSchema = null } = {}
   ) {
     const result = await LLMPerformanceMonitor.measureAsyncFunction(
       this.openai.chat.completions
@@ -423,7 +421,6 @@ class GeminiLLM {
           buildGeminiChatRequest({
             model: this.model,
             messages,
-            temperature,
             responseSchema,
           })
         )
@@ -458,13 +455,12 @@ class GeminiLLM {
     };
   }
 
-  async streamGetChatCompletion(messages = null, { temperature = 0.7 }) {
+  async streamGetChatCompletion(messages = null) {
     const measuredStreamRequest = await LLMPerformanceMonitor.measureStream({
       func: this.openai.chat.completions.create({
         model: this.model,
         stream: true,
         messages,
-        temperature: temperature,
         stream_options: {
           include_usage: true,
         },

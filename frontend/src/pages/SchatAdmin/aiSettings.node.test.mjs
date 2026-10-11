@@ -142,14 +142,14 @@ function form(tree) {
   return elements(tree).find((node) => node.type === "form");
 }
 
-test("답변 설정에는 모델 칸 없이 대화 참고·답변 규칙·고급 설정만 남는다", () => {
+test("답변 설정에는 대화 참고와 답변 규칙만 남는다", () => {
   const s = setup();
   const tree = s.renderAnswer();
   assert.deepEqual(
     elements(tree)
       .filter((node) => typeof node.type === "function")
       .map((node) => node.type.name),
-    ["HistoryCount", "AnswerRules", "Advanced"]
+    ["HistoryCount", "AnswerRules"]
   );
 });
 
