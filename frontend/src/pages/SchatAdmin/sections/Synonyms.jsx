@@ -25,7 +25,7 @@ export const SYNONYM_STATUS_LABELS = {
   active: { text: "사용 중", tone: "active" },
   off: { text: "사용 안 함", tone: "off" },
 };
-export const SYNONYM_KIND_LABELS = { procedure: "시술·기구", drug: "약물" };
+export const SYNONYM_KIND_LABELS = { drug: "약물", procedure: "용어" };
 export function splitTerms(value = "") {
   return String(value)
     .split(/[,=\n]/)

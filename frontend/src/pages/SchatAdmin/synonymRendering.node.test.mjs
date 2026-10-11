@@ -69,7 +69,7 @@ test("표는 회색 사각 단어칩과 상태를 표시하며 기존 사용 중
 });
 
 test("표의 기본 작업은 수정이고 다른 행 편집 중에는 비활성이다", () => {
-  assert.match(render(), /<td[^>]*>시술·기구/);
+  assert.match(render(), /<td[^>]*>용어/);
   assert.match(render(), />수정</);
   assert.doesNotMatch(render(), /role="switch"/);
   const locked = render({}, { editingElsewhere: true });

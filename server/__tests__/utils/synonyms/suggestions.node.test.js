@@ -292,7 +292,7 @@ test("1·2. a new document creates suggestions, all 검토 필요 and 자동 제
   const [row] = db.suggestions;
   assert.equal(row.type, "group");
   assert.equal(row.group_id, created[0].id);
-  assert.equal(row.category, "카테터·라인");
+  assert.equal(row.category, "용어");
   assert.equal(row.confidence, 0.95);
   assert.match(row.method, /^gemini-titles-v1:gemini-test$/);
   assert.deepEqual(JSON.parse(row.sources), [

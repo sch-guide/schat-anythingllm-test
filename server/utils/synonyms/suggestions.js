@@ -39,14 +39,7 @@ function serializeGeneration(task) {
   return run;
 }
 
-const CATEGORIES = Object.freeze([
-  "검사·시술",
-  "수술",
-  "의료기구",
-  "카테터·라인",
-  "약물",
-  "기타",
-]);
+const CATEGORIES = Object.freeze(["약물", "용어"]);
 
 const SUGGESTION_SCHEMA = {
   type: "object",
@@ -256,7 +249,7 @@ function validateCandidates(output, batch = { text: "", pages: [] }) {
     result.push({
       terms: checked.terms,
       kind: checked.kind,
-      category: CATEGORIES.includes(item?.category) ? item.category : "기타",
+      category: item?.category === "약물" ? "약물" : "용어",
       confidence: Math.min(1, Math.round(confidence * 100) / 100),
       reason: containsPrivateInfo(reason) ? "" : reason,
       pages: [
