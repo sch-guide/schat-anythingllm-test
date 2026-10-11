@@ -11,7 +11,6 @@ test("login screen uses the shared blue SCH logo on both sides and no welcome he
   const modal = src("../Modals/Password/index.jsx");
   assert.equal((modal.match(/<SchLogo /g) || []).length, 2);
   assert.match(modal, /순천향대학교 부속 천안병원/);
-  assert.match(modal, /<span>병원 실무지침 AI<\/span>/);
   assert.doesNotMatch(modal, /useLogo|loginLogo|>SCH</);
   for (const form of [
     "../Modals/Password/MultiUserAuth.jsx",

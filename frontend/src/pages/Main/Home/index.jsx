@@ -21,7 +21,7 @@ import paths from "@/utils/paths";
 import showToast from "@/utils/toast";
 import { safeJsonParse } from "@/utils/request";
 import QuickActions from "@/components/lib/QuickActions";
-import SuggestedMessages from "@/components/lib/SuggestedMessages";
+import { BrandAnnouncement, BrandWelcome, BrandExamples, useBrandPanelStyle } from "@/components/SchatBrandContent";
 import useUser from "@/hooks/useUser";
 import ChatSettingsMenu from "@/components/WorkspaceChat/ChatContainer/ChatSettingsMenu";
 import { ChatTooltips } from "@/components/WorkspaceChat/ChatContainer/ChatTooltips";
@@ -183,6 +183,7 @@ export default function Home() {
 }
 
 function HomeContent({ workspace, setWorkspace, threadSlug, setThreadSlug }) {
+  const brandPanelStyle = useBrandPanelStyle();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -294,13 +295,14 @@ function HomeContent({ workspace, setWorkspace, threadSlug, setThreadSlug }) {
         className="relative flex md:ml-[2px] md:mr-[16px] md:my-[16px] w-full h-full z-[2]"
       >
         <ChatSettingsMenu />
-        <div className="flex-1 min-w-0 transition-all duration-500 relative md:rounded-[16px] schat-chat-panel bg-zinc-900 light:bg-white w-full h-full overflow-hidden border-none light:border-solid light:border light:border-theme-modal-border">
+        <div style={brandPanelStyle} className="flex-1 min-w-0 transition-all duration-500 relative md:rounded-[16px] schat-chat-panel bg-zinc-900 light:bg-white w-full h-full overflow-hidden border-none light:border-solid light:border light:border-theme-modal-border">
+          <BrandAnnouncement />
           {isMobile && <SidebarMobileHeader />}
           <DnDFileUploaderWrapper>
             <div className="flex flex-col h-full w-full items-center justify-center">
               <div className="flex flex-col items-center w-full max-w-[750px]">
                 <h1 className="text-white text-xl md:text-2xl mb-11 text-center">
-                  {t("main-page.greeting")}
+                  <BrandWelcome />
                 </h1>
                 <PromptInput
                   workspace={workspace}
@@ -321,8 +323,8 @@ function HomeContent({ workspace, setWorkspace, threadSlug, setThreadSlug }) {
                   }
                 />
               </div>
-              <SuggestedMessages
-                suggestedMessages={workspace?.suggestedMessages}
+              <BrandExamples
+                fallback={workspace?.suggestedMessages}
                 sendCommand={sendCommand}
               />
             </div>
@@ -342,6 +344,7 @@ function NoWorkspacesAssigned() {
       style={{ height: isMobile ? "100%" : "calc(100% - 32px)" }}
       className="transition-all duration-500 relative md:ml-[2px] md:mr-[16px] md:my-[16px] md:rounded-[16px] schat-chat-panel bg-zinc-900 light:bg-white w-full h-full overflow-hidden"
     >
+      <BrandAnnouncement />
       <div className="flex flex-col h-full w-full items-center justify-center">
         <p className="text-white/60 text-sm text-center whitespace-pre-line">
           {t("home.notAssigned")}

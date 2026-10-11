@@ -30,10 +30,9 @@ import useChatContainerQuickScroll from "@/hooks/useChatContainerQuickScroll";
 import { PENDING_HOME_MESSAGE } from "@/utils/constants";
 import { clearPromptInputDraft } from "@/hooks/usePromptInputStorage";
 import { safeJsonParse } from "@/utils/request";
-import { useTranslation } from "react-i18next";
 import paths from "@/utils/paths";
 import QuickActions from "@/components/lib/QuickActions";
-import SuggestedMessages from "@/components/lib/SuggestedMessages";
+import { BrandAnnouncement, BrandWelcome, BrandExamples, useBrandPanelStyle } from "@/components/SchatBrandContent";
 import ChatSettingsMenu from "./ChatSettingsMenu";
 import { ChatSidebarProvider } from "./ChatSidebar";
 import SourcesSidebar from "./SourcesSidebar";
@@ -46,7 +45,7 @@ export default function ChatContainer({
   knownHistory = [],
 }) {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const brandPanelStyle = useBrandPanelStyle();
   const [loadingResponse, setLoadingResponse] = useState(false);
   const [chatHistory, setChatHistory] = useState(knownHistory);
   const [socketId, setSocketId] = useState(null);
@@ -485,13 +484,14 @@ export default function ChatContainer({
             workspace={workspace}
             threadSlug={activeThreadSlug}
           />
-          <div className="schat-chat-panel flex-1 min-w-0 relative md:rounded-[16px] bg-zinc-900 light:bg-white w-full h-full overflow-hidden border-none light:border-solid light:border light:border-theme-modal-border">
+          <div style={brandPanelStyle} className="schat-chat-panel flex-1 min-w-0 relative md:rounded-[16px] bg-zinc-900 light:bg-white w-full h-full overflow-hidden border-none light:border-solid light:border light:border-theme-modal-border">
+            <BrandAnnouncement />
             {isMobile && <SidebarMobileHeader />}
             <DnDFileUploaderWrapper>
               <div className="flex flex-col h-full w-full items-center justify-center">
                 <div className="flex flex-col items-center w-full max-w-[750px]">
                   <h1 className="text-white text-xl md:text-2xl mb-11 text-center">
-                    {t("main-page.greeting")}
+                    <BrandWelcome />
                   </h1>
                   <PromptInput
                     workspace={workspace}
@@ -516,8 +516,8 @@ export default function ChatContainer({
                     }
                   />
                 </div>
-                <SuggestedMessages
-                  suggestedMessages={workspace?.suggestedMessages}
+                <BrandExamples
+                  fallback={workspace?.suggestedMessages}
                   sendCommand={sendCommand}
                 />
               </div>
@@ -542,7 +542,8 @@ export default function ChatContainer({
           workspace={workspace}
           threadSlug={activeThreadSlug}
         />
-        <div className="schat-chat-panel flex-1 min-w-0 relative md:rounded-[16px] bg-zinc-900 light:bg-white text-white light:text-slate-900 h-full overflow-hidden border-none light:border-solid light:border light:border-theme-modal-border">
+        <div style={brandPanelStyle} className="schat-chat-panel flex-1 min-w-0 relative md:rounded-[16px] bg-zinc-900 light:bg-white text-white light:text-slate-900 h-full overflow-hidden border-none light:border-solid light:border light:border-theme-modal-border">
+          <BrandAnnouncement />
           {isMobile && <SidebarMobileHeader />}
           <DnDFileUploaderWrapper>
             <div className="flex flex-col h-full w-full pb-20 md:pb-0">

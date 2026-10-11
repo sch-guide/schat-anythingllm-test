@@ -8,8 +8,10 @@ import {
   AUTH_TIMESTAMP,
 } from "../../../utils/constants";
 import SchLogo from "@/components/SchLogo";
+import useSchatBrand from "@/hooks/useSchatBrand";
 
 export default function PasswordModal({ mode = "single" }) {
+  const { brand } = useSchatBrand();
   return (
     <div className="schat-login fixed inset-0 flex items-center justify-center overflow-auto">
       <main className="schat-login__shell">
@@ -20,7 +22,7 @@ export default function PasswordModal({ mode = "single" }) {
           </div>
           <div>
             <p className="schat-login__eyebrow">HOSPITAL KNOWLEDGE ASSISTANT</p>
-            <h1>병원 실무지침 AI</h1>
+            <h1>{brand.subtitle}</h1>
             <p className="schat-login__description">
               등록된 실무지침을 근거로 질문하고 출처와 함께 확인합니다.
             </p>
@@ -34,7 +36,7 @@ export default function PasswordModal({ mode = "single" }) {
         <section className="schat-login__form">
           <div className="schat-login__product">
             <SchLogo className="schat-login__product-mark" />
-            <span>병원 실무지침 AI</span>
+            <span>{brand.subtitle}</span>
           </div>
           {mode === "single" ? <SingleUserAuth /> : <MultiUserAuth />}
         </section>
