@@ -17,6 +17,8 @@ const STOP = new Set([
   "대한",
   "관련",
   "환자",
+  "이름",
+  "성명",
   "질문",
   "있나요",
 ]);
@@ -27,18 +29,13 @@ function safeExample(prompt) {
       .normalize("NFKC")
       .slice(0, 4000)
       // 호칭 뒤 문법을 열거하지 않고 이름+호칭 문맥 전체를 제거한다.
-      .replace(/(?<![가-힣])[가-힣]{2,4}\s*님[가-힣]*/gu, "[이름]")
-      // 일반 의료 용어+환자는 이름으로 가리지 않도록 성씨 문맥을 한정한다.
       .replace(
-        /(?<![가-힣])[김이박최정강조윤장임한오서신권황안송전홍유고문양손배백허남심노하곽성차주우구민진지엄채원천방공현함변염여][가-힣]{1,3}\s*환자(?:분)?[가-힣]*/gu,
+        /(?<![가-힣])[가-힣]{2,4}\s*(?:교수님?|선생님|간호사님?|주치의|과장님?|팀장님?|담당자|환자(?:분)?|님|씨)[가-힣]*/gu,
         "[이름]"
       )
+      // 성씨 목록에 없는 이름도 제외한다. 짧은 의료 표현의 보수적 누락은 허용한다.
       .replace(
-        /(?<![가-힣])((?:성명|이름)\s*[:：]?\s*)[가-힣]{2,4}/gu,
-        "$1[이름]"
-      )
-      .replace(
-        /(?<![가-힣])(환자\s*[:：]?\s*)[김이박최정강조윤장임한오서신권황안송전홍유고문양손배백허남심노하곽성차주우구민진지엄채원천방공현함변염여][가-힣]{1,3}/gu,
+        /(?<![가-힣])((?:성명|이름|환자)\s*[:：]?\s*)[가-힣]{2,4}/gu,
         "$1[이름]"
       )
       .replace(/\d{2,4}\s*(?:호실|호)(?![가-힣])/g, "[병실]")
@@ -136,6 +133,7 @@ function checkMatches(matches, expressions, snippets, dismissed = []) {
         pages: source.page ? [source.page] : [],
         source: {
           type: "staff_questions",
+          expression: expression.term,
           count: expression.count,
           example: expression.example,
           documentId: source.documentId,

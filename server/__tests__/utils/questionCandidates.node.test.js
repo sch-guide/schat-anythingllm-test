@@ -53,6 +53,13 @@ test("이름 뒤 님·환자분의 호칭 변형은 예시와 전송 표현에�
     "김민지 환자분은 산포도",
     "홍길동님이라고 산포도",
     "이영희 환자분께서는 산포도",
+    "도민지 환자분은 산포도",
+    "김민지씨 산포도",
+    "김민지 씨는 산포도",
+    "김민지 교수님께서는 산포도",
+    "환자 김민지 산포도",
+    "이름: 홍길동 산포도",
+    "성명 이영희 산포도",
   ]) {
     const result = api.collectExpressions(
       [1, 2].map((id) => ({ id, prompt, response: '{"sources":[]}' }))
@@ -63,15 +70,14 @@ test("이름 뒤 님·환자분의 호칭 변형은 예시와 전송 표현에�
     );
     assert.doesNotMatch(
       JSON.stringify(result),
-      /김민지|홍길동|이영희|님이요|환자분/
+      /김민지|홍길동|이영희|도민지|님이요|환자분/
     );
-    assert.doesNotMatch(api.safeExample(prompt), /김민지|홍길동|이영희/);
+    assert.doesNotMatch(api.safeExample(prompt), /김민지|홍길동|이영희|도민지/);
   }
   assert.equal(
     api.safeExample("산소포화도 환자는 유지"),
     "산소포화도 환자는 유지"
   );
-  assert.equal(api.safeExample("혈액투석 환자는 유지"), "혈액투석 환자는 유지");
 });
 
 test("AI가 입력 밖의 용어를 만들거나 이미 거절한 말을 다른 묶음으로 제안하면 버림", () => {

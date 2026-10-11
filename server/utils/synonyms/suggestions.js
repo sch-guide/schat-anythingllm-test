@@ -315,7 +315,10 @@ function addSource(sources = [], source) {
     ...item,
     pages: [...(item.pages || [])],
   }));
-  const found = list.find((item) => item.documentId === source.documentId && item.type === source.type);
+  const found = list.find((item) =>
+    item.documentId === source.documentId && item.type === source.type &&
+    (source.type !== "staff_questions" || termKey(item.expression) === termKey(source.expression))
+  );
   if (!found) {
     list.push({ ...source, pages: [...(source.pages || [])] });
     return { sources: list, changed: true };
@@ -407,7 +410,9 @@ function planSuggestions(
       });
       if (!fresh.length) {
         plan.duplicates += 1;
-        if (groupRow) touchSource(groupRow, candidate.pages);
+        // 추가 후보의 질문 증거로 기본 묶음의 다른 표현을 덮어쓰지 않는다.
+        if (groupRow && (source.type !== "staff_questions" || keys.every(key => own.has(key))))
+          touchSource(groupRow, candidate.pages);
         for (const row of additionRows)
           if (
             row.status === "pending" &&

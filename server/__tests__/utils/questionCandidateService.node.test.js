@@ -444,3 +444,117 @@ test("같은 문서라도 질문 출처가 문서 출처를 덮어쓰지 않고 
   assert.equal(sources[1].type, "staff_questions");
   assert.equal(sources[1].count, 5);
 });
+test("추가 후보의 반복 질문은 기본 묶음의 다른 표현 횟수와 예시를 덮어쓰지 않음", async (t) => {
+  const { sql, db } = fixture(t);
+  sql.exec(
+    `INSERT INTO schat_synonym_groups VALUES (1,'["vancomycin","vanc"]','active','draft','drug',NULL)`
+  );
+  const insert = sql.prepare(
+    "INSERT INTO schat_synonym_suggestions(type,group_id,terms,sources,status) VALUES (?,?,?,?,?)"
+  );
+  insert.run(
+    "group",
+    1,
+    '["vancomycin","vanc"]',
+    JSON.stringify([
+      {
+        type: "staff_questions",
+        count: 2,
+        example: "vanc original",
+        documentId: "fake",
+        pages: [1],
+      },
+    ]),
+    "pending"
+  );
+  insert.run(
+    "addition",
+    1,
+    '["vanco"]',
+    JSON.stringify([
+      {
+        type: "staff_questions",
+        count: 3,
+        example: "vanco original",
+        documentId: "fake",
+        pages: [1],
+      },
+    ]),
+    "pending"
+  );
+  await api.saveQuestionMatches(
+    db,
+    [
+      {
+        terms: ["vanco", "vancomycin"],
+        kind: "drug",
+        pages: [1],
+        source: {
+          type: "staff_questions",
+          count: 7,
+          example: "vanco repeated",
+          documentId: "fake",
+          pages: [1],
+        },
+      },
+    ],
+    8
+  );
+  const sources = sql
+    .prepare("SELECT sources FROM schat_synonym_suggestions ORDER BY id")
+    .all()
+    .map((row) => JSON.parse(row.sources));
+  assert.equal(sources[0][0].count, 2);
+  assert.equal(sources[0][0].example, "vanc original");
+  assert.equal(sources[1][0].count, 7);
+  assert.equal(sources[1][0].example, "vanco repeated");
+});
+test("같은 묶음과 문서의 서로 다른 질문 표현도 각자 횟수와 예시를 유지", async (t) => {
+  const { sql, db } = fixture(t);
+  sql.exec(
+    `INSERT INTO schat_synonym_groups VALUES (1,'["vancomycin","vanc","vanco"]','active','draft','drug',NULL)`
+  );
+  sql
+    .prepare(
+      "INSERT INTO schat_synonym_suggestions(type,group_id,terms,sources,status) VALUES (?,?,?,?,?)"
+    )
+    .run(
+      "group",
+      1,
+      '["vancomycin","vanc","vanco"]',
+      JSON.stringify([
+        {
+          type: "staff_questions",
+          expression: "vanc",
+          count: 2,
+          example: "vanc original",
+          documentId: "fake",
+          pages: [1],
+        },
+      ]),
+      "pending"
+    );
+  const candidate = {
+    terms: ["vanco", "vancomycin"],
+    kind: "drug",
+    pages: [1],
+    source: {
+      type: "staff_questions",
+      expression: "vanco",
+      count: 7,
+      example: "vanco repeated",
+      documentId: "fake",
+      pages: [1],
+    },
+  };
+  await api.saveQuestionMatches(db, [candidate], 8);
+  const sources = JSON.parse(
+    sql.prepare("SELECT sources FROM schat_synonym_suggestions").get().sources
+  );
+  assert.equal(sources.length, 2);
+  assert.equal(sources.find((source) => source.expression === "vanc").count, 2);
+  assert.equal(
+    sources.find((source) => source.expression === "vanco").count,
+    7
+  );
+});
