@@ -53,6 +53,7 @@ export default function MobileSourceScreen({
   const hasPdf = Boolean(source?.pdfRef && workspaceSlug);
   const [tab, setTab] = useState(hasPdf ? "pdf" : "text");
   const [pdfFailed, setPdfFailed] = useState(!hasPdf);
+  const [pdfDeleted, setPdfDeleted] = useState(false);
   const closedByHistory = useRef(false);
   const titleRef = useRef(null);
 
@@ -86,8 +87,9 @@ export default function MobileSourceScreen({
     if (window.history.state?.[HISTORY_FLAG]) window.history.back();
     else onClose();
   };
-  const markPdfFailed = useCallback(() => {
+  const markPdfFailed = useCallback((reason) => {
     setPdfFailed(true);
+    setPdfDeleted(reason === 'deleted');
     setTab("text");
   }, []);
 
@@ -189,7 +191,7 @@ export default function MobileSourceScreen({
       >
         {pdfFailed && hasPdf && (
           <p className="mb-3 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200 light:text-amber-800">
-            원본 PDF를 불러올 수 없어 텍스트 근거를 표시합니다.
+            {pdfDeleted ? '원본이 삭제되었습니다' : '원본 PDF를 불러올 수 없어 텍스트 근거를 표시합니다.'}
           </p>
         )}
         <div className="space-y-3 break-words text-[15px] leading-[1.75] text-zinc-100 light:text-slate-900">

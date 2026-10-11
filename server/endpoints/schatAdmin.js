@@ -30,6 +30,9 @@ const {
   publicReport,
   loadStorageCleanupInputs,
 } = require("../utils/schatAdmin/storageCleanup");
+const originalReviewApi=require('../utils/schatAdmin/originalReviewApi').createOriginalReviewApi({
+  loadReport:async()=>classifyStorage(await loadStorageCleanupInputs()),body:reqBody,
+});
 
 // Scanning every stored file takes ~20s on the Docker Desktop bind mount, so
 // the list view reuses a recent scan. The preview below always rescans.
@@ -263,6 +266,9 @@ function schatAdminEndpoints(app) {
     }
   );
 
+  app.post('/schat-admin/storage-cleanup/originals/preview',
+    [validatedRequest,flexUserRoleValid([ROLES.admin])],originalReviewApi.preview);
+
   // 연결 정보가 없는 원본 PDF 삭제: admin only, explicit confirmation. Each
   // file is judged again on a fresh scan; unused ones are deleted and every
   // other selection comes back with its own reason (no partial trust of the
@@ -271,7 +277,7 @@ function schatAdminEndpoints(app) {
     "/schat-admin/storage-cleanup/originals/delete",
     [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (request, response) => {
-      const { keys = [], confirm } = reqBody(request);
+      const { keys = [], confirm, previewToken } = reqBody(request);
       const userId = response.locals?.user?.id ?? null;
       if (!Array.isArray(keys) || keys.length === 0 || keys.length > 100)
         return response
@@ -287,7 +293,13 @@ function schatAdminEndpoints(app) {
           .json({ ok: false, message: "이미 정리 작업이 진행 중입니다." });
       cleanupRunning = true;
       try {
-        const result = await executeOriginalPdfCleanup(keys.map(String));
+        const {withOriginalCleanupLock}=require('../utils/schatAdmin/originalCleanupLock');
+        const result = await withOriginalCleanupLock(keys,()=>executeOriginalPdfCleanup(keys,{
+          verifyReview:report=>originalReviewApi.verify(response,{keys,previewToken},report),
+        }),{
+          loadReport:async()=>classifyStorage(await loadStorageCleanupInputs()),
+          guard:require('../utils/documentUpdates/guard').guard,
+        });
         storageReportCache = {
           at: Date.now(),
           body: publicReport(result.report),
@@ -305,15 +317,19 @@ function schatAdminEndpoints(app) {
         const { report: _report, ...rest } = result;
         response.status(200).json({
           ...rest,
-          message:
+          message: result.message || (
             result.changed.length > 0
               ? "삭제 후 확인에서 차이가 발견되었습니다. 관리자 확인이 필요합니다."
               : result.deleted > 0
-                ? `연결되지 않은 원본 PDF ${result.deleted}개를 삭제했습니다.`
-                : "삭제한 파일이 없습니다.",
+                ? `선택한 원본 PDF ${result.deleted}개를 삭제했습니다.`
+                : "삭제한 파일이 없습니다."),
         });
       } catch (e) {
-        console.error("[schat-admin] original pdf cleanup failed:", e.message);
+        if(['DOCUMENT_UPDATE_LOCKED','DOCUMENT_UPDATE_BUSY','ORIGINAL_PDF_BUSY'].includes(e.message))
+          return response.status(423).json({ok:false,message:'이 문서는 지금 업데이트 중입니다. 잠시 후 다시 시도해 주세요.'});
+        if(['ORIGINAL_SCOPE_UNKNOWN','DOCUMENT_UPDATE_INVALID_SCOPE'].includes(e.message))
+          return response.status(409).json({ok:false,message:'원본 문서 이름을 확인하지 못해 삭제하지 않았습니다.'});
+        console.error("[schat-admin] original pdf cleanup failed");
         response.status(500).json({
           ok: false,
           message: "삭제하지 못했습니다. 다시 확인해 주세요.",

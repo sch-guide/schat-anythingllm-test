@@ -61,9 +61,13 @@ const StorageFiles = {
   originalPdf: async function (workspaceSlug, pdfRef) {
     return await fetch(
       `${API_BASE}/workspace/${encodeURIComponent(workspaceSlug)}/original-pdf/${encodeURIComponent(pdfRef)}`,
-      { headers: baseHeaders() }
+      { headers: baseHeaders(), cache: 'no-store' }
     )
-      .then((res) => {
+      .then(async (res) => {
+        if (res.status === 410) {
+          const detail = await res.json().catch(() => null);
+          if(detail?.code === 'ORIGINAL_PDF_DELETED') return {deleted: true};
+        }
         if (!res.ok) throw new Error("Failed to fetch original PDF");
         return res.blob();
       })

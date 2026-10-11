@@ -73,7 +73,7 @@ export default function PdfPageViewer({
       .then(async (blob) => {
         if (!active) return;
         if (!blob || blob.type !== "application/pdf") {
-          onUnavailable?.();
+          onUnavailable?.(blob?.deleted ? 'deleted' : undefined);
           return;
         }
         const original = URL.createObjectURL(blob);

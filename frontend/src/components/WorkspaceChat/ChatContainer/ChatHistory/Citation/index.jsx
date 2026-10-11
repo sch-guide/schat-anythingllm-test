@@ -45,6 +45,7 @@ export function SourceEvidenceRow({
   const [isOpen, setIsOpen] = useState(initiallyOpen);
   const [isExpanded, setIsExpanded] = useState(initiallyExpanded);
   const [pdfUnavailable, setPdfUnavailable] = useState(!source?.pdfRef);
+  const [pdfDeleted, setPdfDeleted] = useState(false);
   // "텍스트 원문으로 보기" is a view choice, not a PDF failure: the reader can
   // switch back with "PDF 원문으로 보기".
   const [textMode, setTextMode] = useState(false);
@@ -65,10 +66,11 @@ export function SourceEvidenceRow({
     source?.pdfRef && workspaceSlug && !pdfUnavailable
   );
   const showPdf = pdfAvailable && !textMode;
-  const markPdfUnavailable = useCallback(() => setPdfUnavailable(true), []);
+  const markPdfUnavailable = useCallback((reason) => {setPdfUnavailable(true);setPdfDeleted(reason === 'deleted');}, []);
 
   useEffect(() => {
     setPdfUnavailable(!source?.pdfRef);
+    setPdfDeleted(false);
   }, [source?.pdfRef]);
 
   return (
@@ -131,6 +133,7 @@ export function SourceEvidenceRow({
             />
           ) : (
             <div className="mx-auto w-full max-w-[720px]">
+              {pdfDeleted && <p role="status" className="mb-3 text-xs text-zinc-400 light:text-slate-500">원본이 삭제되었습니다</p>}
               {!source?.pdfRef && (
                 <p role="status" className="mb-3 text-xs text-zinc-400 light:text-slate-500">
                   원문 보기는 PDF 문서만 지원합니다. 아래는 답변에 사용된 근거 텍스트입니다.

@@ -4,6 +4,19 @@ const path = require("node:path");
 
 const PDF_REF_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const PDF_HEADER = Buffer.from("%PDF-");
+const originalWrites = new Set();
+// SCHAT runs one HTTP server process. Reserve originals across asynchronous
+// upload/restore work as well as cleanup; no stale disk lock survives restart.
+async function withOriginalPdfLocks(storageKeys, operation, {storageRoot} = {}) {
+  const root = path.resolve(storageRoot || defaultStorageRoot());
+  const keys = [...new Set(storageKeys.map(key => `${root}:${key}`))];
+  if(keys.some(key => originalWrites.has(key))) {
+    const error=new Error('ORIGINAL_PDF_BUSY');error.code='ORIGINAL_PDF_BUSY';throw error;
+  }
+  keys.forEach(key=>originalWrites.add(key));
+  try {return await operation();}
+  finally {keys.forEach(key=>originalWrites.delete(key));}
+}
 
 function defaultStorageRoot() {
   if (process.env.SCHAT_ORIGINAL_DOCUMENTS_DIR)
@@ -70,6 +83,34 @@ function safeOriginalName(value = "document.pdf") {
   return /\.pdf$/i.test(base) ? base : "document.pdf";
 }
 
+// Written before removal: a failed removal is not reported as a deletion while
+// the PDF still exists. Receipts contain no document text or original filename.
+function markOriginalPdfDeletion(documentId, { storageRoot } = {}) {
+  if (typeof documentId !== 'string' || !documentId.trim()) throw new Error('ORIGINAL_ID_REQUIRED');
+  const root = storageRoot || defaultStorageRoot();
+  const pdfRef = pdfRefForDocumentId(documentId, {storageRoot: root});
+  const storageKey = path.basename(storagePaths(documentId.trim(), root).pdfPath, '.pdf');
+  const directory = path.join(root, '.deleted-refs');
+  fs.mkdirSync(directory, {recursive: true});
+  fs.writeFileSync(path.join(directory, `${pdfRef}.json`), JSON.stringify({storageKey}), {mode: 0o600});
+}
+
+function wasOriginalPdfDeleted(pdfRef, { storageRoot } = {}) {
+  if (!PDF_REF_PATTERN.test(String(pdfRef || ''))) return false;
+  const root = storageRoot || defaultStorageRoot();
+  try {
+    const receipt = JSON.parse(fs.readFileSync(path.join(root, '.deleted-refs', `${pdfRef}.json`), 'utf8'));
+    return /^[a-f0-9]{64}$/.test(receipt.storageKey) && !fs.existsSync(path.join(root, `${receipt.storageKey}.pdf`));
+  } catch { return false; }
+}
+
+function responseReferencesPdf(response, pdfRef) {
+  try {
+    const saved = typeof response === 'string' ? JSON.parse(response) : response;
+    return Array.isArray(saved?.sources) && saved.sources.some(source=>source?.pdfRef===pdfRef);
+  } catch {return false;}
+}
+
 function fileSha256(filePath) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash("sha256");
@@ -107,7 +148,13 @@ function originalPdfStatus(documentId, { storageRoot } = {}) {
   };
 }
 
-async function persistOriginalPdf({
+async function persistOriginalPdf(options) {
+  const id=String(options.documentId || '').trim();
+  const key=crypto.createHash('sha256').update(id).digest('hex');
+  return withOriginalPdfLocks([key],()=>persistOriginalPdfUnlocked(options),options);
+}
+
+async function persistOriginalPdfUnlocked({
   sourcePath,
   documentId,
   originalName,
@@ -197,10 +244,10 @@ async function removeOriginalPdf(documentId, { storageRoot } = {}) {
   if (typeof documentId !== "string" || !documentId.trim()) return;
   const root = storageRoot || defaultStorageRoot();
   const { pdfPath, metadataPath } = storagePaths(documentId.trim(), root);
-  await Promise.all([
+  await withOriginalPdfLocks([path.basename(pdfPath,'.pdf')],()=>Promise.all([
     fs.promises.rm(pdfPath, { force: true }),
     fs.promises.rm(metadataPath, { force: true }),
-  ]);
+  ]),{storageRoot:root});
 }
 
 function metadataOf(document = {}) {
@@ -288,6 +335,10 @@ function parsePdfByteRange(header, size) {
 
 module.exports = {
   PDF_REF_PATTERN,
+  withOriginalPdfLocks,
+  markOriginalPdfDeletion,
+  wasOriginalPdfDeleted,
+  responseReferencesPdf,
   defaultStorageRoot,
   pdfRefForDocumentId,
   originalPdfStatus,

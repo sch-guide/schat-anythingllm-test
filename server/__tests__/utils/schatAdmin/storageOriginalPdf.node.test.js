@@ -93,6 +93,42 @@ const originalGroup = (report, id) =>
     (g) => g.kind === "original" && g.originalKey === originalStorageKey(id)
   );
 
+test('an original appearing after lock selection is never deleted without its reservation',async()=>{
+ const fixture=setup();let scans=0;
+ try {
+  const key=originalGroup(classifyStorage(await fixture.loadInputs()),ORPHAN_1).key;
+  const loadInputs=async()=>{const input=await fixture.loadInputs();if(++scans===1)input.originals=input.originals.filter(item=>item.storageKey!==originalStorageKey(ORPHAN_1));return input;};
+  const result=await executeOriginalPdfCleanup([key],{root:fixture.root,loadInputs,verifyReview:()=>true});
+  assert.equal(result.deleted,0);assert.equal(result.refused,1);
+  assert.equal(fs.existsSync(path.join(fixture.originals,originalStorageKey(ORPHAN_1)+'.pdf')),true);
+ } finally {fs.rmSync(fixture.root,{recursive:true,force:true});}
+});
+
+test('explicitly reviewed historical original is removed with a deleted-source receipt, not its DB',async()=>{
+ const fixture=setup();
+ const {emptyOriginalReferences}=require('../../../utils/schatAdmin/originalReferenceReview');
+ const originals=require('../../../utils/originalDocuments');
+ const root=fixture.originals;
+ const ref=originals.pdfRefForDocumentId(CHAT_ONLY,{storageRoot:root});
+ let lockedScans=0,requireLock=false;
+ const loadInputs=async()=>{
+  if(requireLock && ++lockedScans>=2) await assert.rejects(
+    originals.withOriginalPdfLocks([originalStorageKey(CHAT_ONLY)],()=>assert.fail('restore entered'),{storageRoot:root}),/ORIGINAL_PDF_BUSY/);
+  const input=await fixture.loadInputs();
+  input.originalReferences=new Map([[originalStorageKey(CHAT_ONLY),{...emptyOriginalReferences(),counts:{...emptyOriginalReferences().counts,chats:1}}]]);
+  return input;
+ };
+ try {
+  const key=originalGroup(classifyStorage(await loadInputs()),CHAT_ONLY).key;
+  assert.equal((await executeOriginalPdfCleanup([key],{root:fixture.root,loadInputs})).deleted,0);
+  requireLock=true;
+  const result=await executeOriginalPdfCleanup([key],{root:fixture.root,loadInputs,verifyReview:()=>true});
+  assert.equal(result.deleted,1);
+  assert.equal(originals.wasOriginalPdfDeleted(ref,{storageRoot:root}),true);
+  assert.equal(fs.readFileSync(path.join(fixture.root,'anythingllm.db'),'utf8'),'db');
+ } finally {fs.rmSync(fixture.root,{recursive:true,force:true});}
+});
+
 test("only an original no document id points to is judged deletable", async () => {
   const { loadInputs } = setup();
   const report = classifyStorage(await loadInputs());
@@ -231,4 +267,13 @@ test("original PDF delete endpoint is admin only and needs confirmation", () => 
   assert.match(block, /cleanupRunning/);
   assert.match(block, /executeOriginalPdfCleanup/);
   assert.match(block, /schat_original_pdf_cleanup/);
+});
+
+test('a stale review refuses every selected original before any deletion', async()=>{
+  const {root,originals,loadInputs}=setup();
+  const report=classifyStorage(await loadInputs());
+  const key=originalGroup(report,ORPHAN_1).key;
+  const result=await executeOriginalPdfCleanup([key],{root,loadInputs,verifyReview:()=>false});
+  assert.equal(result.deleted,0);
+  assert.equal(fs.existsSync(path.join(originals,`${originalStorageKey(ORPHAN_1)}.pdf`)),true);
 });

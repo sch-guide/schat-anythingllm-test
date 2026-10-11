@@ -35,7 +35,7 @@ export function isOriginalPdf(group) {
 export function originalDeleteSummary(result = {}) {
   const deleted = Number(result.deleted || 0);
   const refused = Number(result.refused || 0);
-  const parts = [`연결되지 않은 원본 PDF ${deleted}개 삭제`];
+  const parts = [`선택한 원본 PDF ${deleted}개 삭제`];
   if (deleted > 0) parts.push(`확보 공간: ${formatBytes(result.freedBytes)}`);
   if (refused > 0) parts.push(`삭제하지 않음 ${refused}개`);
   return parts.join(" · ");
@@ -162,10 +162,7 @@ export default function StorageSection() {
       </div>
       {result && <DeleteResult result={result} />}
       <Notice>
-        이 화면은 자동으로 지우지 않습니다. 현재 사용 중인 문서·검색
-        데이터·체크리스트·원본 PDF는 선택할 수 없고, 이미지 설명 저장본(
-        {n(descriptionCache?.files)}개)은 같은 이미지를 다시 올릴 때 AI 설명을
-        다시 만들지 않도록 항상 유지합니다.
+        자동 삭제는 하지 않습니다. 옛 원본 PDF는 아래에서 연결된 자료를 확인한 뒤 별도로 삭제합니다.
       </Notice>
       {!showList ? (
         <div>
@@ -492,16 +489,19 @@ function Preview({ preview, rows, onDelete }) {
   );
 }
 
-function OriginalPdfCard({ groups, onDone }) {
+export function OriginalPdfCard({ groups, onDone }) {
   const [selected, setSelected] = useState([]);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [outcome, setOutcome] = useState(null);
+  const [preview,setPreview]=useState(null);
+  const [previewing,setPreviewing]=useState(false);
   const labelOf = (key) => groups.find((g) => g.key === key)?.label || "항목";
 
   async function remove() {
     setDeleting(true);
-    const result = await SchatAdmin.storageDeleteOriginals(selected);
+    if(!preview?.ok){setDeleting(false);return;}
+    const result = await SchatAdmin.storageDeleteOriginals(selected,preview.previewToken);
     setDeleting(false);
     setConfirming(false);
     setOutcome(result);
@@ -512,10 +512,20 @@ function OriginalPdfCard({ groups, onDone }) {
     onDone?.();
   }
 
+  async function review() {
+    setPreviewing(true);setPreview(null);setOutcome(null);
+    try {
+      const result=await SchatAdmin.storagePreviewOriginals(selected);
+      if(result?.ok){setPreview(result);setConfirming(true);}
+      else setOutcome(result||{message:'연결 정보를 확인하지 못했습니다.'});
+    } catch {setOutcome({message:'연결 정보를 확인하지 못했습니다.'});}
+    finally {setPreviewing(false);}
+  }
+
   return (
     <Card
-      title="연결 정보가 없는 원본 PDF"
-      description="작업 공간·검색 데이터·체크리스트·대화 출처·퀴즈 어디에서도 쓰지 않는 원본 PDF만 삭제할 수 있습니다. 조금이라도 연결이 남아 있으면 검토 필요로 둡니다."
+      title="아직 쓰이고 있을 수 있는 옛 원본 PDF"
+      help="선택하면 연결된 자료를 다시 확인합니다. 원본을 삭제하면 이전 대화·퀴즈에서 그 PDF를 열 수 없습니다."
     >
       {outcome && (
         <Notice tone={outcome.deleted > 0 ? "info" : "warning"}>
@@ -534,7 +544,7 @@ function OriginalPdfCard({ groups, onDone }) {
       )}
       <ul className="flex flex-col" data-testid="original-pdf-list">
         {groups.map((group) => {
-          const selectable = group.status === "unlinked";
+          const selectable = ['unlinked','review'].includes(group.status) && !!group.references;
           const status = STATUS_LABELS[group.status] || STATUS_LABELS.review;
           return (
             <li
@@ -545,15 +555,16 @@ function OriginalPdfCard({ groups, onDone }) {
                 type="checkbox"
                 aria-label={`${group.label} 선택`}
                 className="mt-1 h-4 w-4 accent-sky-600 disabled:opacity-40"
-                disabled={!selectable}
+                disabled={!selectable || previewing || deleting}
                 checked={selected.includes(group.key)}
-                onChange={(e) =>
+                onChange={(e) => {
+                  setPreview(null);setConfirming(false);
                   setSelected((prev) =>
                     e.target.checked
                       ? [...prev, group.key]
                       : prev.filter((k) => k !== group.key)
-                  )
-                }
+                  );
+                }}
               />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-theme-text-primary">
@@ -576,13 +587,13 @@ function OriginalPdfCard({ groups, onDone }) {
       <div>
         <Button
           variant="danger"
-          disabled={selected.length === 0 || deleting}
-          onClick={() => setConfirming(true)}
+          disabled={selected.length === 0 || deleting || previewing}
+          onClick={review}
         >
-          선택한 파일 삭제
+          {previewing?'확인 중…':'선택한 파일 확인'}
         </Button>
       </div>
-      {confirming && (
+      {confirming && preview?.ok && (
         <Modal
           isOpen
           onClose={() => !deleting && setConfirming(false)}
@@ -602,11 +613,11 @@ function OriginalPdfCard({ groups, onDone }) {
                   <li key={key}>{labelOf(key)}</li>
                 ))}
               </ul>
-              <p className="text-theme-text-secondary">
-                현재 작업 공간, 검색 데이터, 체크리스트, 원본 문서 연결에서
-                사용되지 않는 파일만 삭제됩니다. 삭제 직전에 서버가 파일마다
-                다시 확인합니다.
-              </p>
+              {preview.items.map(item=><div key={item.key} className="text-theme-text-primary">
+                <p className="font-medium">{labelOf(item.key)} 연결된 자료</p>
+                {Object.entries({chats:'대화',quizSets:'퀴즈 묶음',quizQuestions:'퀴즈 문항',quizRuns:'퀴즈 생성 기록',checklists:'체크리스트',workspaces:'등록 문서 연결',search:'검색 자료 연결',images:'이미지 폴더'}).map(([key,label])=><p key={key}>{label} {n(item.counts[key])}건</p>)}
+              </div>)}
+              <p className="text-theme-text-secondary">삭제하면 연결된 자료에서 이 원본 PDF를 열 수 없습니다.</p>
               <Notice tone="warning">삭제 후 복구할 수 없습니다.</Notice>
               <div className="flex justify-end gap-2">
                 <Button
@@ -617,7 +628,7 @@ function OriginalPdfCard({ groups, onDone }) {
                   취소
                 </Button>
                 <Button variant="danger" onClick={remove} disabled={deleting}>
-                  {deleting ? "삭제 중..." : "삭제"}
+                  {deleting ? "삭제 중..." : "그래도 삭제"}
                 </Button>
               </div>
             </div>

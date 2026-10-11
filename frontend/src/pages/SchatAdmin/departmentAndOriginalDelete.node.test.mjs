@@ -47,7 +47,7 @@ test("원본 PDF는 따로 모아 파일별 결과와 확보 공간을 보여 �
       refused: 0,
       freedBytes: 81 * 1024 ** 2,
     }),
-    "연결되지 않은 원본 PDF 3개 삭제 · 확보 공간: 약 81MB"
+    "선택한 원본 PDF 3개 삭제 · 확보 공간: 약 81MB"
   );
   assert.match(
     originalDeleteSummary({ deleted: 1, refused: 2, freedBytes: 2048 }),
@@ -61,8 +61,8 @@ test("원본 PDF는 따로 모아 파일별 결과와 확보 공간을 보여 �
     /선택한 원본 PDF \$\{selected\.length\}개를 삭제하시겠습니까\?/
   );
   assert.match(page, /삭제 후 복구할 수 없습니다/);
-  assert.match(page, /disabled=\{!selectable\}/);
-  assert.match(page, /SchatAdmin\.storageDeleteOriginals\(selected\)/);
+  assert.match(page, /disabled=\{!selectable \|\| previewing \|\| deleting\}/);
+  assert.match(page, /SchatAdmin\.storageDeleteOriginals\(selected,preview\.previewToken\)/);
 });
 
 test("시스템 기록에 부서 삭제와 원본 PDF 정리가 쉬운 말로 나온다", async () => {

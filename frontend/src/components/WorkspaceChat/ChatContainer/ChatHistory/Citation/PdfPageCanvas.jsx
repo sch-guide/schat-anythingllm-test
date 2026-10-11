@@ -48,7 +48,7 @@ export default function PdfPageCanvas({
     StorageFiles.originalPdf(workspaceSlug, pdfRef)
       .then(async (blob) => {
         if (!active) return;
-        if (!blob || blob.type !== "application/pdf") return onUnavailable?.();
+        if (!blob || blob.type !== "application/pdf") return onUnavailable?.(blob?.deleted ? 'deleted' : undefined);
         const data = new Uint8Array(await blob.arrayBuffer());
         if (!active) return;
         loadingTask = openEvidenceDocument(data);

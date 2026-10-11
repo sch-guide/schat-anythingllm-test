@@ -69,7 +69,10 @@ test("mobile citations open a full-screen PDF/텍스트 source view", () => {
     canvas,
     /aria-label=\{`\$\{documentName.*p\.\$\{pageNumber\}/
   );
-  assert.match(canvas, /isEvalSupported: false/);
+  assert.match(canvas, /openEvidenceDocument\(data\)/);
+  assert.match(src('../../utils/pdfEvidenceDocument.js'), /isEvalSupported: false/);
+  assert.match(screen, /원본이 삭제되었습니다/);
+  assert.match(row, /원본이 삭제되었습니다/);
   assert.match(screen, /lazy\(\(\) => import\("\.\/PdfPageCanvas"\)\)/);
 });
 

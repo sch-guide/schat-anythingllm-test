@@ -7,6 +7,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const {collectOriginalReferences,emptyOriginalReferences} = require('./originalReferenceReview');
 
 const STATUS = {
   IN_USE: "in_use", // 현재 사용 중 - protected
@@ -106,6 +107,7 @@ function classifyStorage(input) {
     descriptionCache = { files: 0, bytes: 0 },
     vectorCounts = { body: 0, image: 0 },
     knownDocumentIds = null,
+    originalReferences = null,
   } = input;
   // Original PDFs are stored as sha256(document_id). Every document id still
   // mentioned anywhere (pages, workspace, search data, checklists, images,
@@ -256,8 +258,13 @@ function classifyStorage(input) {
     const unused = scanned && !referenced;
     groups.push({
       key: groupKey("original", original.storageKey),
-      documentId: null,
+      documentId: knownDocumentIds instanceof Set
+        ? [...knownDocumentIds].find(id=>originalStorageKey(id)===original.storageKey) || null : null,
       originalKey: original.storageKey, // internal only
+      originalName: original.originalName || null, // replacement lock scope, internal only
+      references: scanned && originalReferences instanceof Map
+        ? originalReferences.get(original.storageKey) || (unused ? emptyOriginalReferences() : null)
+        : null,
       kind: "original",
       title: "연결 정보가 없는 원본 PDF",
       uploadedAt: original.modifiedAt || null,
@@ -650,9 +657,27 @@ async function executeStorageCleanup(
  */
 async function executeOriginalPdfCleanup(
   keys = [],
-  { loadInputs = loadStorageCleanupInputs, root = storageRoot() } = {}
+  { loadInputs = loadStorageCleanupInputs, root = storageRoot(), verifyReview } = {}
+) {
+  // The initial scan selects lock keys only. Never authorize from this scan:
+  // a restore may finish while its asynchronous database reads are running.
+  const initial = classifyStorage(await loadInputs());
+  const selected = new Set(keys);
+  const storageKeys = initial.groups.filter(group=>selected.has(group.key) && group.kind==='original').map(group=>group.originalKey);
+  return require('../originalDocuments').withOriginalPdfLocks(storageKeys,
+    ()=>executeOriginalPdfCleanupLocked(keys,{loadInputs,root,verifyReview,lockedKeys:new Set(storageKeys)}),
+    {storageRoot:path.join(root,'original-documents')});
+}
+
+async function executeOriginalPdfCleanupLocked(
+  keys = [],
+  { loadInputs = loadStorageCleanupInputs, root = storageRoot(), verifyReview, lockedKeys } = {}
 ) {
   const before = classifyStorage(await loadInputs());
+  if(verifyReview && verifyReview(before)!==true) return {
+    ok:false,deleted:0,refused:keys.length,freedBytes:0,results:[],changed:[],report:before,
+    message:'연결 정보가 바뀌었거나 확인 시간이 지났습니다. 다시 확인해 주세요.',
+  };
   const byKey = new Map(before.groups.map((g) => [g.key, g]));
   const dir = path.join(root, "original-documents");
   const results = [];
@@ -668,8 +693,12 @@ async function executeOriginalPdfCleanup(
       refuse("원본 PDF 항목이 아닙니다.");
       continue;
     }
+    if(!lockedKeys.has(group.originalKey)) {
+      refuse('확인 중 원본 목록이 바뀌었습니다. 다시 확인해 주세요.');
+      continue;
+    }
     if (
-      group.status !== STATUS.UNLINKED ||
+      (group.status !== STATUS.UNLINKED && !(verifyReview && group.status === STATUS.REVIEW && group.references && group.documentId)) ||
       !/^[a-f0-9]{64}$/.test(group.originalKey || "")
     ) {
       refuse(
@@ -681,6 +710,10 @@ async function executeOriginalPdfCleanup(
     const targets = [`${group.originalKey}.pdf`, `${group.originalKey}.json`]
       .map((name) => path.join(dir, name))
       .filter((target) => isInside(dir, target));
+    if(group.documentId) {
+      try {require('../originalDocuments').markOriginalPdfDeletion(group.documentId,{storageRoot:dir});}
+      catch {refuse('삭제 안내를 준비하지 못해 파일을 보존했습니다.');continue;}
+    }
     const outcome = removeTargets({ files: targets, folders: [] });
     if (outcome.failed.length) {
       refuse("파일을 지우지 못했습니다.");
@@ -713,11 +746,13 @@ function publicGroup(group) {
   const {
     documentId: _hidden,
     originalKey: _originalKey,
+    originalName: _originalName,
     pageFiles: _pages,
     cacheFileNames: _cache,
+    references,
     ...rest
   } = group;
-  return { ...rest, totalBytes: groupBytes(group) };
+  return { ...rest, ...(references !== undefined ? {references:references ? {counts:references.counts} : null}:{}), totalBytes: groupBytes(group) };
 }
 
 function publicReport(report) {
@@ -803,8 +838,9 @@ async function loadStorageCleanupInputs() {
   const root = storageRoot();
 
   const rows = await prisma.workspace_documents.findMany({
-    select: { docpath: true, docId: true, metadata: true },
+    select: { id:true, workspaceId:true, docpath: true, docId: true, metadata: true },
   });
+  const referenceIdentities={checklists:[],workspaces:[],search:[],images:[]};
   const workspaceDocumentIds = new Set();
   const imageFolderByKey = new Map();
   const workspaceDocs = rows.map((row) => {
@@ -819,6 +855,7 @@ async function loadStorageCleanupInputs() {
     }
     if (metadata.document_id)
       workspaceDocumentIds.add(String(metadata.document_id).trim());
+    if(metadata.document_id)referenceIdentities.workspaces.push({document_id:String(metadata.document_id).trim(),id:JSON.stringify([row.id,row.workspaceId,row.docId,row.docpath])});
     return {
       docpath: row.docpath,
       docId: row.docId,
@@ -868,9 +905,13 @@ async function loadStorageCleanupInputs() {
           offset,
           include: ["metadatas"],
         });
-        for (const metadata of page.metadatas || []) {
+        for (const [index,metadata] of (page.metadatas || []).entries()) {
           if (metadata?.document_id)
             chromaDocumentIds.add(metadata.document_id);
+          if(metadata?.document_id) {
+            if(!page.ids?.[index])chromaIncomplete=true;
+            else referenceIdentities.search.push({document_id:metadata.document_id,id:JSON.stringify([slug,page.ids[index]])});
+          }
           if (metadata?.image_key) referencedImageKeys.add(metadata.image_key);
           try {
             for (const key of JSON.parse(metadata?.related_image_keys || "[]"))
@@ -892,6 +933,7 @@ async function loadStorageCleanupInputs() {
   const checklistDocumentIds = new Map();
   for (const checklist of ChecklistRepository.listAll()) {
     if (!checklist?.documentId) continue;
+    referenceIdentities.checklists.push({document_id:checklist.documentId,id:checklist.id});
     checklistDocumentIds.set(
       checklist.documentId,
       (checklistDocumentIds.get(checklist.documentId) || 0) + 1
@@ -905,6 +947,9 @@ async function loadStorageCleanupInputs() {
         .filter((e) => e.isDirectory() && !e.name.startsWith("."))
         .map((e) => {
           const full = path.join(imagesDir, e.name);
+          for(const name of fs.readdirSync(full,{recursive:true}).sort())
+            referenceIdentities.images.push({document_id:e.name,id:String(name)});
+          referenceIdentities.images.push({document_id:e.name,id:'folder:'+e.name});
           return {
             name: e.name,
             ...folderStats(full),
@@ -922,8 +967,15 @@ async function loadStorageCleanupInputs() {
           const storageKey = name.slice(0, 64);
           const pdf = path.join(originalsDir, name);
           const meta = path.join(originalsDir, `${storageKey}.json`);
+          let originalName = null;
+          try {
+            const metadata = JSON.parse(fs.readFileSync(meta, 'utf8'));
+            if (typeof metadata.filename === 'string' && metadata.filename.trim())
+              originalName = metadata.filename;
+          } catch { /* An unidentified original cannot pass the deletion lock. */ }
           return {
             storageKey,
+            originalName,
             bytes:
               fs.statSync(pdf).size +
               (fs.existsSync(meta) ? fs.statSync(meta).size : 0),
@@ -944,6 +996,7 @@ async function loadStorageCleanupInputs() {
   // sources saved with past answers (Citation). Any failure -> null (no
   // original is then judged unused).
   let knownDocumentIds = null;
+  let originalReferences = null;
   if (!chromaIncomplete) {
     try {
       const ids = new Set([
@@ -952,20 +1005,21 @@ async function loadStorageCleanupInputs() {
         ...checklistDocumentIds.keys(),
         ...imageFolders.map((folder) => folder.name),
       ]);
+      const quizRows = [];
       for (const table of [
         "schat_quiz_sets",
         "schat_quiz_questions",
         "schat_quiz_generation_logs",
       ]) {
         const rows = await prisma[table].findMany({
-          select: { document_id: true },
-          distinct: ["document_id"],
+          select: { id:true, document_id: true },
         });
+        quizRows.push(rows);
         for (const row of rows)
           if (row.document_id) ids.add(String(row.document_id).trim());
       }
       const chats = await prisma.workspace_chats.findMany({
-        select: { response: true },
+        select: { id:true, response: true },
       });
       for (const chat of chats)
         for (const match of String(chat.response || "").matchAll(
@@ -973,6 +1027,8 @@ async function loadStorageCleanupInputs() {
         ))
           ids.add(match[1].trim());
       knownDocumentIds = ids;
+      originalReferences = collectOriginalReferences({chats,quizSets:quizRows[0],quizQuestions:quizRows[1],quizRuns:quizRows[2],
+        checklists:checklistDocumentIds,workspaceDocumentIds,chromaDocumentIds,imageFolders,referenceIdentities});
     } catch {
       knownDocumentIds = null;
     }
@@ -980,6 +1036,7 @@ async function loadStorageCleanupInputs() {
 
   return {
     knownDocumentIds,
+    originalReferences,
     pageRecords: readPageRecords(
       path.join(root, "documents"),
       path.join(root, "vector-cache")

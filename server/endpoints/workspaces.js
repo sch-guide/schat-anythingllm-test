@@ -799,6 +799,8 @@ function workspaceEndpoints(app) {
           originalPdfAvailable: true,
         });
       } catch (error) {
+        if(error?.code==='ORIGINAL_PDF_BUSY')
+          return response.status(423).json({success:false,error:'이 문서는 지금 업데이트 중입니다. 잠시 후 다시 시도해 주세요.'});
         const status =
           error?.code === "ORIGINAL_PDF_CONFLICT"
             ? 409
@@ -836,7 +838,20 @@ function workspaceEndpoints(app) {
 
         const documents = await Document.forWorkspace(workspace.id);
         const original = resolveWorkspaceOriginalPdf({ pdfRef, documents });
-        if (!original) return response.sendStatus(404);
+        if (!original) {
+          const {wasOriginalPdfDeleted,responseReferencesPdf}=require('../utils/originalDocuments');
+          if(wasOriginalPdfDeleted(pdfRef)) {
+            const belongsToWorkspace=resolveWorkspaceDocumentId({pdfRef,documents});
+            const history=belongsToWorkspace ? [] : await WorkspaceChats.where({
+              workspaceId:workspace.id,
+              ...(multiUserMode(response)?{user_id:user.id}:{}),
+              response:{contains:pdfRef},
+            });
+            if(belongsToWorkspace || history.some(chat=>responseReferencesPdf(chat.response,pdfRef)))
+              return response.set('Cache-Control','no-store').status(410).json({code:'ORIGINAL_PDF_DELETED',message:'원본이 삭제되었습니다'});
+          }
+          return response.sendStatus(404);
+        }
 
         const stat = await fs.promises.stat(original.filePath);
         const requestedRange = request.headers.range;
@@ -850,7 +865,7 @@ function workspaceEndpoints(app) {
 
         response.setHeader("Content-Type", "application/pdf");
         response.setHeader("Accept-Ranges", "bytes");
-        response.setHeader("Cache-Control", "private, max-age=3600");
+        response.setHeader("Cache-Control", "private, no-store");
         response.setHeader(
           "Content-Disposition",
           `inline; filename*=UTF-8''${encodeURIComponent(original.filename)}`
