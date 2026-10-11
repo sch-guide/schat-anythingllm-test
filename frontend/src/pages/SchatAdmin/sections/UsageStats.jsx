@@ -9,7 +9,9 @@ import {
   YAxis,
 } from "recharts";
 import SchatAdmin from "@/models/schatAdmin";
-import { Card, InfoRow, Loading, Notice } from "../ui";
+import { Card, Help, InfoRow, Loading, Notice } from "../ui";
+import DepartmentPicker from "../DepartmentPicker";
+import { selectionError } from "../usageSelection";
 
 // "사용 통계": 무엇을 물었는지 중심. 개인별 목록이나 사람끼리 비교하는 표시는 만들지 않는다.
 // 서버가 질문 원문의 환자 정보 같은 숫자를 가린 뒤 보낸다.
@@ -89,34 +91,23 @@ export default function UsageStatsSection() {
   const [endDate, setEndDate] = useState(today);
   const [departmentIds, setDepartmentIds] = useState([]);
   const [departments, setDepartments] = useState([]);
-  const [selection, setSelection] = useState({ period: '7d', departmentIds: [] });
-  const [validation, setValidation] = useState('');
+  const validation = selectionError(period, startDate, endDate, today);
 
   useEffect(() => {
     let active = true;
     setStats(null);
-    SchatAdmin.usageStats(selection.period, selection).then((result) => {
+    if (validation) return;
+    SchatAdmin.usageStats(period, { period, startDate, endDate, departmentIds }).then((result) => {
       if (!active) return;
       setStats(result || { error: true });
       if (result?.availableDepartments) setDepartments(result.availableDepartments);
-    });
+    }).catch(() => { if (active) setStats({ error: true }); });
     return () => { active = false; };
-  }, [selection]);
-
-  function applySelection(event) {
-    event.preventDefault();
-    if (period === 'custom' && (!startDate || !endDate || startDate > endDate || endDate > today ||
-      (new Date(endDate) - new Date(startDate)) / 86400000 >= 366)) {
-      setValidation('날짜를 확인해 주세요. 시작일~종료일은 최대 366일이며 미래 날짜는 선택할 수 없습니다.');
-      return;
-    }
-    setValidation('');
-    setSelection({ period, startDate, endDate, departmentIds: [...departmentIds] });
-  }
+  }, [period, startDate, endDate, departmentIds, validation]);
 
   return (
     <div className="flex flex-col gap-y-5">
-      <form onSubmit={applySelection} className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="기간">
         {[...USAGE_PERIODS, ['custom', '날짜 직접 선택']].map(([key, label]) => (
           <button
@@ -141,25 +132,16 @@ export default function UsageStatsSection() {
           <label>종료일 <input aria-label="종료일" type="date" value={endDate} min={startDate} max={today} onChange={e=>setEndDate(e.target.value)} className="rounded border border-theme-sidebar-border bg-theme-bg-primary p-2" /></label>
         </div>
       )}
-      <fieldset className="flex flex-wrap gap-2">
-        <legend className="mb-2 text-sm">대상 부서 (여러 부서 선택 가능)</legend>
-        <button type="button" aria-pressed={!departmentIds.length} onClick={()=>setDepartmentIds([])} className={`rounded-full border px-3 py-1 ${!departmentIds.length ? 'border-sky-500 bg-sky-500/15' : 'border-theme-sidebar-border'}`}>전체 부서</button>
-        {departments.map(dept=>(
-          <label key={dept.id} className={`flex items-center gap-2 rounded-full border px-3 py-1 ${departmentIds.includes(dept.id) ? 'border-sky-500 bg-sky-500/15' : 'border-theme-sidebar-border'}`}>
-            <input type="checkbox" checked={departmentIds.includes(dept.id)} onChange={()=>setDepartmentIds(ids=>ids.includes(dept.id)?ids.filter(id=>id!==dept.id):[...ids,dept.id])} />{dept.name}
-          </label>
-        ))}
-      </fieldset>
-      <p className="text-xs text-theme-text-secondary">기존 기록은 삭제하지 않습니다. 부서는 현재 계정 정보 기준이며, 선택한 부서의 질문과 저장된 토큰을 합산합니다. 질문 목록은 최근 90일 이내 최대 100건만 표시하며, 5명 미만 부서 선택 시 통계를 숨깁니다. 조건 변경 후 조회를 눌러 주세요.</p>
+      <div>대상 부서 <Help>여러 부서를 고를 수 있습니다. 부서는 현재 계정 정보 기준이며 질문 목록은 최근 90일 이내 최대 100건입니다. 5명 미만 부서의 통계는 숨깁니다. 기존 기록은 삭제하지 않습니다.</Help></div>
+      <DepartmentPicker departments={departments} selected={departmentIds} onChange={setDepartmentIds} />
       {validation && <p role="alert" className="text-red-500">{validation}</p>}
-      <button type="submit" className="self-start rounded-lg bg-sky-600 px-5 py-2 text-white">조회</button>
-      </form>
+      </div>
 
       {stats?.selection && <p role="status" className="text-sm text-theme-text-secondary">
         적용 기간: {stats.selection.startDate} ~ {stats.selection.endDate} (한국 시간) · 대상: {stats.selection.departmentIds.length ? departments.filter(d=>stats.selection.departmentIds.includes(d.id)).map(d=>d.name).join(', ') : '전체 부서'}
       </p>}
 
-      {!stats ? (
+      {validation ? null : !stats ? (
         <Loading />
       ) : stats.error ? (
         <Notice tone="warning">통계를 불러오지 못했습니다. 날짜와 부서 선택을 확인한 뒤 다시 조회해 주세요.</Notice>
@@ -170,7 +152,7 @@ export default function UsageStatsSection() {
           <div className="md:col-span-2">
             <Card
               title={`질문 수 ${n(stats.questions.total)}건`}
-              description="직원이 SCHAT에 물어본 질문 수입니다. 시간은 한국 시간 기준입니다."
+            help="직원이 SCHAT에 물어본 질문 수입니다. 시간은 한국 시간 기준입니다."
             >
               <p className="m-0 text-sm font-medium text-theme-text-primary">
                 날짜별
@@ -200,7 +182,7 @@ export default function UsageStatsSection() {
 
           <Card
             title="많이 검색된 주제"
-            description="답변에 인용된 지침 문서의 목차(없으면 쪽) 기준, 상위 10개입니다."
+            help="답변에 인용된 지침 문서의 목차(없으면 쪽) 기준, 상위 10개입니다."
           >
             {stats.topics.length ? (
               <div>
@@ -219,7 +201,7 @@ export default function UsageStatsSection() {
 
           <Card
             title="많이 인용된 지침 문서"
-            description="답변의 근거로 쓰인 질문 수입니다."
+            help="답변의 근거로 쓰인 질문 수입니다."
           >
             {stats.documents.cited.length ? (
               <div>
@@ -250,7 +232,7 @@ export default function UsageStatsSection() {
 
           <Card
             title={`검색 실패 질문 ${n(stats.searchFailures.total)}건`}
-            description="답변에 인용된 근거가 한 건도 없었던 질문입니다. 질문 내용과 날짜만 보여주며, 환자 정보로 보이는 숫자는 ***로 가립니다."
+            help="답변에 인용된 근거가 한 건도 없었던 질문입니다. 질문 내용과 날짜만 보여주며, 환자 정보로 보이는 숫자는 ***로 가립니다."
           >
             <QuestionList
               items={stats.searchFailures.items}
@@ -261,7 +243,7 @@ export default function UsageStatsSection() {
 
           <Card
             title={`근거 없음 응답 ${n(stats.notFoundAnswers.total)}건`}
-            description="근거는 찾았지만 챗봇이 '지침에서 확인되지 않는다'는 취지로 답한 질문입니다. 검색 실패 질문과 겹치지 않습니다."
+            help="근거는 찾았지만 챗봇이 '지침에서 확인되지 않는다'는 취지로 답한 질문입니다. 검색 실패 질문과 겹치지 않습니다."
           >
             <QuestionList
               items={stats.notFoundAnswers.items}
@@ -272,7 +254,7 @@ export default function UsageStatsSection() {
 
           <Card
             title="부서별 사용량"
-            description="부서별 질문 수입니다(가나다순). 이 기간 사용자가 5명 미만인 부서는 표시하지 않습니다."
+            help="부서별 질문 수입니다(가나다순). 이 기간 사용자가 5명 미만인 부서는 표시하지 않습니다."
           >
             {stats.departments.length ? (
               <div>
@@ -293,17 +275,17 @@ export default function UsageStatsSection() {
 
           <Card
             title="대략적인 AI 사용량"
-            description="답변할 때 저장된 Gemini 토큰 수의 합계입니다. 금액은 계산하지 않습니다."
+            help="기록된 AI 입력·출력 분량의 합계입니다. 글자 수나 실제 요금이 아니며 일부 사용량은 빠질 수 있습니다."
           >
             <div>
               <InfoRow label="질문 수">{n(stats.aiUsage.questions)}건</InfoRow>
-              <InfoRow label="토큰 기록이 있는 답변">
+              <InfoRow label="사용량 기록이 있는 답변">
                 {n(stats.aiUsage.chatsWithTokens)}건
               </InfoRow>
-              <InfoRow label="입력 토큰">
+              <InfoRow label="AI가 읽은 분량">
                 {n(stats.aiUsage.promptTokens)}
               </InfoRow>
-              <InfoRow label="출력 토큰">
+              <InfoRow label="AI가 작성한 분량">
                 {n(stats.aiUsage.completionTokens)}
               </InfoRow>
             </div>
