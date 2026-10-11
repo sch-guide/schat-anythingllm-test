@@ -126,18 +126,15 @@
   width: 42px;
 }
 .synonym-table th:nth-child(2) {
-  width: 34%;
+  width: auto;
 }
 .synonym-table th:nth-child(3) {
   width: 90px;
 }
 .synonym-table th:nth-child(4) {
-  width: auto;
-}
-.synonym-table th:nth-child(5) {
   width: 106px;
 }
-.synonym-table th:nth-child(6) {
+.synonym-table th:nth-child(5) {
   width: 94px;
 }
 .synonym-table input[type="checkbox"] {
@@ -186,8 +183,33 @@
   overflow-wrap: anywhere;
 }
 .synonym-sources {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: 12px;
   line-height: 1.6;
+}
+.synonym-source-hint {
+  display: inline-block;
+}
+.synonym-source-tooltip {
+  display: none;
+  background: #20262b;
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 6px;
+  max-width: min(320px, 70vw);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.synonym-source-tooltip > span {
+  display: block;
+}
+.synonym-source-hint:hover > .synonym-source-tooltip,
+.synonym-source-hint:focus-within > .synonym-source-tooltip,
+.synonym-source-tooltip--open {
+  display: block;
 }
 .synonym-sources small {
   display: block;

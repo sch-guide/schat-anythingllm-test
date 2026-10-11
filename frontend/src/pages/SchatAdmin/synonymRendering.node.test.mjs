@@ -78,9 +78,9 @@ test("표의 기본 작업은 수정이고 다른 행 편집 중에는 비활성
 
 test("모바일용 항목 이름과 직접 등록 출처를 유지하고 편집기에서만 사용 상태와 삭제를 제공한다", () => {
   const html = render();
-  for (const label of ["선택", "동의어", "분류", "출처", "상태", "작업"])
+  for (const label of ["선택", "동의어", "분류", "상태", "작업"])
     assert.ok(html.includes(`data-label="${label}"`), label);
-  assert.ok(html.includes("직접 등록"));
+  assert.doesNotMatch(html, /data-label="출처"|직접 등록|synonym-source-link/);
   const editor = renderToStaticMarkup(
     React.createElement(TermEditor, {
       terms: ["관", "tube"],
@@ -109,6 +109,7 @@ test("검토 대기 편집은 저장 후 등록이라고 표시하고 안전한 
   );
   assert.match(editor, />저장 후 등록</);
   const safe = render({
+    status: "needs_review",
     source: "auto",
     suggestion: {
       id: 6,
@@ -127,12 +128,12 @@ test("검토 대기 편집은 저장 후 등록이라고 표시하고 안전한 
   });
   assert.match(
     safe,
-    /<button[^>]*class="synonym-source-link"[^>]*>synthetic.pdf p.7 원문/
+    /원문 ↗/
   );
   assert.doesNotMatch(safe, /원문을 열 수 없는/);
 });
 
-test("suggestion safety badges, document pages and unsupported-source notice survive rendering", () => {
+test("사용 중인 묶음의 추가 제안은 출처와 내부 표식을 표시하지 않는다", () => {
   const html = render({
     pendingAdditions: [
       {
@@ -148,16 +149,12 @@ test("suggestion safety badges, document pages and unsupported-source notice sur
     ],
   });
   for (const value of [
-    "낮은 확신",
-    "출처 없음",
-    "검증용",
-    "missing.pdf p.2",
-    "원문을 열 수 없는 문서예요.",
     "제안 catheter 추가",
     "무시",
   ])
     assert.ok(html.includes(value), value);
   assert.match(html, /synonym-proposal-chip/);
+  assert.doesNotMatch(html, /검증용|missing.pdf|테스트 근거|synonym-source-link/);
   assert.doesNotMatch(html, /제안 정보|추가 후보/);
 });
 
@@ -244,7 +241,6 @@ test("실제 동의어 관리 화면은 제목과 안내를 한 번만 표시하
     "문서 전체",
     "사용 안 함",
     "동의어",
-    "출처",
     "작업",
   ])
     assert.ok(html.includes(label), label);

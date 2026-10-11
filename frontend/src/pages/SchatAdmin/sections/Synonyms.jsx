@@ -43,10 +43,9 @@ function Sources({ group }) {
   ].filter(Boolean);
   return (
     <div className="synonym-sources">
-      {sources.length ? (
-        sources.map((item, index) => (
-          <div key={index}>
-            {canOpenSource(item) ? (
+      {sources.length
+        ? sources.map((item, index) => (
+            <span className="synonym-source-hint" key={index}>
               <button
                 type="button"
                 className="synonym-source-link"
@@ -54,43 +53,30 @@ function Sources({ group }) {
                   setUnavailable(false);
                   setSource(item);
                 }}
+                aria-label={`원문 보기: ${describeSources([item])}`}
               >
-                {describeSources([item])} 원문
+                원문 ↗
               </button>
-            ) : (
-              <>
-                <span>{describeSources([item])}</span>
-                <small>원문을 열 수 없는 문서예요.</small>
-              </>
-            )}
-          </div>
-        ))
-      ) : (
-        <span>{group.source === "auto" ? "출처 없음" : "직접 등록"}</span>
-      )}
-      {proposals.map((item) => (
-        <div key={item.id}>
-          {item.reason && <small>{item.reason}</small>}
-          {(item.test || item.lowConfidence || item.sourceMissing) && (
-            <small>
-              {[
-                item.test && "검증용",
-                item.lowConfidence && "낮은 확신",
-                item.sourceMissing && "출처 없음",
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </small>
-          )}
-          {item.status && item.status !== "pending" && (
-            <small>
-              {item.status === "approved"
-                ? "승인됨"
-                : "제외됨 · 필요 없음으로 기록"}
-            </small>
-          )}
-        </div>
-      ))}
+              <span className="synonym-source-tooltip" role="tooltip">
+                {describeSources([item])}
+                {proposals
+                  .map((proposal) => proposal.reason)
+                  .filter(Boolean)
+                  .join(" · ") && (
+                  <span>
+                    {proposals
+                      .map((proposal) => proposal.reason)
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                )}
+                {!canOpenSource(item) && (
+                  <span>원문을 열 수 없는 문서예요.</span>
+                )}
+              </span>
+            </span>
+          ))
+        : null}
       {source && (
         <div
           role="dialog"
@@ -105,7 +91,16 @@ function Sources({ group }) {
                 닫기
               </Button>
             </div>
-            {unavailable ? (
+            <div className="synonym-source-tooltip synonym-source-tooltip--open">
+              {describeSources([source])}
+              <span>
+                {proposals
+                  .map((item) => item.reason)
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </div>
+            {unavailable || !canOpenSource(source) ? (
               <Notice>
                 원문을 열지 못했어요. 문서가 남아 있는지 확인해 주세요.
               </Notice>
@@ -147,7 +142,7 @@ function RunsCard({ runs }) {
           {runs.map((item) => (
             <option key={item.id} value={item.id}>
               #{item.id} {RUN_TRIGGER_LABELS[item.trigger] || item.trigger}
-              {item.test ? " · 검증용" : ""} ·{" "}
+              {" · "}
               {item.status === "running"
                 ? "진행 중"
                 : item.status === "removed"
@@ -445,7 +440,7 @@ export function GroupRow({
         />
       </td>
       {editing ? (
-        <td colSpan={5} className="synonym-editor-cell">
+        <td colSpan={4} className="synonym-editor-cell">
           <TermEditor
             terms={terms}
             setTerms={setTerms}
@@ -482,6 +477,7 @@ export function GroupRow({
                   </span>
                 )
               )}
+              {pending && group.source === "auto" && <Sources group={group} />}
             </div>
             {(group.pendingAdditions || [])
               .filter((item) => !item.status || item.status === "pending")
@@ -511,9 +507,6 @@ export function GroupRow({
           </td>
           <td data-label="분류">
             {SYNONYM_KIND_LABELS[group.kind] || group.kind}
-          </td>
-          <td data-label="출처">
-            <Sources group={group} />
           </td>
           <td data-label="상태">
             <span className={`synonym-status synonym-status--${label.tone}`}>
@@ -788,9 +781,7 @@ export default function SynonymsSection() {
       )}
       {notice?.error && (
         <div role="alert">
-          <Notice tone="warning">
-            {notice.text}
-          </Notice>
+          <Notice tone="warning">{notice.text}</Notice>
         </div>
       )}
       <section className="synonym-table-card" aria-label="동의어 목록">
@@ -908,7 +899,7 @@ export default function SynonymsSection() {
                     }
                   />
                 </th>
-                {["동의어", "분류", "출처", "상태", "작업"].map((label) => (
+                {["동의어", "분류", "상태", "작업"].map((label) => (
                   <th key={label}>{label}</th>
                 ))}
               </tr>
@@ -917,7 +908,7 @@ export default function SynonymsSection() {
               {creating && (
                 <tr className="synonym-editing-row" data-synonym-creating>
                   <td data-label="선택" />
-                  <td colSpan={5} className="synonym-editor-cell">
+                  <td colSpan={4} className="synonym-editor-cell">
                     <TermEditor
                       terms={newTerms}
                       setTerms={setNewTerms}
@@ -937,7 +928,7 @@ export default function SynonymsSection() {
                 <Fragment key={section.status}>
                   {filters.status === "all" && (
                     <tr className="synonym-section-row">
-                      <td colSpan={6}>
+                      <td colSpan={5}>
                         {SYNONYM_STATUS_LABELS[section.status].text}
                         {section.status === "needs_review" &&
                           " · AI가 지침에서 찾은 새 묶음"}
@@ -974,7 +965,7 @@ export default function SynonymsSection() {
               ))}
               {!creating && !view.rows.length && (
                 <tr>
-                  <td colSpan={6} className="synonym-empty">
+                  <td colSpan={5} className="synonym-empty">
                     해당하는 묶음이 없어요.
                   </td>
                 </tr>
@@ -1023,8 +1014,7 @@ export default function SynonymsSection() {
         <p className="mt-2 leading-6">
           사용 중인 묶음만 검색에 적용돼요. 검토 대기 묶음은 근거를 확인한 뒤
           등록해 주세요. 삽입과 제거처럼 다른 시술은 함께 묶을 수 없어요. 약물은
-          비슷한 이름이어도 다른 약일 수 있으니 확실한 것만 넣어 주세요. 낮은
-          확신·출처 없음·검증용 표시가 있으면 원문을 따로 확인해 주세요.
+          이름이 비슷해도 다를 수 있어요. 확실하지 않으면 원문을 확인해 주세요.
         </p>
       </details>
       <RunsCard key={runs[0]?.id ?? "none"} runs={runs} />
