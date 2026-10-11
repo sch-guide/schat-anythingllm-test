@@ -184,10 +184,10 @@ test("no-evidence answer renders notice only, never even a hidden reference row"
   assert.doesNotMatch(html,/참고문서|인슐린 배경 자료|검색된 참고 자료 보기/);
 });
 
-test("unverified substantive answer has a closed disclosure and explicit reference warning", async () => {
+test("unverified substantive answer has a closed disclosure without a missing-evidence banner", async () => {
   const html = await renderCitations([{documentName:"참고문서.pdf",page:8,excerpt:"다른 주제"}],
     {question:"CT 금식 시간?",answer:"금식 시간을 확인하세요."});
-  assert.match(html,/직접 근거를 특정하지 못했습니다/);
+  assert.doesNotMatch(html,/직접 근거를 특정하지 못했습니다|원문 확인이 필요합니다/);
   assert.match(html,/<summary[^>]*>검색된 참고 자료 보기/);
   assert.match(html,/답변의 직접 근거로 확인되지 않은 자료입니다/);
   assert.doesNotMatch(html,/<details[^>]*\bopen\b/);

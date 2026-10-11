@@ -2,6 +2,7 @@
 const { EventEmitter, setMaxListeners } = require("events");
 const { APIError } = require("./error.js");
 const Providers = require("./providers/index.js");
+const { completeWithEvidence } = require("./utils/evidenceQuotes.js");
 const { Telemetry } = require("../../../models/telemetry.js");
 const { v4 } = require("uuid");
 const { ToolReranker } = require("./utils/toolReranker.js");
@@ -261,11 +262,13 @@ class AIbitat {
       if (!identity || this._pendingRagSourceKeys.has(identity)) continue;
 
       const publicSource = buildPublicRagSource(source, { question });
-      publicSource.relatedImages = publicSource.relatedImages.filter((image) => {
-        if (this._pendingRagImageKeys.has(image.imageKey)) return false;
-        this._pendingRagImageKeys.add(image.imageKey);
-        return true;
-      });
+      publicSource.relatedImages = publicSource.relatedImages.filter(
+        (image) => {
+          if (this._pendingRagImageKeys.has(image.imageKey)) return false;
+          this._pendingRagImageKeys.add(image.imageKey);
+          return true;
+        }
+      );
       this._pendingRagSourceKeys.add(identity);
       this._pendingRagSources.push(publicSource);
     }
@@ -1228,8 +1231,19 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     for (const attemptMessages of [flattened, compact]) {
       const completion = await this.#safeProviderCall(() =>
         stream
-          ? this.providerInstance.stream(attemptMessages, [], eventHandler)
-          : this.providerInstance.complete(attemptMessages, [])
+          ? completeWithEvidence({
+              provider: this.providerInstance,
+              sources: this.getRagMemorySources(),
+              messages: attemptMessages,
+              functions: [],
+              eventHandler,
+            })
+          : completeWithEvidence({
+              provider: this.providerInstance,
+              sources: this.getRagMemorySources(),
+              messages: attemptMessages,
+              functions: [],
+            })
       );
       if (this._aborted) return null;
       if (!completion?.functionCall) return completion;
@@ -1269,7 +1283,13 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
 
     /** @type {{ functionCall: { name: string, arguments: string }, textResponse: string }} */
     const completionStream = await this.#safeProviderCall(() =>
-      this.providerInstance.stream(messages, functions, eventHandler)
+      completeWithEvidence({
+        provider: this.providerInstance,
+        sources: this.getRagMemorySources(),
+        messages,
+        functions,
+        eventHandler,
+      })
     );
 
     // An abort mid-stream resolves (not throws) with a partial completion,
@@ -1460,7 +1480,12 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
 
     // get the chat completion
     const completion = await this.#safeProviderCall(() =>
-      this.providerInstance.complete(messages, functions)
+      completeWithEvidence({
+        provider: this.providerInstance,
+        sources: this.getRagMemorySources(),
+        messages,
+        functions,
+      })
     );
 
     // An abort mid-stream resolves (not throws) with a partial completion,

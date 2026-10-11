@@ -1,4 +1,10 @@
 import test from "node:test";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const {
+  completeWithEvidence,
+  evidenceSourceId,
+} = require("../../../server/utils/agents/aibitat/utils/evidenceQuotes.js");
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -6,6 +12,8 @@ import path from "node:path";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import {
   findEvidenceHighlights,
+  answerHighlightTexts,
+  drawEvidenceHighlights,
   saveHighlightedPdf,
 } from "./pdfEvidenceHighlight.js";
 
@@ -35,7 +43,7 @@ function syntheticPdf(rotation = 0) {
 }
 
 for (const rotation of [0, 90, 180, 270]) {
-  test(`real PDF roundtrip preserves source, text, rotation ${rotation} and yellow annotations`, async () => {
+  test(`real PDF roundtrip preserves source, text, rotation ${rotation} and pale blue line highlights`, async () => {
     const original = syntheticPdf(rotation);
     const hash = createHash("sha256").update(original).digest("hex");
     const task = getDocument({
@@ -48,11 +56,10 @@ for (const rotation of [0, 90, 180, 270]) {
     try {
       const page = await pdf.getPage(1);
       const result = findEvidenceHighlights(await page.getTextContent(), [
-        "Alpha beta\nGamma",
-        "Drug\t10 mg\tIV",
+        "Alpha beta\nGamma\nDrug\t10 mg\tIV",
       ]);
       assert.equal(result.matched, true);
-      saved = await saveHighlightedPdf(pdf, 1, result.rects);
+      saved = await saveHighlightedPdf(pdf, 1, result.paintRects);
       assert.equal(pdf.annotationStorage.size, 0);
       assert.equal(createHash("sha256").update(original).digest("hex"), hash);
     } finally {
@@ -79,9 +86,9 @@ for (const rotation of [0, 90, 180, 270]) {
         annotations.every(
           (annotation) =>
             annotation.subtype === "Highlight" &&
-            annotation.color[0] === 255 &&
-            annotation.color[1] === 255 &&
-            annotation.color[2] === 0
+            Math.abs(annotation.color[0] - 96) <= 2 &&
+            Math.abs(annotation.color[1] - 165) <= 2 &&
+            Math.abs(annotation.color[2] - 250) <= 2
         )
       );
       assert.match(
@@ -93,8 +100,80 @@ for (const rotation of [0, 90, 180, 270]) {
         .getViewport({ scale: 2 })
         .convertToViewportRectangle(annotations[0].rect);
       assert.ok(rectangle.every(Number.isFinite));
+      // Mobile uses the same PDF coordinates at every zoom/device-pixel scale.
+      for (const scale of [1, 1.5, 2, 3, 6, 9]) {
+        const viewport = page.getViewport({ scale });
+        const calls = [];
+        const context = {
+          save() {},
+          restore() {},
+          fillRect(...args) {
+            calls.push(args);
+          },
+        };
+        drawEvidenceHighlights(context, viewport, [annotations[0].rect]);
+        assert.equal(context.globalCompositeOperation, "multiply");
+        assert.equal(context.globalAlpha, 0.22);
+        const [x, y, width, height] = calls[0];
+        const a = viewport.convertToPdfPoint(x, y),
+          b = viewport.convertToPdfPoint(x + width, y + height);
+        const roundtrip = [
+          Math.min(a[0], b[0]),
+          Math.min(a[1], b[1]),
+          Math.max(a[0], b[0]),
+          Math.max(a[1], b[1]),
+        ];
+        roundtrip.forEach((value, index) =>
+          assert.ok(Math.abs(value - annotations[0].rect[index]) < 0.001)
+        );
+      }
     } finally {
       await reopenedTask.destroy();
     }
   });
 }
+
+test("recorded quotes connect a paraphrased answer to only the supporting PDF region", async () => {
+  const source = {
+    documentName: "synthetic.pdf",
+    page: 1,
+    text: "Alpha beta\nGamma\nDrug 10 mg IV",
+  };
+  const quote = "Alpha beta\nGamma";
+  const sources = [source];
+  await completeWithEvidence({
+    sources,
+    messages: [{ role: "user", content: "Synthetic procedure question" }],
+    functions: [],
+    provider: {
+      complete: async () => ({
+        textResponse:
+          "Read the first two synthetic entries.<schat_evidence>" +
+          JSON.stringify({
+            quotes: [{ source_id: evidenceSourceId(source), text: quote }],
+          }) +
+          "</schat_evidence>",
+      }),
+    },
+  });
+  const task = getDocument({
+    data: syntheticPdf(),
+    isEvalSupported: false,
+    useSystemFonts: true,
+  });
+  try {
+    const pdf = await task.promise;
+    const page = await pdf.getPage(1);
+    const content = await page.getTextContent();
+    const result = findEvidenceHighlights(
+      content,
+      answerHighlightTexts(source, "Read the first two synthetic entries.")
+    );
+    assert.equal(result.matched, true);
+    assert.equal(result.rects.length, 1);
+    // The table below the selected sentences must stay outside the box.
+    assert.ok(result.rects[0][1] > 145);
+  } finally {
+    await task.destroy();
+  }
+});

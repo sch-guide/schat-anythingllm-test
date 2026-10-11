@@ -1,3 +1,4 @@
+const { evidenceSourceId } = require("./evidenceQuotes");
 const {
   normalizePage,
   sanitizeDisplayText,
@@ -38,7 +39,9 @@ function buildRagContext(sources = []) {
   const sourceTexts = Array.isArray(sources)
     ? sources
         .map((source) =>
-          typeof source?.text === "string" ? source.text.trim() : ""
+          typeof source?.text === "string" && source.text.trim()
+            ? `[evidence_source_id=${evidenceSourceId(buildPublicRagSource(source))}]\n${source.text.trim()}`
+            : ""
         )
         .filter(Boolean)
     : [];
@@ -116,7 +119,9 @@ function buildPublicRagSource(source = {}, { question = "" } = {}) {
     excerpt,
     text: excerpt,
   };
-  const documentId = String(source.document_id || source.documentId || "").trim();
+  const documentId = String(
+    source.document_id || source.documentId || ""
+  ).trim();
   const pdfRef =
     documentId && /\.pdf$/i.test(documentName)
       ? pdfRefForDocumentId(documentId)

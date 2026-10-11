@@ -24,12 +24,18 @@ test("actual citation deduplication passes all full chunks to the desktop PDF vi
         contents: `
         import React from "react";
         import { renderToStaticMarkup } from "react-dom/server";
-        import { dedupeCitationSources, SourceEvidenceRow } from "./src/components/WorkspaceChat/ChatContainer/ChatHistory/Citation/index.jsx";
+        import Citations, { dedupeCitationSources, SourceEvidenceRow } from "./src/components/WorkspaceChat/ChatContainer/ChatHistory/Citation/index.jsx";
         const sources = [
           { pdfRef: "fixture", page: 1, text: "Full first chunk", excerpt: "First" },
           { pdfRef: "fixture", page: 1, text: "Full second chunk", excerpt: "Second longer" }
         ];
         export const merged = dedupeCitationSources(sources);
+        const verifiedSources = [
+          {documentName:"used-fixture.pdf",page:1,text:"Observe the test indicator after the procedure.",excerpt:"Observe the test indicator after the procedure.",evidenceQuotes:["Observe the test indicator after the procedure."]},
+          {documentName:"unused-fixture.pdf",page:2,text:"Unrelated material",excerpt:"Unrelated material",evidenceQuotes:[]}
+        ];
+        export const verifiedHtml = renderToStaticMarkup(React.createElement(Citations, {sources:verifiedSources,answer:"Inspect the final status.",workspaceSlug:"fixture"}));
+
         export const html = renderToStaticMarkup(React.createElement(SourceEvidenceRow, {source: merged[0], index: 0, workspaceSlug: "fixture", initiallyOpen: true}));
       `,
         resolveDir: root,
@@ -75,6 +81,8 @@ test("actual citation deduplication passes all full chunks to the desktop PDF vi
       ],
     });
     const fixture = await import(pathToFileURL(outfile));
+    assert.match(fixture.verifiedHtml, /used-fixture.pdf/);
+    assert.doesNotMatch(fixture.verifiedHtml, /unused-fixture.pdf/);
     assert.equal(fixture.merged.length, 1);
     assert.deepEqual(fixture.merged[0].highlightTexts, [
       "Full first chunk",

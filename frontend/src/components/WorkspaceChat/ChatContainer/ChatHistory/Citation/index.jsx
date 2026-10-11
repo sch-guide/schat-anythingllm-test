@@ -22,7 +22,7 @@ import PdfPageViewer from "./PdfPageViewer";
 import MobileSourceScreen, { useMobileViewport } from "./MobileSourceScreen";
 import { buildCitationDisplay } from "@/utils/citationFilter";
 import { employeeDocumentName } from "@/utils/schatSourceDisplay";
-import { sourceHighlightTexts, mergeHighlightTexts } from "@/utils/pdfEvidenceHighlight";
+import { sourceHighlightTexts, mergeHighlightTexts, answerHighlightTexts } from "@/utils/pdfEvidenceHighlight";
 
 const LONG_EXCERPT_LENGTH = 420;
 
@@ -360,6 +360,9 @@ export function dedupeCitationSources(sources = []) {
     result[position] = {
       ...representative,
       highlightTexts: mergeHighlightTexts(current, source),
+      ...([current, source].some(item => Array.isArray(item.evidenceQuotes))
+        ? { evidenceQuotes: [...new Set([current, source].flatMap(item => item.evidenceQuotes || []))] }
+        : {}),
       pdfRef: current.pdfRef || source.pdfRef,
       documentName: current.documentName || source.documentName,
       document_name: current.document_name || source.document_name,
@@ -381,14 +384,24 @@ export default function Citations({
   answer = "",
   aliases = [],
 }) {
-  const display = buildCitationDisplay({
+  let display = buildCitationDisplay({
     question,
     answer,
     sources,
     aliases,
   });
-  const visibleSources = dedupeCitationSources(display.sources);
-  const referenceSources = dedupeCitationSources(display.references);
+  const quotedSources = sources.filter(source => Array.isArray(source.evidenceQuotes) && source.evidenceQuotes.length > 0);
+  if (quotedSources.length && display.mode !== "no-evidence") {
+    display = {mode: "direct", sources: quotedSources, references: [], missingTopics: []};
+  }
+  const visibleSources = dedupeCitationSources(display.sources).map((source) => ({
+    ...source,
+    highlightTexts: answerHighlightTexts(source, answer),
+  }));
+  const referenceSources = dedupeCitationSources(display.references).map((source) => ({
+    ...source,
+    highlightTexts: [],
+  }));
   if (!answer.trim() && !sources.length) return null;
 
   return (
@@ -403,7 +416,6 @@ export default function Citations({
       )}
       {display.mode === "unverified" && (
         <div className="rounded-lg border border-theme-sidebar-border p-3 text-sm">
-          <p role="status">답변의 직접 근거를 특정하지 못했습니다. 원문 확인이 필요합니다.</p>
           {referenceSources.length > 0 && (
             <details className="mt-2">
               <summary className="cursor-pointer font-medium">검색된 참고 자료 보기</summary>
@@ -414,11 +426,6 @@ export default function Citations({
             </details>
           )}
         </div>
-      )}
-      {display.mode === "direct" && display.missingTopics.length > 0 && (
-        <p className="mb-2 text-sm text-theme-text-secondary" role="status">
-          {display.missingTopics.join("·")}의 직접 근거를 특정하지 못했습니다.
-        </p>
       )}
       <div className="w-full">
         {visibleSources.map((source, index) => (

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import StorageFiles from "@/models/files";
 import {
   inspectPdfEvidence,
+  documentEvidenceTexts,
   saveHighlightedPdf,
   pdfHighlightUrl,
-  PDF_POSITION_UNAVAILABLE,
 } from "@/utils/pdfEvidenceHighlight";
 
 function normalizedPdfPage(page) {
@@ -26,17 +26,37 @@ export default function PdfPageViewer({
   onUnavailable,
   onShowText,
 }) {
+  const frameRef = useRef(null);
+  const [frameWidth, setFrameWidth] = useState(0);
+  const [pageWidth, setPageWidth] = useState(0);
   const [objectUrl, setObjectUrl] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [position, setPosition] = useState(null);
-  const [positionUnavailable, setPositionUnavailable] = useState(false);
   const [originalUrl, setOriginalUrl] = useState("");
   const [displayPage, setDisplayPage] = useState(normalizedPdfPage(page));
-  const evidenceKey = JSON.stringify(evidenceTexts);
-  const viewerUrl = useMemo(
-    () => pdfHighlightUrl(objectUrl, displayPage, position),
-    [objectUrl, displayPage, position]
+  const evidenceKey = JSON.stringify(
+    documentEvidenceTexts(documentName, evidenceTexts)
   );
+  const widthZoom =
+    frameWidth && pageWidth
+      ? Math.max(
+          1,
+          Math.floor(((frameWidth - 24) / ((pageWidth * 96) / 72)) * 100)
+        )
+      : undefined;
+  const viewerUrl = useMemo(
+    () => pdfHighlightUrl(objectUrl, displayPage, position, widthZoom),
+    [objectUrl, displayPage, position, widthZoom]
+  );
+
+  useEffect(() => {
+    if (!objectUrl || !frameRef.current) return;
+    const frame = frameRef.current;
+    const observer = new ResizeObserver(() => setFrameWidth(frame.clientWidth));
+    observer.observe(frame);
+    setFrameWidth(frame.clientWidth);
+    return () => observer.disconnect();
+  }, [objectUrl]);
 
   useEffect(() => {
     let active = true;
@@ -45,7 +65,7 @@ export default function PdfPageViewer({
     setObjectUrl("");
     setLoaded(false);
     setPosition(null);
-    setPositionUnavailable(false);
+    setPageWidth(0);
     setOriginalUrl("");
     setDisplayPage(normalizedPdfPage(page));
 
@@ -77,11 +97,14 @@ export default function PdfPageViewer({
           );
           if (!active) return;
           setDisplayPage(result.page);
+          const destinationPage = await pdf.getPage(result.page);
+          if (!active) return;
+          setPageWidth(destinationPage.getViewport({ scale: 1 }).width);
           if (result.matched) {
             const saved = await saveHighlightedPdf(
               pdf,
               result.page,
-              result.rects
+              result.paintRects
             );
             if (!active) return;
             displayed = URL.createObjectURL(
@@ -95,14 +118,11 @@ export default function PdfPageViewer({
               result.rects[0]
             );
             setPosition([Math.min(x1, x2), Math.min(y1, y2)]);
-          } else {
-            setPositionUnavailable(true);
           }
         } catch {
           displayed = original;
           if (active) {
             setPosition(null);
-            setPositionUnavailable(true);
           }
         } finally {
           await task?.destroy();
@@ -131,20 +151,13 @@ export default function PdfPageViewer({
 
   return (
     <div className="mx-auto w-full max-w-[920px]">
-      {positionUnavailable && (
-        <p
-          role="status"
-          className="mb-2 text-xs text-amber-300 light:text-amber-800"
-        >
-          {PDF_POSITION_UNAVAILABLE}
-        </p>
-      )}
       {!loaded && (
         <p className="mb-2 text-center text-xs text-zinc-400 light:text-slate-500">
           PDF viewer를 준비하는 중입니다.
         </p>
       )}
       <iframe
+        ref={frameRef}
         title={documentName || "원본 PDF"}
         aria-label="PDF 원본"
         src={viewerUrl}

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { openEvidenceDocument } from "@/utils/pdfEvidenceDocument";
 import {
   inspectPdfEvidence,
-  PDF_POSITION_UNAVAILABLE,
+  documentEvidenceTexts,
+  drawEvidenceHighlights,
 } from "@/utils/pdfEvidenceHighlight";
 import StorageFiles from "@/models/files";
 
@@ -34,7 +35,9 @@ export default function PdfPageCanvas({
   const [rendered, setRendered] = useState(false);
   const [pageNumber, setPageNumber] = useState(normalizedPage(page));
   const [highlights, setHighlights] = useState({ matched: false, rects: [] });
-  const evidenceKey = JSON.stringify(evidenceTexts);
+  const evidenceKey = JSON.stringify(
+    documentEvidenceTexts(documentName, evidenceTexts)
+  );
 
   useEffect(() => {
     let active = true;
@@ -94,19 +97,11 @@ export default function PdfPageCanvas({
         return renderTask.promise.then(() => {
           if (cancelled) return;
           const context = canvas.getContext("2d");
-          context.save();
-          context.globalCompositeOperation = "multiply";
-          context.fillStyle = "rgba(255,255,0,0.35)";
-          for (const rect of highlights.rects) {
-            const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(rect);
-            context.fillRect(
-              Math.min(x1, x2),
-              Math.min(y1, y2),
-              Math.abs(x2 - x1),
-              Math.abs(y2 - y1)
-            );
-          }
-          context.restore();
+          drawEvidenceHighlights(
+            context,
+            viewport,
+            highlights.paintRects || []
+          );
           setRendered(true);
           if (highlights.rects.length) {
             const cssViewport = pdfPage.getViewport({ scale: cssScale });
@@ -134,14 +129,6 @@ export default function PdfPageCanvas({
   const zoomIndex = ZOOMS.indexOf(zoom);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {pdf && !highlights.matched && (
-        <p
-          role="status"
-          className="px-3 py-2 text-xs text-amber-300 light:text-amber-800"
-        >
-          {PDF_POSITION_UNAVAILABLE}
-        </p>
-      )}
       <div
         ref={frameRef}
         className="relative min-h-0 flex-1 overflow-auto bg-zinc-800 light:bg-slate-200"

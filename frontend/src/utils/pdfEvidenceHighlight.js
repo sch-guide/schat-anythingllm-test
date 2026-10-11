@@ -1,12 +1,20 @@
 export const PDF_POSITION_UNAVAILABLE =
   "정확한 위치를 찾지 못해 원문을 표시합니다.";
+export const EVIDENCE_HIGHLIGHT = Object.freeze({
+  color: [96, 165, 250],
+  opacity: 0.22,
+});
+export const EVIDENCE_HIGHLIGHT_LABEL =
+  "\uD30C\uB780\uC0C9 \uD45C\uC2DC = \uB2F5\uBCC0\uC5D0 \uC0AC\uC6A9\uB41C \uADFC\uAC70";
 const compact = (text) => String(text).replace(/\s/gu, "");
 const missing = () => ({ matched: false, rects: [] });
 
 export function sourceHighlightTexts(source = {}) {
-  const values = Array.isArray(source.highlightTexts)
-    ? source.highlightTexts
-    : [source.text || source.excerpt || ""];
+  const values = Array.isArray(source.evidenceQuotes)
+    ? source.evidenceQuotes
+    : Array.isArray(source.highlightTexts)
+      ? source.highlightTexts
+      : [source.text || source.excerpt || ""];
   return [
     ...new Set(
       values
@@ -22,6 +30,37 @@ export function sourceHighlightTexts(source = {}) {
         .filter(Boolean)
     ),
   ];
+}
+
+// Only exact answer/source sentence alignment is eligible. Topic similarity
+// cannot establish which part of a retrieved page supported an answer.
+export function answerHighlightTexts(source = {}, answer = "") {
+  if (Array.isArray(source.evidenceQuotes)) return sourceHighlightTexts(source);
+  const plainAnswer = String(answer)
+    .replace(/\*\*|__|`/gu, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1");
+  const answerText = compact(plainAnswer);
+  if (!answerText) return [];
+  const selected = sourceHighlightTexts(source).flatMap((text) => {
+    const regions = [];
+    let current = [];
+    const flush = () => {
+      if (current.length) regions.push(current.join("\n"));
+      current = [];
+    };
+    for (const raw of text.split(/(?<=[.!?\u3002])(?:\s+|$)|\r?\n/gu)) {
+      const sentence = raw.trim().replace(/^(?:[-*\u2022]\s+|\d+[.)]\s+)/u, "");
+      if (
+        compact(sentence).length >= 12 &&
+        answerText.includes(compact(sentence))
+      )
+        current.push(sentence);
+      else flush();
+    }
+    flush();
+    return regions;
+  });
+  return [...new Set(selected)];
 }
 
 export function mergeHighlightTexts(...sources) {
@@ -59,7 +98,7 @@ export function findEvidenceHighlights(content, texts) {
     runs.push({ item, start: full.length, end: full.length + text.length });
     full += text;
   }
-  const selected = new Set();
+  const groups = [];
   for (const text of texts) {
     const needle = compact(text);
     const start = needle ? full.indexOf(needle) : -1;
@@ -70,42 +109,78 @@ export function findEvidenceHighlights(content, texts) {
     );
     if (overlapping[0]?.start !== start || overlapping.at(-1)?.end !== end)
       return missing();
-    for (const run of overlapping) selected.add(run);
+    groups.push(overlapping);
   }
   const rects = [];
-  for (const { item } of [...selected].sort((a, b) => a.start - b.start)) {
-    const style = content.styles?.[item.fontName] || {};
-    const [a, b, c, d, x, y] = item.transform || [];
-    if (
-      ![a, b, c, d, x, y, item.width].every(Number.isFinite) ||
-      a <= 0 ||
-      d <= 0 ||
-      Math.abs(b) > 0.001 ||
-      Math.abs(c) > 0.001 ||
-      item.width <= 0 ||
-      style.vertical ||
-      item.dir === "rtl"
-    )
-      return missing();
-    const ascent = Number.isFinite(style.ascent) ? style.ascent : 0.8;
-    const descent = Number.isFinite(style.descent) ? style.descent : -0.2;
-    rects.push([x, y + descent * d, x + item.width, y + ascent * d]);
+  const paintRects = [];
+  for (const group of groups.sort((a, b) => a[0].start - b[0].start)) {
+    const groupRects = [];
+    for (const { item } of group) {
+      const style = content.styles?.[item.fontName] || {};
+      const [a, b, c, d, x, y] = item.transform || [];
+      if (
+        ![a, b, c, d, x, y, item.width].every(Number.isFinite) ||
+        a <= 0 ||
+        d <= 0 ||
+        Math.abs(b) > 0.001 ||
+        Math.abs(c) > 0.001 ||
+        item.width <= 0 ||
+        style.vertical ||
+        item.dir === "rtl"
+      )
+        return missing();
+      const ascent = Number.isFinite(style.ascent) ? style.ascent : 0.8;
+      const descent = Number.isFinite(style.descent) ? style.descent : -0.2;
+      groupRects.push([x, y + descent * d, x + item.width, y + ascent * d]);
+    }
+    paintRects.push(...groupRects);
+    rects.push([
+      Math.min(...groupRects.map((rect) => rect[0])),
+      Math.min(...groupRects.map((rect) => rect[1])),
+      Math.max(...groupRects.map((rect) => rect[2])),
+      Math.max(...groupRects.map((rect) => rect[3])),
+    ]);
   }
-  return rects.length ? { matched: true, rects } : missing();
+  return rects.length
+    ? {
+        matched: true,
+        rects,
+        paintRects: [
+          ...new Map(paintRects.map((rect) => [rect.join(","), rect])).values(),
+        ],
+      }
+    : missing();
 }
 
 // pdf.js 4.8 serializable annotation format; verified by reopening saved PDFs.
 export function highlightAnnotations(rects, page) {
   return rects.map(([x1, y1, x2, y2]) => ({
     annotationType: 9,
-    color: [255, 255, 0],
-    opacity: 0.35,
+    color: [...EVIDENCE_HIGHLIGHT.color],
+    opacity: EVIDENCE_HIGHLIGHT.opacity,
     pageIndex: page - 1,
     rotation: 0,
     rect: [x1, y1, x2, y2],
     quadPoints: [x1, y2, x2, y2, x1, y1, x2, y1],
     outlines: [[x1, y1, x2, y1, x2, y2, x1, y2]],
   }));
+}
+
+export function drawEvidenceHighlights(context, viewport, rects) {
+  context.save();
+  context.globalCompositeOperation = "multiply";
+  context.globalAlpha = EVIDENCE_HIGHLIGHT.opacity;
+  context.fillStyle = `rgb(${EVIDENCE_HIGHLIGHT.color.join(",")})`;
+  for (const rect of rects) {
+    const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(rect);
+    context.fillRect(
+      Math.min(x1, x2),
+      Math.min(y1, y2),
+      Math.abs(x2 - x1),
+      Math.abs(y2 - y1)
+    );
+  }
+  context.restore();
 }
 
 export async function saveHighlightedPdf(pdf, page, rects) {
@@ -122,12 +197,23 @@ export async function saveHighlightedPdf(pdf, page, rects) {
   }
 }
 
-export function pdfHighlightUrl(objectUrl, page, position) {
+export function pdfHighlightUrl(objectUrl, page, position, zoomPercent) {
   if (!objectUrl) return "";
   const validPage =
     Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
+  if (Number.isFinite(zoomPercent) && zoomPercent > 0) {
+    const top = position
+      ? Math.max(0, Math.floor(((position[1] - 16) * zoomPercent) / 100))
+      : 0;
+    return `${objectUrl}#page=${validPage}&zoom=${zoomPercent},0,${top}`;
+  }
   const destination = position
-    ? `zoom=100,${Math.max(0, Math.floor(position[0]))},${Math.max(0, Math.floor(position[1] - 16))}`
+    ? `view=FitH,${Math.max(0, Math.floor(position[1] - 16))}`
     : "view=FitH";
   return `${objectUrl}#page=${validPage}&${destination}`;
+}
+
+// Display policy only; never changes citation selection or source metadata.
+export function documentEvidenceTexts(documentName, texts) {
+  return /실무\s*지침/u.test(String(documentName || "")) ? texts : [];
 }
