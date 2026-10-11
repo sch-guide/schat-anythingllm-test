@@ -2,9 +2,13 @@ import { useEffect, useState } from "react";
 import System from "@/models/system";
 import SchatAdmin from "@/models/schatAdmin";
 import { Badge, Button, Card, InfoRow, Loading, Notice } from "../ui";
+import GeminiBudgetPanel from '../GeminiBudgetPanel';
 
 // Plain-language names for the system records admins are likely to see.
 export const EVENT_LABELS = {
+  schat_gemini_exhausted: 'Gemini 한도 소진 감지',
+  schat_gemini_recovered: 'Gemini 정상 복구',
+  schat_gemini_busy_repeated: 'Gemini 일시적 혼잡 반복 발생',
   login_event: "로그인",
   failed_login_invalid_password: "로그인 실패 (비밀번호 오류)",
   failed_login_invalid_username: "로그인 실패 (없는 아이디)",
@@ -113,6 +117,7 @@ export default function StatusSection() {
   const { workspaces = [], checklists, connections } = status;
   return (
     <div className="flex flex-col gap-y-5">
+      <GeminiBudgetPanel />
       <Card
         title="문서와 검색 데이터"
         description="읽기 전용 정보입니다. 문서 추가·삭제는 작업 공간의 문서 업로드에서 합니다."
