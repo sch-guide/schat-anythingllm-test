@@ -1,6 +1,7 @@
 const prisma = require("../utils/prisma");
 const slugifyModule = require("slugify");
 const { Document } = require("./documents");
+const { isArchivedDocument } = require("../utils/documentUpdates/archive");
 const { WorkspaceUser } = require("./workspaceUsers");
 const { ROLES } = require("../utils/middleware/multiUserProtected");
 const { v4: uuidv4 } = require("uuid");
@@ -318,7 +319,7 @@ const Workspace = {
 
       return {
         ...workspace,
-        documents: await Document.forWorkspace(workspace.id),
+        documents: (await Document.forWorkspace(workspace.id)).filter((document) => !isArchivedDocument(document)),
         contextWindow: this._getContextWindow(workspace),
         currentContextTokenCount: await this._getCurrentContextTokenCount(
           workspace.id
@@ -378,6 +379,7 @@ const Workspace = {
       if (!workspace) return null;
       return {
         ...workspace,
+        documents: (workspace.documents || []).filter((document) => !isArchivedDocument(document)),
         contextWindow: this._getContextWindow(workspace),
         currentContextTokenCount: await this._getCurrentContextTokenCount(
           workspace.id

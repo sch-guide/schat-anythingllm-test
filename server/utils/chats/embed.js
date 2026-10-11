@@ -145,7 +145,7 @@ async function streamChatWithForEmbed(
   const filledSources = fillSourceWindow({
     nDocs: embed.workspace?.topN || 4,
     searchResults: vectorSearchResults.sources,
-    history: rawHistory,
+    history: await require('../documentUpdates/searchSnapshot').filterArchivedHistory(embed.workspace,rawHistory),
     filterIdentifiers: pinnedDocIdentifiers,
   });
 
@@ -320,5 +320,5 @@ async function resolveLLMConnectorForEmbed({
 }
 
 module.exports = {
-  streamChatWithForEmbed,
+  streamChatWithForEmbed: (...args) => require('../documentUpdates/searchSnapshot').withSearchSnapshot(args[1].workspace,()=>streamChatWithForEmbed(...args),{response:args[0]}),
 };

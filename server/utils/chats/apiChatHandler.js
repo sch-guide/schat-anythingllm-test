@@ -379,7 +379,7 @@ async function chatSync({
   const filledSources = fillSourceWindow({
     nDocs: workspace?.topN || 4,
     searchResults: vectorSearchResults.sources,
-    history: rawHistory,
+    history: await require('../documentUpdates/searchSnapshot').filterArchivedHistory(workspace,rawHistory),
     filterIdentifiers: pinnedDocIdentifiers,
   });
 
@@ -768,7 +768,7 @@ async function streamChat({
   const filledSources = fillSourceWindow({
     nDocs: workspace?.topN || 4,
     searchResults: vectorSearchResults.sources,
-    history: rawHistory,
+    history: await require('../documentUpdates/searchSnapshot').filterArchivedHistory(workspace,rawHistory),
     filterIdentifiers: pinnedDocIdentifiers,
   });
 
@@ -910,6 +910,6 @@ async function streamChat({
 }
 
 module.exports.ApiChatHandler = {
-  chatSync,
-  streamChat,
+  chatSync: options => require('../documentUpdates/searchSnapshot').withSearchSnapshot(options.workspace,()=>chatSync(options)),
+  streamChat: options => require('../documentUpdates/searchSnapshot').withSearchSnapshot(options.workspace,()=>streamChat(options),{response:options.response}),
 };

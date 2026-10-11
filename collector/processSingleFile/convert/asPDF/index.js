@@ -145,6 +145,9 @@ async function asPdf({
     return writeToServerDocuments({
       data,
       filename: `${slugify(filename)}-page-${page || index + 1}-${data.id}`,
+      ...(options.documentUpdateJob ? { destinationOverride:
+        require('../../../utils/documentUpdateStage').updateDestination(documentsFolder, options.documentUpdateJob)
+      } : {}),
       options: { parseOnly: options.parseOnly },
     });
   });

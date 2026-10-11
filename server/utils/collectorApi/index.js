@@ -109,13 +109,13 @@ class CollectorApi {
    * @param {Object} metadata - Optional metadata key:value pairs
    * @returns {Promise<Object>} - The response from the collector API
    */
-  async processDocument(filename = "", metadata = {}) {
+  async processDocument(filename = "", metadata = {}, documentUpdateJob = null) {
     if (!filename) return false;
 
     const data = JSON.stringify({
       filename,
       metadata,
-      options: this.#attachOptions(),
+      options: { ...this.#attachOptions(), ...(documentUpdateJob ? { documentUpdateJob } : {}) },
     });
 
     return await fetch(`${this.endpoint}/process`, {

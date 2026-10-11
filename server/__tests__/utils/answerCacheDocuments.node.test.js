@@ -26,6 +26,7 @@ function fixture() {
     '../endpoints/utils':{getModelTag:()=> 'fake'},'./systemSettings':{SystemSettings:{}},
     '../utils/answerCacheRuntime':{cache,beginMutation:ids=>cache.beginMutation(ids)},
     '../utils/documentUpdates/guard':{guard:{read:operation=>operation()}},
+    '../utils/documentUpdates/scopes':{workspaceKey:id=>`workspace:${id}`,pathKeys:async paths=>paths.map(value=>`document:${value}`)},
     // These fixtures use active synthetic documents and already canonical paths.
     // Keep unfinished archive implementation out of the independent cache test.
     '../utils/documentUpdates/archive':{

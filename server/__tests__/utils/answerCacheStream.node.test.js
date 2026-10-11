@@ -16,11 +16,12 @@ function fixture() {
   const deps={cache,env,prisma:{workspace_chats:{findMany:async()=>state.history},
     workspace_parsed_files:{findMany:async()=>state.files},workspace_documents:{findMany:async()=>state.documents}}};
   const vector={hasNamespace:async()=>true,namespaceCount:async()=>1,
-    performSimilaritySearch:async()=>({contextTexts:['synthetic evidence'],sources:[{document_name:'synthetic',page:3}],relatedImageSources:[]})};
+    performSimilaritySearch:async()=>{if(state.onSearch)await state.onSearch();return {contextTexts:['synthetic evidence'],sources:[{document_name:'synthetic',page:3}],relatedImageSources:[]};}};
   const connector={promptWindowLimit:()=>1000,defaultTemp:0};
   const modules={
     uuid:{v4:()=>`uuid-${state.records.length}`},
-    '../DocumentManager':{DocumentManager:class {async pinnedDocs(){return [];}}},
+    '../DocumentManager':{DocumentManager:class {async pinnedDocs(){if(state.onPins)await state.onPins();return [];}}},
+    '../documentUpdates/searchSnapshot':{withSearchSnapshot:(_workspace,operation)=>state.withSnapshot?state.withSnapshot(operation):operation(),filterArchivedHistory:async(_workspace,history)=>history},
     '../../models/workspaceChats':{WorkspaceChats:{new:async record=>{state.records.push(structuredClone(record));return{chat:{id:state.records.length}};}}},
     '../../models/workspaceParsedFiles':{WorkspaceParsedFiles:{getContextFiles:async()=>state.files}},
     '../helpers':{getVectorDbClass:()=>vector,resolveProviderConnector:async()=>({connector})},
@@ -51,6 +52,23 @@ function fixture() {
   }
   return {cache,state,ask,workspace};
 }
+
+test('직원 답변은 고정문서와 검색 사이 교체를 막고 다른 부서는 계속 처리한다',async t=>{
+  const directory=await fs.promises.mkdtemp(path.join(require('node:os').tmpdir(),'schat-stream-snapshot-'));
+  t.after(()=>fs.promises.rm(directory,{recursive:true,force:true}));
+  const guard=new (require('../../utils/documentUpdates/guard').UpdateGuard)(directory);
+  const f=fixture();let pinned=false;
+  f.state.withSnapshot=operation=>guard.readWhenAvailable(operation,['search:synthetic']);
+  f.state.onPins=async()=>{pinned=true;};
+  f.state.onSearch=async()=>{
+    assert.equal(pinned,true);
+    await assert.rejects(guard.acquire('replace',['search:synthetic']),/DOCUMENT_UPDATE_BUSY/);
+    const release=await guard.acquire('other',['search:other']);await release();
+  };
+  await f.ask();
+  assert.equal(f.state.completions,1);
+  const release=await guard.acquire('after-retrieval',['search:synthetic']);await release();
+});
 
 test('cache hit bypasses admission and model while preserving fresh chat IDs, prompt, evidence and presentation',async()=>{
   const f=fixture();await f.ask();await f.ask('ct준비！',{id:2});

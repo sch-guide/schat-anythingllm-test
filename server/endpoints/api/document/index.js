@@ -51,6 +51,7 @@ function apiDocumentEndpoints(app) {
     "/v1/document/upload",
     [validApiKey, handleAPIFileUpload, validateWorkspaceSlugQuery],
     async (request, response) => {
+      return require('../../../utils/documentUpdates/guard').catalogWriteLease(request,response,async()=>{
       /*
     #swagger.tags = ['Documents']
     #swagger.description = 'Upload a new file to AnythingLLM to be parsed and prepared for embedding, with optional metadata.'
@@ -169,6 +170,7 @@ function apiDocumentEndpoints(app) {
         console.error(e.message, e);
         response.sendStatus(500).end();
       }
+      });
     }
   );
 
@@ -176,6 +178,7 @@ function apiDocumentEndpoints(app) {
     "/v1/document/upload/:folderName",
     [validApiKey, handleAPIFileUpload, validateWorkspaceSlugQuery],
     async (request, response) => {
+      return require('../../../utils/documentUpdates/guard').catalogWriteLease(request,response,async()=>{
       /*
       #swagger.tags = ['Documents']
       #swagger.description = 'Upload a new file to a specific folder in AnythingLLM to be parsed and prepared for embedding. If the folder does not exist, it will be created.'
@@ -318,6 +321,7 @@ function apiDocumentEndpoints(app) {
         console.error(e.message, e);
         response.sendStatus(500).end();
       }
+      });
     }
   );
 

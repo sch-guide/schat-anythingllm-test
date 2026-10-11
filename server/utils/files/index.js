@@ -3,6 +3,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 const { v5: uuidv5, v4: uuidv4 } = require("uuid");
 const { Document } = require("../../models/documents");
+const { isArchivedDocument } = require("../documentUpdates/archive");
 const { DocumentSyncQueue } = require("../../models/documentSyncQueue");
 const { publicOriginalPdfMetadata } = require("../originalDocuments");
 const documentsPath =
@@ -783,6 +784,8 @@ async function fileToPickerData({
   liveSyncAvailable = false,
   cachefilename = null,
 }) {
+  const references = await Document.where({ docpath: cachefilename });
+  if (references.length && references.every(isArchivedDocument)) return null;
   let metadata = {};
   const filename = path.basename(pathToFile);
   const fileStats = fs.statSync(pathToFile);

@@ -1,5 +1,7 @@
 const fs = require("fs");
 const path = require("path");
+const { isArchivedDocument } = require("../documentUpdates/archive");
+const { guard } = require("../documentUpdates/guard");
 
 const documentsPath =
   process.env.NODE_ENV === "development"
@@ -20,10 +22,10 @@ class DocumentManager {
   async pinnedDocuments() {
     if (!this.workspace) return [];
     const { Document } = require("../../models/documents");
-    return await Document.where({
+    return (await Document.where({
       workspaceId: Number(this.workspace.id),
       pinned: true,
-    });
+    })).filter((document) => !isArchivedDocument(document));
   }
 
   async pinnedDocs() {
@@ -70,3 +72,8 @@ class DocumentManager {
 }
 
 module.exports.DocumentManager = DocumentManager;
+const readPinnedDocs = DocumentManager.prototype.pinnedDocs;
+DocumentManager.prototype.pinnedDocs = function (...args) {
+  if(!this.workspace)return readPinnedDocs.apply(this,args);
+  return require('../documentUpdates/searchSnapshot').withSearchSnapshot(this.workspace,()=>readPinnedDocs.apply(this,args));
+};

@@ -405,6 +405,7 @@ export default function useDocumentPicker({ slug }) {
     if (!listing) {
       dispatch({ type: "hydrate-failed" });
       return {
+        success: false,
         folders: stateRef.current.folders,
         docpaths: workspaceDocpathsForRefresh(
           null,
@@ -426,7 +427,7 @@ export default function useDocumentPicker({ slug }) {
       workspaceDocs,
       workspaceDocpaths: new Set(docpaths),
     });
-    return { folders, docpaths };
+    return { success: Boolean(currentWorkspace), folders, docpaths };
   }, [slug]);
 
   /** Fetch (or append) a page of files for a folder. Idempotent per status. */

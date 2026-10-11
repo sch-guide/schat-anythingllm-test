@@ -2,6 +2,7 @@ const { Document } = require("../../../../models/documents");
 const { safeJsonParse } = require("../../../http");
 const { summarizeContent } = require("../utils/summarize");
 const Provider = require("../providers/ai-provider");
+const { isArchivedDocument } = require("../../../documentUpdates/archive");
 
 const docSummarizer = {
   name: "document-summarizer",
@@ -72,9 +73,9 @@ const docSummarizer = {
               this.super.introspect(
                 `${this.caller}: Looking at the available documents.`
               );
-              const documents = await Document.where({
+              const documents = (await Document.where({
                 workspaceId: this.super.handlerProps.invocation.workspace_id,
-              });
+              })).filter((document) => !isArchivedDocument(document));
               if (documents.length === 0)
                 return "No documents found - nothing can be done. Stop.";
 

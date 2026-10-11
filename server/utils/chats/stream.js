@@ -222,6 +222,7 @@ async function streamChatWithWorkspace(
       const VectorDb = getVectorDbClass();
 
       const messageLimit = workspace?.openAiHistory || 20;
+      const retrieval = await require('../documentUpdates/searchSnapshot').withSearchSnapshot(workspace, async () => {
       const hasVectorizedSpace = await VectorDb.hasNamespace(workspace.slug);
       const embeddingsCount = await VectorDb.namespaceCount(workspace.slug);
 
@@ -264,11 +265,6 @@ async function streamChatWithWorkspace(
       // If we are here we know that we are in a workspace that is:
       // 1. Chatting in "chat" mode and may or may _not_ have embeddings
       // 2. Chatting in "query" mode and has at least 1 embedding
-      let completeText;
-      let metrics = {};
-      let safety = null;
-      let presentation = null;
-      let relatedImages = [];
       let contextTexts = [];
       let sources = [];
       let pinnedDocIdentifiers = [];
@@ -284,7 +280,6 @@ async function streamChatWithWorkspace(
 
       // Pinned docs — reuse pre-fetched if available, otherwise fetch with token cap.
       const pinnedDocs =
-        prefetchedPinnedDocs ??
         (await new DocumentManager({
           workspace,
           maxTokens: LLMConnector.promptWindowLimit(),
@@ -366,7 +361,7 @@ async function streamChatWithWorkspace(
       const filledSources = fillSourceWindow({
         nDocs: workspace?.topN || 4,
         searchResults: vectorSearchResults.sources,
-        history: rawHistory,
+        history: await require('../documentUpdates/searchSnapshot').filterArchivedHistory(workspace,rawHistory),
         filterIdentifiers: pinnedDocIdentifiers,
       });
 
@@ -379,6 +374,15 @@ async function streamChatWithWorkspace(
       // TLDR; reduces GitHub issues for "LLM citing document that has no answer in it" while keep answers highly accurate.
       contextTexts = [...contextTexts, ...filledSources.contextTexts];
       sources = [...sources, ...vectorSearchResults.sources];
+      return { contextTexts, sources, rawHistory, chatHistory, parsedFiles, vectorSearchResults };
+      }, {signal:session.signal});
+      if(!retrieval)return;
+      let {contextTexts,sources,rawHistory,chatHistory,parsedFiles,vectorSearchResults}=retrieval;
+      let completeText;
+      let metrics = {};
+      let safety = null;
+      let presentation = null;
+      let relatedImages = [];
 
       // Query mode and SCHAT employee chat both fail closed when retrieval found no
       // evidence, so Gemini cannot answer from general knowledge.

@@ -6,6 +6,7 @@ import { useDropzone } from "react-dropzone";
 import FileUploadProgress from "./FileUploadProgress";
 import Workspace from "../../../../../models/workspace";
 import debounce from "lodash.debounce";
+import DocumentUpdateStatus from "./DocumentUpdateStatus";
 import { getFilesFromUploadEvent } from "../../../../../utils/folderUpload";
 import {
   mergeUploadCompletion,
@@ -51,9 +52,35 @@ export default function UploadFile({
   queue,
   onUploadComplete,
   onLinkScraped,
+  onUpdateComplete,
 }) {
   const { t } = useTranslation();
-  const { ready, files, setFiles, enqueueDrop } = queue;
+  const {
+    ready,
+    busy,
+    updateState,
+    confirmUpdate,
+    cancelUpdate,
+    files,
+    setFiles,
+    enqueueDrop,
+  } = queue;
+  const lastUpdateResult = useRef(null);
+  useEffect(() => {
+    if (
+      updateState.phase !== "complete" ||
+      lastUpdateResult.current === updateState.result
+    )
+      return;
+    lastUpdateResult.current = updateState.result;
+    runUploadCompletionSync({ onUploadComplete: onUpdateComplete }).then(({ ok }) => {
+      if (!ok)
+        showToast(
+          "업데이트는 완료했지만 목록을 새로 불러오지 못했습니다. 문서 화면을 다시 열어 주세요.",
+          "error"
+        );
+    });
+  }, [updateState, onUpdateComplete]);
   const [fetchingUrl, setFetchingUrl] = useState(false);
   const pendingUploadDocpaths = useRef([]);
 
@@ -109,7 +136,7 @@ export default function UploadFile({
 
   const { getRootProps, getInputProps } = useDropzone({
     onDrop: enqueueDrop,
-    disabled: !ready,
+    disabled: !ready || busy,
     getFilesFromEvent: getFilesFromUploadEvent,
   });
 
@@ -160,6 +187,11 @@ export default function UploadFile({
           </div>
         )}
       </div>
+      <DocumentUpdateStatus
+        state={updateState}
+        onConfirm={confirmUpdate}
+        onCancel={cancelUpdate}
+      />
       {SHOW_LINK_UPLOAD && (
         <>
           <div className="text-center text-white text-opacity-50 text-xs font-medium w-[560px] py-2">

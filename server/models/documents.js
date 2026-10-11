@@ -5,6 +5,7 @@ const { Telemetry } = require("./telemetry");
 const { EventLogs } = require("./eventLogs");
 const { safeJsonParse } = require("../utils/http");
 const { getModelTag } = require("../endpoints/utils");
+const { isArchivedDocument, canonicalDocumentPath } = require("../utils/documentUpdates/archive");
 
 const Document = {
   writable: ["pinned", "watched", "lastUpdatedAt"],
@@ -81,6 +82,7 @@ const Document = {
   },
 
   addDocuments: async function (workspace, additions = [], userId = null) {
+    additions = additions.map(canonicalDocumentPath);
     const VectorDb = getVectorDbClass();
     if (additions.length === 0) return { failed: [], embedded: [] };
     const { fileData } = require("../utils/files");
@@ -106,6 +108,18 @@ const Document = {
         totalDocs: additions.length,
       };
 
+      const references = await prisma.workspace_documents.findMany({ where: { docpath: path } });
+      if (references.some((document) =>
+        isArchivedDocument(document) && document.workspaceId === workspace.id
+      ) || (references.length > 0 && references.every(isArchivedDocument))) {
+        failedToEmbed.push(path);
+        errors.add("Archived document cannot be re-added");
+        emitProgress(workspace.slug, {
+          type: "doc_failed", ...docProgress,
+          error: "Archived document cannot be re-added",
+        });
+        continue;
+      }
       const data = await fileData(path);
       if (!data) {
         emitProgress(workspace.slug, {
@@ -210,7 +224,7 @@ const Document = {
         docpath: path,
         workspaceId: workspace.id,
       });
-      if (!document) continue;
+      if (!document || isArchivedDocument(document)) continue;
       await VectorDb.deleteDocumentFromNamespace(
         workspace.slug,
         document.docId
@@ -261,6 +275,11 @@ const Document = {
       return { document: { id }, message: "No valid fields to update!" };
 
     try {
+      const existing = await prisma.workspace_documents.findFirst({ where: { id } });
+      if (!existing)
+        return { document: null, message: "Document not found" };
+      if (isArchivedDocument(existing))
+        return { document: null, message: "Archived document cannot be modified" };
       const document = await prisma.workspace_documents.update({
         where: { id },
         data,
@@ -380,4 +399,20 @@ for (const name of ['addDocuments', 'removeDocuments', 'update', 'delete', '_upd
   };
 }
 
+for (const name of ['addDocuments', 'removeDocuments', 'update']) {
+  const method = Document[name].bind(Document);
+  Document[name] = async (...args) => {
+    const {pathKeys,workspaceKey}=require('../utils/documentUpdates/scopes');
+    let workspaceId,paths;
+    if(name==='update') {
+      let row;
+      try {row=await prisma.workspace_documents.findFirst({where:{id:args[0]}});}
+      catch(error){return {document:null,message:error.message};}
+      if(!row)return method(...args);
+      workspaceId=row.workspaceId;paths=[row.docpath];
+    } else {workspaceId=args[0]?.id;paths=(args[1]||[]).map(canonicalDocumentPath);}
+    const keys=[workspaceKey(workspaceId),...await pathKeys(paths)];
+    return require('../utils/documentUpdates/guard').guard.read(()=>method(...args),keys);
+  };
+}
 module.exports = { Document };

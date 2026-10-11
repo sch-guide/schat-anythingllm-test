@@ -214,14 +214,15 @@ export default function Directory({
    * so the user does not have to upload and then move. Progress is reported
    * in the shared uploader below the picker.
    */
-  const uploadQueue = useUploadQueue();
+  const uploadQueue = useUploadQueue(workspace);
   const { enqueueIntoFolder } = uploadQueue;
   const handleFolderDrop = useCallback(
     async (folderName, event) => {
       // Must be called before anything awaits: a drop's DataTransferItems are
       // only readable while the drop event is being dispatched.
       const dropped = await getFilesFromUploadEvent(event.nativeEvent ?? event);
-      const { queued, skipped } = enqueueIntoFolder(dropped, folderName);
+      const { queued, skipped, blocked } = await enqueueIntoFolder(dropped, folderName);
+      if (blocked) return;
 
       if (queued === 0)
         return showToast(
@@ -234,7 +235,7 @@ export default function Directory({
       // The progress list lives in the uploader below the picker, which may be
       // scrolled out of view - confirm the drop landed so it does not look
       // like nothing happened.
-      showToast(`Uploading ${queued} file(s) to ${folderName}`, "info");
+      showToast(`${folderName} 폴더에 올릴 파일 ${queued}개를 확인했습니다.`, "info");
       if (skipped > 0)
         showToast(
           `${skipped} file(s) inside folders were skipped - drop a folder on the uploader below to add it as its own folder.`,
@@ -352,7 +353,7 @@ export default function Directory({
                     onToggleFile={toggleFile}
                     onPrefetch={prefetchFolder}
                     onLoadMore={loadMore}
-                    acceptsDrops={uploadQueue.ready}
+                    acceptsDrops={uploadQueue.ready && !uploadQueue.busy}
                     onDropFiles={handleFolderDrop}
                   />
                 ))
@@ -420,6 +421,7 @@ export default function Directory({
             queue={uploadQueue}
             onUploadComplete={syncAfterUpload}
             onLinkScraped={syncAfterUpload}
+            onUpdateComplete={refresh}
           />
         </div>
         <Modal isOpen={isFolderModalOpen} onClose={closeFolderModal} noPortal>

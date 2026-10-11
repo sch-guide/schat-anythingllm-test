@@ -6,6 +6,51 @@ import { v4 } from "uuid";
 import { ABORT_STREAM_EVENT } from "@/utils/chat";
 
 const Workspace = {
+  previewDocumentUpdate: async function (slug, names) {
+    const response = await fetch(
+      `${API_BASE}/workspace/${encodeURIComponent(slug)}/document-update-preview`,
+      {
+        method: "POST",
+        headers: { ...baseHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ names }),
+      }
+    );
+    const data = await response.json();
+    if (!response.ok)
+      throw new Error(data.error || "기존 자료 확인에 실패했습니다.");
+    return data;
+  },
+  replaceDocumentBatch: async function (slug, items, conflicts) {
+    const folders = new Set(
+      items.map((item) => item.folderName || "custom-documents")
+    );
+    if (folders.size !== 1)
+      throw new Error(
+        "여러 폴더의 문서는 한 번에 업데이트할 수 없습니다. 폴더별로 다시 선택해 주세요."
+      );
+    const form = new FormData();
+    for (const { file } of items) form.append("files", file, file.name);
+    form.append(
+      "manifest",
+      JSON.stringify({
+        names: items.map(({ file }) => file.name),
+        conflicts,
+        folderName: [...folders][0],
+      })
+    );
+    const response = await fetch(
+      `${API_BASE}/workspace/${encodeURIComponent(slug)}/document-update`,
+      {
+        method: "POST",
+        headers: baseHeaders(),
+        body: form,
+      }
+    );
+    const data = await response.json();
+    if (!response.ok)
+      throw new Error(data.error || "문서 업데이트 요청에 실패했습니다.");
+    return data;
+  },
   workspaceOrderStorageKey: "anythingllm-workspace-order",
   /** The maximum percentage of the context window that can be used for attachments */
   maxContextWindowLimit: 0.8,

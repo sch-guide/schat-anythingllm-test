@@ -9,9 +9,21 @@ const {
 } = require(".");
 const { Document } = require("../../models/documents");
 const { Workspace } = require("../../models/workspace");
+const prisma = require("../../utils/prisma");
+const { isArchivedDocument } = require("../documentUpdates/archive");
+const { guard } = require("../documentUpdates/guard");
+
+async function assertNoArchivedReferences(docpaths) {
+  // Fail closed on DB read errors: retained references protect historical sources.
+  const references = await prisma.workspace_documents.findMany({
+    where: { docpath: { in: docpaths } },
+  });
+  if (references.some(isArchivedDocument)) throw new Error("ARCHIVED_DOCUMENT_PROTECTED");
+}
 
 async function purgeDocument(filename = null) {
   if (!filename || !normalizePath(filename)) return;
+  await assertNoArchivedReferences([normalizePath(filename).replace(/\\/g, "/")]);
 
   await purgeVectorCache(filename);
   await purgeSourceDocument(filename);
@@ -56,8 +68,9 @@ async function purgeFolder(folderName = null) {
   const filenames = fs
     .readdirSync(subFolderPath)
     .map((file) =>
-      path.join(subFolderPath, file).replace(documentsPath + "/", "")
+      path.relative(documentsPath, path.join(subFolderPath, file)).replace(/\\/g, "/")
     );
+  await assertNoArchivedReferences(filenames);
   const workspaces = await Workspace.where();
 
   const purgePromises = [];
@@ -85,7 +98,21 @@ async function purgeFolder(folderName = null) {
   return;
 }
 
+async function withDocumentPaths(paths,operation) {
+  if(!paths.length)return operation();
+  const {pathKeys,workspaceKey}=require('../documentUpdates/scopes');
+  const rows=await prisma.workspace_documents.findMany({where:{docpath:{in:paths}}});
+  const keys=[...await pathKeys(paths),...rows.map(row=>workspaceKey(row.workspaceId))];
+  return guard.read(operation,keys);
+}
 module.exports = {
-  purgeDocument,
-  purgeFolder,
+  purgeDocument: filename => filename
+    ? withDocumentPaths([normalizePath(filename).replace(/\\/g,'/')],()=>purgeDocument(filename)) : purgeDocument(filename),
+  purgeFolder: async folderName => {
+    if(!folderName)return;
+    const target=path.resolve(documentsPath,normalizePath(folderName));
+    if(!isWithin(documentsPath,target))return;
+    const filenames=fs.readdirSync(target).map(file=>path.relative(documentsPath,path.join(target,file)).replace(/\\/g,'/'));
+    return withDocumentPaths(filenames,()=>purgeFolder(folderName));
+  },
 };

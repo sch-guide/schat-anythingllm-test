@@ -7,6 +7,7 @@ const {
 const { moveProcessedDocsToFolder } = require("../utils/files");
 const { Workspace } = require("../models/workspace");
 const { Document } = require("../models/documents");
+const { previewDocumentUpdates } = require("../utils/documentUpdates/preview");
 const { DocumentVectors } = require("../models/vectors");
 const { WorkspaceChats } = require("../models/workspaceChats");
 const { getVectorDbClass, stripThinkingFromText } = require("../utils/helpers");
@@ -89,6 +90,78 @@ function workspaceEndpoints(app) {
   if (!app) return;
   const responseCache = new Map();
 
+  // Confirmed batch update: isolated PDF preparation precedes guarded cutover.
+  app.post(
+    '/workspace/:slug/document-update',
+    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager]), validWorkspaceSlug,
+      require('../utils/documentUpdates/readiness').requireDocumentUpdateReady,
+      require('../utils/documentUpdates/upload').handleDocumentUpdateUpload],
+    async (request,response)=>{
+      try {
+        const manifest=JSON.parse(request.body?.manifest || 'null');
+        const result=await require('../utils/documentUpdates/service').executeDocumentUpdate({
+          workspace:response.locals.workspace,files:request.files,manifest,
+        });
+        // 새 버전 문서의 동의어 후보: 같은 후보는 다시 만들지 않고 새 표현만 "검토 필요".
+        if (result?.success)
+          await scheduleSynonymSuggestions(
+            (result.results || []).flatMap((item) => (item.documents || []).map((doc) => ({ location: doc.docpath }))),
+            { trigger: 'document_update' }
+          );
+        return response.status(200).json(result);
+      } catch(error) {
+        const knownCodes=new Set(['DOCUMENT_UPDATE_LOCKED','DOCUMENT_UPDATE_BUSY',
+          'DOCUMENT_UPDATE_RECOVERY_REQUIRED','DOCUMENT_UPDATE_UNLOCK_REQUIRED',
+          'PDF_ONLY','CHROMA_REQUIRED','SHARED_DOCUMENT_UPDATE_UNSUPPORTED',
+          'WATCHED_DOCUMENT_UPDATE_UNSUPPORTED','DOCUMENT_PREVIEW_CHANGED',
+          'MIXED_DOCUMENT_SCOPE_UNSUPPORTED','OLD_VECTOR_MAPPING_INCOMPLETE',
+          'UNASSOCIATED_DOCUMENT_UPDATE_UNSUPPORTED',
+          'BATCH_CHANGED','INVALID_FOLDER','PDF_PREPARATION_FAILED',
+          'ISOLATED_COLLECTOR_REQUIRED','VECTOR_PREPARATION_FAILED',
+          'VECTOR_VERIFICATION_FAILED','OLD_VECTORS_REMAIN',
+          'SEARCH_CACHE_VERIFICATION_FAILED','PAST_SOURCE_INDEX_UNAVAILABLE']);
+        const code=knownCodes.has(error.message)?error.message:'DOCUMENT_UPDATE_FAILED';
+        const conflict=['DOCUMENT_UPDATE_LOCKED','DOCUMENT_UPDATE_BUSY'].includes(code);
+        const locked=conflict || /RECOVERY|UNLOCK/.test(code);
+        const unsupported=/PDF_ONLY|CHROMA_REQUIRED|UNSUPPORTED/.test(code);
+        return response.status(locked?423:unsupported?422:409).json({
+          success:false,code,
+          error:conflict
+            ? '이 문서는 지금 업데이트 중입니다. 잠시 후 다시 시도해 주세요.'
+            : locked
+            ? '문서 업데이트 복구 확인이 필요하여 검색을 잠갔습니다. 관리자에게 문의해주세요.'
+            : unsupported
+              ? '이 묶음은 안전하게 업데이트할 수 없습니다. PDF 형식, 공유 여부와 문서 자동 동기화 설정을 확인해주세요.'
+              : '문서 업데이트를 완료하지 못했습니다. 기존 자료를 유지하거나 복구한 뒤 중단했습니다.',
+        });
+      } finally {
+        await require('../utils/documentUpdates/upload').cleanupIncoming(request.files);
+      }
+    }
+  );
+
+  // Preflight only: no file upload, embedding, deletion, or metadata writes.
+  app.post(
+    "/workspace/:slug/document-update-preview",
+    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager]), validWorkspaceSlug],
+    async (request, response) => {
+      try {
+        const { documentsPath } = require("../utils/files");
+        const { names } = reqBody(request);
+        const preview = await previewDocumentUpdates({ root: documentsPath, names });
+        return response.status(200).json({ success: true, ...preview });
+      } catch (error) {
+        const invalid = ["INVALID_UPLOAD_NAMES", "DUPLICATE_BATCH_NAME"].includes(error.message);
+        return response.status(invalid ? 400 : 409).json({
+          success: false,
+          error: invalid
+            ? "파일 이름을 확인해주세요. 같은 이름의 파일은 한 번에 하나씩 올려주세요."
+            : "기존 자료를 확인하지 못해 업로드를 중단함. 문서 목록을 확인해주세요.",
+        });
+      }
+    }
+  );
+
   app.post(
     "/workspace/new",
     [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
@@ -163,6 +236,7 @@ function workspaceEndpoints(app) {
       handleFileUpload,
     ],
     async function (request, response) {
+      return require('../utils/documentUpdates/guard').catalogWriteLease(request,response,async()=>{
       let stagedOriginal = null;
       let stagedDocumentId = null;
       let collectorSucceeded = false;
@@ -254,6 +328,7 @@ function workspaceEndpoints(app) {
           })
           .end();
       }
+      });
     }
   );
 
@@ -360,6 +435,8 @@ function workspaceEndpoints(app) {
               : null,
         });
       } catch (e) {
+        if (['DOCUMENT_UPDATE_LOCKED','DOCUMENT_UPDATE_BUSY'].includes(e.message))
+          return response.status(423).json({success:false,code:'DOCUMENT_UPDATE_LOCKED',error:'이 문서는 지금 업데이트 중입니다. 잠시 후 다시 시도해 주세요.'});
         console.error(e.message, e);
         response.sendStatus(500).end();
       }
@@ -387,6 +464,8 @@ function workspaceEndpoints(app) {
           return;
         }
 
+        await require('../utils/documentUpdates/scopes').operations.reset(
+          workspace.id, `workspace-delete-${workspace.id}`, async () => {
         await WorkspaceChats.delete({ workspaceId: Number(workspace.id) });
         await DocumentVectors.deleteForWorkspace(workspace.id);
         await Document.delete({ workspaceId: Number(workspace.id) });
@@ -405,8 +484,11 @@ function workspaceEndpoints(app) {
         } catch (e) {
           console.error(e.message);
         }
+        });
         response.sendStatus(200).end();
       } catch (e) {
+        if (['DOCUMENT_UPDATE_LOCKED', 'DOCUMENT_UPDATE_BUSY'].includes(e.message))
+          return response.status(423).json({ success: false, code: 'DOCUMENT_UPDATE_LOCKED', error: '이 문서는 지금 업데이트 중입니다. 잠시 후 다시 시도해 주세요.' });
         console.error(e.message, e);
         response.sendStatus(500).end();
       }
@@ -430,6 +512,8 @@ function workspaceEndpoints(app) {
           return;
         }
 
+        await require('../utils/documentUpdates/scopes').operations.reset(
+          workspace.id, `workspace-reset-${workspace.id}`, async () => {
         await DocumentVectors.deleteForWorkspace(workspace.id);
         await Document.delete({ workspaceId: Number(workspace.id) });
 
@@ -446,8 +530,11 @@ function workspaceEndpoints(app) {
         } catch (e) {
           console.error(e.message);
         }
+        });
         response.sendStatus(200).end();
       } catch (e) {
+        if (['DOCUMENT_UPDATE_LOCKED', 'DOCUMENT_UPDATE_BUSY'].includes(e.message))
+          return response.status(423).json({ success: false, code: 'DOCUMENT_UPDATE_LOCKED', error: '이 문서는 지금 업데이트 중입니다. 잠시 후 다시 시도해 주세요.' });
         console.error(e.message, e);
         response.sendStatus(500).end();
       }
@@ -1005,6 +1092,8 @@ function workspaceEndpoints(app) {
         await Document.update(document.id, { pinned: pinStatus });
         return response.status(200).end();
       } catch (error) {
+        if (['DOCUMENT_UPDATE_LOCKED','DOCUMENT_UPDATE_BUSY'].includes(error.message))
+          return response.status(423).json({success:false,code:'DOCUMENT_UPDATE_LOCKED',error:'이 문서는 지금 업데이트 중입니다. 잠시 후 다시 시도해 주세요.'});
         console.error("Error processing the pin status update:", error);
         return response.status(500).end();
       }
@@ -1167,6 +1256,7 @@ function workspaceEndpoints(app) {
       handleFileUpload,
     ],
     async function (request, response) {
+      return require('../utils/documentUpdates/guard').catalogWriteLease(request,response,async()=>{
       let stagedOriginal = null;
       let stagedDocumentId = null;
       let collectorSucceeded = false;
@@ -1266,6 +1356,7 @@ function workspaceEndpoints(app) {
           })
           .end();
       }
+      });
     }
   );
 
@@ -1292,6 +1383,8 @@ function workspaceEndpoints(app) {
         await purgeDocument(body.documentLocation);
         response.status(200).end();
       } catch (e) {
+        if (['DOCUMENT_UPDATE_LOCKED','DOCUMENT_UPDATE_BUSY'].includes(e.message))
+          return response.status(423).json({success:false,code:'DOCUMENT_UPDATE_LOCKED',error:'이 문서는 지금 업데이트 중입니다. 잠시 후 다시 시도해 주세요.'});
         console.error(e.message, e);
         response.sendStatus(500).end();
       }

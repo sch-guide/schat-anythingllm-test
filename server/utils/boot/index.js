@@ -32,6 +32,7 @@ function bootSSL(app, port = 3001) {
 
     server
       .listen(port, async () => {
+        require('../documentUpdates/recovery').startRecovery();
         await migrateWebBrowsingToDefault(); // must run before markOnboarded() so a fresh instance is not mistaken for an existing one.
         await markOnboarded();
         await setupTelemetry();
@@ -66,6 +67,7 @@ function bootHTTP(app, port = 3001) {
 
   app
     .listen(port, async () => {
+      require('../documentUpdates/recovery').startRecovery();
       await migrateWebBrowsingToDefault(); // must run before markOnboarded() so a fresh instance is not mistaken for an existing one.
       await markOnboarded();
       await setupTelemetry();

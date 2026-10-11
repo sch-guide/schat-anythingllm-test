@@ -135,8 +135,8 @@ export async function runUploadCompletionSync({
 } = {}) {
   if (typeof onUploadComplete !== "function") return { ok: true };
   try {
-    await onUploadComplete(docpaths);
-    return { ok: true };
+    const result = await onUploadComplete(docpaths);
+    return { ok: result?.success !== false };
   } catch {
     return { ok: false };
   }

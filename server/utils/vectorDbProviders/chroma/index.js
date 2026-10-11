@@ -38,6 +38,20 @@ const COLLECTION_REGEX = new RegExp(
 class Chroma extends VectorDatabase {
   constructor() {
     super();
+    const { guard } = require('../../documentUpdates/guard');
+    const { searchKey } = require('../../documentUpdates/scopes');
+    for (const name of ['addDocumentToNamespace', 'deleteDocumentFromNamespace',
+      'deleteVectorsInNamespace', 'performSimilaritySearch', 'similarityResponse',
+      'smartAdd', 'smartDelete']) {
+      const method = this[name].bind(this);
+      this[name] = (...args) => {
+        const namespace = ['performSimilaritySearch','similarityResponse'].includes(name)
+          ? args[0]?.namespace : name==='deleteVectorsInNamespace' ? args[1]
+            : ['smartAdd','smartDelete'].includes(name) ? args[0]?.name : args[0];
+        if(!namespace)return method(...args);
+        return guard.readWhenAvailable(()=>method(...args),[searchKey(this.normalize(namespace))],{signal:args[0]?.signal || require('../../chatAdmissionContext').currentAdmissionSignal()});
+      };
+    }
   }
 
   get name() {

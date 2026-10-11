@@ -476,6 +476,8 @@ function systemEndpoints(app) {
         await purgeDocument(name);
         response.sendStatus(200).end();
       } catch (e) {
+        if (['DOCUMENT_UPDATE_LOCKED','DOCUMENT_UPDATE_BUSY'].includes(e.message))
+          return response.status(423).json({success:false,code:'DOCUMENT_UPDATE_LOCKED',error:'이 문서는 지금 업데이트 중입니다. 잠시 후 다시 시도해 주세요.'});
         console.error(e.message, e);
         response.sendStatus(500).end();
       }
@@ -491,6 +493,8 @@ function systemEndpoints(app) {
         for await (const name of names) await purgeDocument(name);
         response.sendStatus(200).end();
       } catch (e) {
+        if (['DOCUMENT_UPDATE_LOCKED','DOCUMENT_UPDATE_BUSY'].includes(e.message))
+          return response.status(423).json({success:false,code:'DOCUMENT_UPDATE_LOCKED',error:'이 문서는 지금 업데이트 중입니다. 잠시 후 다시 시도해 주세요.'});
         console.error(e.message, e);
         response.sendStatus(500).end();
       }
@@ -506,6 +510,8 @@ function systemEndpoints(app) {
         await purgeFolder(name);
         response.sendStatus(200).end();
       } catch (e) {
+        if (['DOCUMENT_UPDATE_LOCKED','DOCUMENT_UPDATE_BUSY'].includes(e.message))
+          return response.status(423).json({success:false,code:'DOCUMENT_UPDATE_LOCKED',error:'이 문서는 지금 업데이트 중입니다. 잠시 후 다시 시도해 주세요.'});
         console.error(e.message, e);
         response.sendStatus(500).end();
       }

@@ -548,6 +548,6 @@ function formatJSON(
 }
 
 module.exports.OpenAICompatibleChat = {
-  chatSync,
-  streamChat,
+  chatSync: options => require('../documentUpdates/searchSnapshot').withSearchSnapshot(options.workspace,()=>chatSync(options)),
+  streamChat: options => require('../documentUpdates/searchSnapshot').withSearchSnapshot(options.workspace,()=>streamChat(options),{response:options.response}),
 };
