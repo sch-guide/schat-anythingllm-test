@@ -47,6 +47,32 @@ test("후보 입력에는 이름·번호·병실·메모를 넣지 않고 표시
   for (const privateText of ["김민지", "12345678", "612호", "비밀메모"])
     assert.equal(json.includes(privateText), false);
 });
+test("이름 뒤 님·환자분의 호칭 변형은 예시와 전송 표현에서 제외", () => {
+  for (const prompt of [
+    "김민지님이요 산포도",
+    "김민지 환자분은 산포도",
+    "홍길동님이라고 산포도",
+    "이영희 환자분께서는 산포도",
+  ]) {
+    const result = api.collectExpressions(
+      [1, 2].map((id) => ({ id, prompt, response: '{"sources":[]}' }))
+    );
+    assert.deepEqual(
+      result.map((item) => item.term),
+      ["산포도"]
+    );
+    assert.doesNotMatch(
+      JSON.stringify(result),
+      /김민지|홍길동|이영희|님이요|환자분/
+    );
+    assert.doesNotMatch(api.safeExample(prompt), /김민지|홍길동|이영희/);
+  }
+  assert.equal(
+    api.safeExample("산소포화도 환자는 유지"),
+    "산소포화도 환자는 유지"
+  );
+  assert.equal(api.safeExample("혈액투석 환자는 유지"), "혈액투석 환자는 유지");
+});
 
 test("AI가 입력 밖의 용어를 만들거나 이미 거절한 말을 다른 묶음으로 제안하면 버림", () => {
   assert.equal(typeof api.checkMatches, "function");

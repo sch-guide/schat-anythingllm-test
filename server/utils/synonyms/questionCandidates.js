@@ -1,6 +1,5 @@
 // 직원 질문 후보의 순수 검사와 호출 예약. 실제 AI/예약 작업 연결은 별도 경계에서 수행한다.
 const { randomUUID } = require("node:crypto");
-const { maskMemo } = require("../answerFeedback");
 const { termKey, validateSynonymGroup } = require("./index");
 const { containsPrivateInfo } = require("./suggestions");
 const LABEL = "schat_question_synonym_budget_v1";
@@ -23,18 +22,33 @@ const STOP = new Set([
 ]);
 
 function safeExample(prompt) {
-  return maskMemo(
+  return (
     String(prompt || "")
       .normalize("NFKC")
       .slice(0, 4000)
-  )
-    .replace(/\d{2,4}\s*(?:호실|호)(?![가-힣])/g, "[병실]")
-    .replace(/\b\d{2,4}[- )]\d{3,4}[- ]\d{4}\b/g, "[번호]")
-    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[연락처]")
-    .replace(/\d{5,}/g, "[번호]")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 200);
+      // 호칭 뒤 문법을 열거하지 않고 이름+호칭 문맥 전체를 제거한다.
+      .replace(/(?<![가-힣])[가-힣]{2,4}\s*님[가-힣]*/gu, "[이름]")
+      // 일반 의료 용어+환자는 이름으로 가리지 않도록 성씨 문맥을 한정한다.
+      .replace(
+        /(?<![가-힣])[김이박최정강조윤장임한오서신권황안송전홍유고문양손배백허남심노하곽성차주우구민진지엄채원천방공현함변염여][가-힣]{1,3}\s*환자(?:분)?[가-힣]*/gu,
+        "[이름]"
+      )
+      .replace(
+        /(?<![가-힣])((?:성명|이름)\s*[:：]?\s*)[가-힣]{2,4}/gu,
+        "$1[이름]"
+      )
+      .replace(
+        /(?<![가-힣])(환자\s*[:：]?\s*)[김이박최정강조윤장임한오서신권황안송전홍유고문양손배백허남심노하곽성차주우구민진지엄채원천방공현함변염여][가-힣]{1,3}/gu,
+        "$1[이름]"
+      )
+      .replace(/\d{2,4}\s*(?:호실|호)(?![가-힣])/g, "[병실]")
+      .replace(/\b\d{2,4}[- )]\d{3,4}[- ]\d{4}\b/g, "[번호]")
+      .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[연락처]")
+      .replace(/\d{5,}/g, "[번호]")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 200)
+  );
 }
 
 function collectExpressions(rows = []) {
