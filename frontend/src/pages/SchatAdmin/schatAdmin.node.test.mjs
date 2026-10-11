@@ -22,7 +22,6 @@ test("the wrench opens exactly the SCHAT admin sections in order", () => {
       "체크리스트 관리",
       "동의어 관리",
       "사용 통계",
-      "시스템 연결",
       "시스템 상태",
       "저장공간 정리",
     ]
@@ -33,6 +32,7 @@ test("the wrench opens exactly the SCHAT admin sections in order", () => {
   // 작업 공간 삭제(위험 설정)는 관리자 메뉴에서 뺐다.
   assert.doesNotMatch(labels, /위험 설정/);
   assert.equal(findSchatAdminSection("danger").key, "brand");
+  assert.equal(findSchatAdminSection("connections").key, "status");
 });
 
 test("settings sidebar no longer links the upstream menus", () => {

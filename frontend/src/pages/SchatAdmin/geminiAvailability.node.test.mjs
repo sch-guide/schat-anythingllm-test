@@ -45,7 +45,7 @@ test("budget presentation shows unavailable instead of zero and independent 80/9
   assert.doesNotMatch(m.exports.missing, />0(?:원|%)/);
   assert.match(
     m.exports.missing,
-    /임베딩, PDF 이미지 설명, 퀴즈 생성, 동의어 자동 생성/
+    /문서 검색 자료 만들기, PDF 이미지 설명, 퀴즈 생성, 동의어 자동 생성/
   );
   assert.match(m.exports.warning, /80%/);
   assert.match(m.exports.warning, /주의/);

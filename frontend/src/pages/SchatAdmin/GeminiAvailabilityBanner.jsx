@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { API_BASE } from "@/utils/constants";
 import { baseHeaders } from "@/utils/request";
+import { Help } from './ui';
 
 export default function GeminiAvailabilityBanner() {
   const { data, error } = useGeminiAvailability();
@@ -61,7 +62,7 @@ export function useGeminiAvailability() {
 }
 
 export const BUDGET_NOTICE =
-  "현재 표시되는 AI 예산 사용률은 SCHAT에 기록된 채팅 사용량을 기준으로 계산한 추정치입니다. 임베딩, PDF 이미지 설명, 퀴즈 생성, 동의어 자동 생성 등 일부 Gemini 사용량은 포함되지 않아 실제 사용액과 다를 수 있습니다.";
+  "현재 표시되는 AI 예산 사용률은 SCHAT에 기록된 채팅 사용량을 기준으로 계산한 추정치입니다. 문서 검색 자료 만들기, PDF 이미지 설명, 퀴즈 생성, 동의어 자동 생성 등 일부 Gemini 사용량은 포함되지 않아 실제 사용액과 다를 수 있습니다.";
 
 export function GeminiAvailabilityNotice({ alerts = [], budget }) {
   const warn =
@@ -115,9 +116,9 @@ export function GeminiAvailabilityNotice({ alerts = [], budget }) {
             })}
             %
           </p>
-          <p className="text-sm mt-2">{BUDGET_NOTICE}</p>
+          <p className="text-sm mt-2">채팅 사용 기록 기준 추정치입니다. <Help>{BUDGET_NOTICE}</Help></p>
           <p className="text-sm">
-            예산 추정치만으로 질문을 차단하지 않음. 실제 API 한도 상태와 별개임.
+            예산 추정치만으로 질문을 차단하지 않음. 실제 AI 한도 상태와 별개임.
           </p>
         </div>
       )}

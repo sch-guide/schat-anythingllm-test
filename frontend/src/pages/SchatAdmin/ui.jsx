@@ -1,6 +1,6 @@
 // Small building blocks shared by the SCHAT admin sections. Wording on these
 // screens is written for non-developer hospital administrators.
-import { useId } from "react";
+import React, { useId } from "react";
 
 export const inputClass =
   "schat-admin-input w-full rounded-lg px-3 py-2 text-sm outline-none bg-theme-settings-input-bg text-theme-text-primary placeholder:text-theme-settings-input-placeholder border border-transparent focus:border-sky-500";

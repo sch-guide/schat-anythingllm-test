@@ -62,11 +62,6 @@ export const SCHAT_ADMIN_SECTIONS = [
       "직원들이 무엇을 물었는지, 어떤 지침이 많이 쓰였는지 기간별로 봅니다. 개인별 기록은 보여주지 않습니다.",
   },
   {
-    key: "connections",
-    label: "시스템 연결",
-    description: "AI 답변과 문서 검색에 쓰는 API 키를 확인하고 교체합니다.",
-  },
-  {
     key: "status",
     label: "시스템 상태",
     description: "등록 문서, 체크리스트, 검색 데이터와 연결 상태를 확인합니다.",
@@ -80,6 +75,7 @@ export const SCHAT_ADMIN_SECTIONS = [
 ];
 
 export function findSchatAdminSection(key) {
+  if (key === "connections") key = "status";
   return (
     SCHAT_ADMIN_SECTIONS.find((section) => section.key === key) ||
     SCHAT_ADMIN_SECTIONS[0]

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { API_BASE } from "@/utils/constants";
 import { baseHeaders } from "@/utils/request";
-import { Card, Field, Button, inputClass } from "./ui";
+import { Card, Field, Help, Button, inputClass } from "./ui";
 import {
   BUDGET_NOTICE,
   useGeminiAvailability,
@@ -45,13 +45,13 @@ export function GeminiBudgetSummary({ budget }) {
       {!available && (
         <p>{budget?.reason || "사용량 또는 단가 설정이 부족함."}</p>
       )}
-      <p className="text-theme-text-secondary">{BUDGET_NOTICE}</p>
-      <p className="text-theme-text-secondary">
+      <p className="text-theme-text-secondary">채팅 사용 기록 기준 추정치입니다. <Help>{BUDGET_NOTICE}</Help></p>
+      <Help>
         한국 시간 기준 이번 달 기록을 계산함. 과거 대화가 삭제되면 추정치도
         달라질 수 있음. 단가 변경 시 이번 달 전체 기록에 적용함.
-      </p>
+      </Help>
       {budget?.missingChats > 0 && (
-        <p>토큰·모델 확인이 필요한 채팅 기록: {budget.missingChats}건</p>
+        <p>사용량 확인이 필요한 채팅 기록: {budget.missingChats}건</p>
       )}
     </div>
   );
@@ -124,8 +124,8 @@ export default function GeminiBudgetPanel() {
   }
   return (
     <Card
-      title="Gemini AI 상태와 예상 예산"
-      description="실제 API 오류 상태와 채팅 사용량 기준 예산 추정치는 서로 별개임."
+      title="예상 비용 설정"
+      help="실제 AI 연결 상태와 채팅 사용량 기준 예산 추정치는 서로 별개입니다."
     >
       {error && (
         <p role="alert">
@@ -167,10 +167,10 @@ export default function GeminiBudgetPanel() {
               }
             />
           </Field>
-          <p className="text-sm text-theme-text-secondary">
-            모델별 100만 토큰당 예상 원화 단가를 입력함. 공식 가격과 환율을
+          <Help>
+            모델별 처리 단위 100만 개당 예상 원화 단가를 입력함. 공식 가격과 환율을
             확인하여 정하는 관리용 단가이며 실제 청구액이 아님.
-          </p>
+          </Help>
           {form.rates.map((rate, index) => (
             <div
               key={index}
@@ -191,7 +191,7 @@ export default function GeminiBudgetPanel() {
                 />
               </Field>
               <Field
-                label="입력 100만 토큰 예상 단가 (원)"
+                label="읽는 분량 100만 단위 예상 단가 (원)"
                 htmlFor={`gemini-input-${index}`}
               >
                 <input
@@ -209,7 +209,7 @@ export default function GeminiBudgetPanel() {
                 />
               </Field>
               <Field
-                label="출력 100만 토큰 예상 단가 (원)"
+                label="작성 분량 100만 단위 예상 단가 (원)"
                 htmlFor={`gemini-output-${index}`}
               >
                 <input

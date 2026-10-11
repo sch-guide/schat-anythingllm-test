@@ -1,8 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import System from "@/models/system";
 import SchatAdmin from "@/models/schatAdmin";
-import { Badge, Button, Card, InfoRow, Loading, Notice } from "../ui";
+import { Button, Card, InfoRow, Loading, Notice } from "../ui";
 import GeminiBudgetPanel from '../GeminiBudgetPanel';
+import ConnectionsSection from './Connections';
+import ChatAdmissionPanel from '../ChatAdmissionPanel';
+import { useGeminiAvailability } from '../GeminiAvailabilityBanner';
+import { SystemLights } from '../SystemOverview';
+import { Link } from 'react-router-dom';
 
 // Plain-language names for the system records admins are likely to see.
 export const EVENT_LABELS = {
@@ -30,7 +35,7 @@ export const EVENT_LABELS = {
   invite_deleted: "초대 링크 삭제",
   multi_user_mode_enabled: "다중 사용자 모드 사용",
   update_llm_provider: "AI 답변 서비스 설정 변경",
-  update_embedding_engine: "검색 임베딩 설정 변경",
+  update_embedding_engine: "문서 검색 설정 변경",
   update_vector_db: "검색 데이터 저장소 설정 변경",
   event_logs_cleared: "시스템 기록 삭제",
   schat_connection_test: "연결 테스트",
@@ -105,10 +110,38 @@ function formatNumber(value) {
 
 export default function StatusSection() {
   const [status, setStatus] = useState(null);
+  const [admission, setAdmission] = useState(null);
+  const [details, setDetails] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [connectionResult, setConnectionResult] = useState(null);
+  const connectionRevision = useRef(0);
+  const { data: availability, error: availabilityError } = useGeminiAvailability();
 
   useEffect(() => {
-    SchatAdmin.status().then((value) => setStatus(value || { error: true }));
+    let active = true;
+    SchatAdmin.status().then((value) => { if(active) setStatus(value || { error: true }); })
+      .catch(() => { if(active) setStatus({error:true}); });
+    return () => { active=false; };
   }, []);
+
+  async function testConnections() {
+    const revision = connectionRevision.current;
+    setTesting(true);
+    setConnectionResult(null);
+    try {
+      const results = await Promise.all(['llm','embedding'].map(target => SchatAdmin.connectionTest(target)));
+      if (revision === connectionRevision.current)
+        setConnectionResult({ ok: results.every(result => result?.ok === true) });
+    } catch { if (revision === connectionRevision.current) setConnectionResult({ ok:false }); }
+    finally { setTesting(false); }
+  }
+
+  async function connectionSaved() {
+    connectionRevision.current += 1;
+    setConnectionResult(null);
+    try { setStatus(await SchatAdmin.status() || {error:true}); }
+    catch { setStatus({error:true}); }
+  }
 
   if (!status) return <Loading />;
   if (status.error)
@@ -117,10 +150,15 @@ export default function StatusSection() {
   const { workspaces = [], checklists, connections } = status;
   return (
     <div className="flex flex-col gap-y-5">
-      <GeminiBudgetPanel />
+      <SystemLights ai={availability?.state} aiError={availabilityError} daily={admission?.dailyUsage}
+        connections={connections} connectionResult={connectionResult} />
+      <Button className="self-start" variant="secondary" onClick={testConnections} disabled={testing}>
+        {testing ? '확인 중…' : '연결 시험'}
+      </Button>
+      <ChatAdmissionPanel onState={setAdmission} showDaily={false} />
       <Card
-        title="문서와 검색 데이터"
-        description="읽기 전용 정보입니다. 문서 추가·삭제는 작업 공간의 문서 업로드에서 합니다."
+        title="등록 지침과 체크리스트"
+        help="지침 추가·삭제는 문서 관리 화면에서 합니다."
       >
         {workspaces.map((ws) => (
           <div key={ws.slug}>
@@ -129,12 +167,9 @@ export default function StatusSection() {
                 {ws.name}
               </p>
             )}
-            <InfoRow label="등록 문서 수">
+            <InfoRow label="등록 지침 수">
               {formatNumber(ws.documents?.files)}개 (검색용{" "}
               {formatNumber(ws.documents?.pages)}쪽)
-            </InfoRow>
-            <InfoRow label="검색 데이터(벡터) 수">
-              {formatNumber(ws.vectors)}개
             </InfoRow>
             <InfoRow label="답변 규칙">
               {ws.inheritsDefaultPrompt
@@ -148,29 +183,19 @@ export default function StatusSection() {
             ? `${formatNumber(checklists.total)}개 (공개 ${formatNumber(checklists.active)} · 검토 필요 ${formatNumber(checklists.review)}${checklists.hidden ? ` · 숨김 ${formatNumber(checklists.hidden)}` : ""})`
             : "확인 불가"}
         </InfoRow>
+        <Link to="/settings/schat/checklists" className="text-sm text-sky-600 underline">검토하러 가기</Link>
       </Card>
-      <Card
-        title="연결 상태"
-        description="API 키가 등록되어 있는지 보여 줍니다. 실제 연결 여부는 '시스템 연결'의 연결 테스트로 확인할 수 있습니다."
-      >
-        <InfoRow label="AI 답변">
-          <KeyBadge info={connections?.llm} />
-        </InfoRow>
-        <InfoRow label="검색 임베딩">
-          <KeyBadge info={connections?.embedding} />
-        </InfoRow>
-      </Card>
-      <RecentEvents />
+      <details onToggle={event => setDetails(event.currentTarget.open)} className="rounded-xl border border-theme-sidebar-border p-4 text-theme-text-primary">
+        <summary className="cursor-pointer font-medium">자세히 보기</summary>
+        {details && <div className="mt-4 flex flex-col gap-4">
+          <GeminiBudgetPanel />
+          <RecentEvents />
+          <Card title="AI 설정" help="거의 안 씀. 연결 정보를 바꾸면 직원 답변에 영향을 줄 수 있습니다.">
+            <ConnectionsSection onSaved={connectionSaved} />
+          </Card>
+        </div>}
+      </details>
     </div>
-  );
-}
-
-function KeyBadge({ info }) {
-  if (!info) return "확인 불가";
-  return info.keySet ? (
-    <Badge tone="ok">API 키 등록됨 · {info.model || "모델 미설정"}</Badge>
-  ) : (
-    <Badge tone="warning">API 키 미등록</Badge>
   );
 }
 
@@ -186,7 +211,7 @@ function RecentEvents() {
   return (
     <Card
       title="시스템 기록"
-      description="로그인, 문서 업로드, 설정 변경 같은 최근 기록입니다. 오류가 의심되면 이 기록을 기술 담당자에게 알려 주세요."
+      help="로그인, 문서 업로드, 설정 변경 같은 최근 기록입니다. 오류가 의심되면 이 기록을 기술 담당자에게 알려 주세요."
     >
       {!data ? (
         <Loading />

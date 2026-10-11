@@ -22,11 +22,9 @@ import QuizSection from "./sections/Quiz";
 import ChecklistsSection from "./sections/Checklists";
 import SynonymsSection from "./sections/Synonyms";
 import UsageStatsSection from "./sections/UsageStats";
-import ConnectionsSection from "./sections/Connections";
 import StatusSection from "./sections/Status";
 import StorageSection from "./sections/Storage";
 import GeminiAvailabilityBanner from "./GeminiAvailabilityBanner";
-import ChatAdmissionPanel from "./ChatAdmissionPanel";
 
 const SECTIONS = {
   brand: BrandSection,
@@ -39,7 +37,6 @@ const SECTIONS = {
   checklists: ChecklistsSection,
   synonyms: SynonymsSection,
   usage: UsageStatsSection,
-  connections: ConnectionsSection,
   status: StatusSection,
   storage: StorageSection,
 };
@@ -192,7 +189,6 @@ export default function SchatAdmin() {
               </select>
             </label>
           )}
-          {section.key === "status" && <ChatAdmissionPanel />}
           <Body key={`${section.key}:${admin.slug}`} {...admin} />
         </div>
       </div>

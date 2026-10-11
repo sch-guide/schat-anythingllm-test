@@ -34,7 +34,7 @@ const TARGETS = {
   },
 };
 
-export default function ConnectionsSection() {
+export default function ConnectionsSection({ onSaved }) {
   const [state, setState] = useState(null);
 
   async function load() {
@@ -61,7 +61,7 @@ export default function ConnectionsSection() {
           key={target}
           target={target}
           info={state[target]}
-          onSaved={load}
+          onSaved={() => { onSaved?.(); load(); }}
         />
       ))}
     </div>
