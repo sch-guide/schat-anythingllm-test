@@ -3,7 +3,10 @@
 // - status "active" 묶음만 검색(BM25 단어 일치)과 체크리스트 연결에 쓴다.
 // - Gemini 호출 없이 문자열로만 넓힌다.
 // - 삽입 계열과 제거 계열처럼 서로 다른 시술 동작은 한 묶음에 넣을 수 없다.
-// - 초안에는 약물을 넣지 않는다. 약물(kind "drug")은 관리자가 넣은 것만 있다.
+// - 초안에는 약물을 넣지 않는다. 약물(kind "drug")은 관리자가 넣거나 승인한
+//   것만 쓰인다.
+// - 문서 등록 후 자동 후보(source "auto")는 "검토 필요"로만 들어온다
+//   (suggestions.js). 관리자가 "사용"으로 바꿔야 검색에 적용된다.
 
 const SYNONYM_KINDS = Object.freeze(["procedure", "drug"]);
 const SYNONYM_STATUSES = Object.freeze(["needs_review", "active", "off"]);
@@ -165,7 +168,12 @@ async function listGroups(prisma = prismaClient()) {
   const rows = await prisma.schat_synonym_groups.findMany({
     orderBy: [{ id: "asc" }],
   });
-  return rows.map(toPublicGroup);
+  // Review information (source document, words waiting to be added) for
+  // automatic suggestions. Search never reads it.
+  return require("./suggestions").withSuggestions(
+    rows.map(toPublicGroup),
+    prisma
+  );
 }
 
 async function createGroup(input, prisma = prismaClient()) {
@@ -214,6 +222,7 @@ async function deleteGroup(id, prisma = prismaClient()) {
   });
   if (!existing) return false;
   await prisma.schat_synonym_groups.delete({ where: { id: existing.id } });
+  await require("./suggestions").closeSuggestionsOfGroup(existing.id, prisma);
   invalidate();
   return true;
 }

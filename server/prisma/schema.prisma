@@ -722,10 +722,43 @@ model schat_synonym_groups {
   terms         String // JSON array of words
   kind          String   @default("procedure") // procedure | drug
   status        String   @default("needs_review") // needs_review | active | off
-  source        String   @default("admin") // draft | admin
+  source        String   @default("admin") // draft | admin | auto
   note          String?
   createdAt     DateTime @default(now())
   lastUpdatedAt DateTime @default(now())
 
   @@index([status])
+}
+
+// 동의어 자동 후보의 출처 기록 (관리자 검토용). 검색은 이 표를 읽지 않는다.
+model schat_synonym_suggestions {
+  id            Int      @id @default(autoincrement())
+  type          String // group (새 묶음 후보) | addition (기존 묶음에 추가할 단어 후보)
+  group_id      Int? // group: 만든 "검토 필요" 묶음, addition: 대상 기존 묶음
+  terms         String // JSON array of words (addition: 새 단어만)
+  category      String?
+  confidence    Float?
+  reason        String?
+  method        String
+  sources       String   @default("[]") // JSON [{documentId, documentName, pages}]
+  status        String   @default("pending") // pending | approved | dismissed
+  run_id        Int? // schat_synonym_suggestion_runs.id (검증용 실행 구분)
+  createdAt     DateTime @default(now())
+  lastUpdatedAt DateTime @default(now())
+
+  @@index([group_id])
+  @@index([status])
+  @@index([run_id])
+}
+
+// 동의어 자동 후보 실행 결과(업로드·기존 문서 한 번 실행). 관리자 화면에 표시.
+model schat_synonym_suggestion_runs {
+  id         Int       @id @default(autoincrement())
+  trigger    String // upload | document_update | backfill
+  test       Boolean   @default(false) // 검증용 실행: 결과를 따로 지울 수 있음
+  status     String    @default("running") // running | done | removed
+  summary    String    @default("{}") // JSON totals
+  documents  String    @default("[]") // JSON per document (이름·후보 수·상태, 본문 없음)
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
 }

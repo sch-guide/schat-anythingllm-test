@@ -68,6 +68,9 @@ const {
 const {
   toPublicChecklist,
 } = require("../utils/documentChecklists/presenter");
+const {
+  scheduleSynonymSuggestions,
+} = require("../utils/synonyms/suggestions");
 
 function workspaceDocumentIds(documents = []) {
   return [
@@ -215,6 +218,8 @@ function workspaceEndpoints(app) {
           onIssues: (result) =>
             logChecklistIssues(result, response.locals?.user?.id),
         });
+        // 동의어 후보 자동 생성: 등록 후 뒤에서 실행, 실패해도 등록은 유지.
+        await scheduleSynonymSuggestions(documents);
 
         // When the upload is part of a folder upload, move the processed
         // documents from their default location into the target folder.
@@ -1213,6 +1218,8 @@ function workspaceEndpoints(app) {
           onIssues: (result) =>
             logChecklistIssues(result, response.locals?.user?.id),
         });
+        // 동의어 후보 자동 생성: 등록 후 뒤에서 실행, 실패해도 등록은 유지.
+        await scheduleSynonymSuggestions(documents);
 
         Collector.log(
           `Document ${originalname} uploaded processed and successfully. It is now available in documents.`

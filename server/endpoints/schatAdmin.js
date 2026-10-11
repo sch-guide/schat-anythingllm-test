@@ -10,6 +10,7 @@ const {
 } = require("../utils/middleware/multiUserProtected");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const Synonyms = require("../utils/synonyms");
+const SynonymSuggestions = require("../utils/synonyms/suggestions");
 const { loadUsageStats } = require("../utils/schatAdmin/usageStats");
 const {
   ChecklistRepository,
@@ -401,6 +402,50 @@ function schatAdminEndpoints(app) {
       try {
         const deleted = await Synonyms.deleteGroup(request.params.id);
         if (!deleted) return response.sendStatus(404);
+        response.status(200).json({ success: true });
+      } catch (e) {
+        synonymError(response, e);
+      }
+    }
+  );
+
+  // 동의어 후보 자동 생성 실행 결과(문서별 후보 수, 중복, 실패, 텍스트 부족).
+  app.get(
+    "/schat-admin/synonyms/runs",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (_request, response) => {
+      response
+        .status(200)
+        .json({ runs: await SynonymSuggestions.listRuns() });
+    }
+  );
+
+  // 자동 후보 중 "기존 묶음에 추가할 단어": 관리자가 승인해야 묶음에 들어간다.
+  app.post(
+    "/schat-admin/synonyms/suggestions/:id/approve",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      try {
+        const group = await SynonymSuggestions.approveAddition(
+          request.params.id
+        );
+        if (!group) return response.sendStatus(404);
+        response.status(200).json({ success: true, group });
+      } catch (e) {
+        synonymError(response, e);
+      }
+    }
+  );
+
+  app.post(
+    "/schat-admin/synonyms/suggestions/:id/dismiss",
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      try {
+        const dismissed = await SynonymSuggestions.dismissAddition(
+          request.params.id
+        );
+        if (!dismissed) return response.sendStatus(404);
         response.status(200).json({ success: true });
       } catch (e) {
         synonymError(response, e);
