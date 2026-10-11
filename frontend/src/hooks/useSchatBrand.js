@@ -6,7 +6,13 @@ import { defaultBrand } from "@/utils/schatBrand";
 // boundaries locally so an open employee page hides an expired notice.
 export function createBrandStore(
   api,
-  clock = { now: Date.now, setTimeout, clearTimeout }
+  // Wrapped so the browser timers are never called with `clock` as `this`
+  // (Chrome throws "Illegal invocation" and the chat page fails to open).
+  clock = {
+    now: () => Date.now(),
+    setTimeout: (fn, ms) => setTimeout(fn, ms),
+    clearTimeout: (id) => clearTimeout(id),
+  }
 ) {
   let state = { brand: defaultBrand(), now: clock.now() };
   let refreshTimer = null,

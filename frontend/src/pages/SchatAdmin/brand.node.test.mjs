@@ -424,3 +424,56 @@ test("관리자 공지: 제목칸(8자)·원래대로·실제 띠 미리보기",
   });
   assert.match(render(), /<strong[^>]*>공지사항<\/strong>/);
 });
+
+test("브랜드 저장소의 기본 시계는 브라우저 타이머를 원래 대상으로 호출함", async () => {
+  // Browsers throw "Illegal invocation" when setTimeout/clearTimeout run with
+  // another object as `this`; that broke the whole employee chat page.
+  const strict = {
+    setTimeout(fn, ms) {
+      if (this !== undefined && this !== strict)
+        throw TypeError("Illegal invocation");
+      return setTimeout(fn, ms);
+    },
+    clearTimeout(id) {
+      if (this !== undefined && this !== strict)
+        throw TypeError("Illegal invocation");
+      return clearTimeout(id);
+    },
+  };
+  const module = { exports: {} };
+  const code = transformSync(
+    readFileSync(
+      new URL("../../hooks/useSchatBrand.js", import.meta.url),
+      "utf8"
+    ),
+    { loader: "js", format: "cjs" }
+  ).code;
+  vm.runInNewContext(code, {
+    module,
+    exports: module.exports,
+    Date,
+    setTimeout: strict.setTimeout,
+    clearTimeout: strict.clearTimeout,
+    window: { addEventListener() {}, removeEventListener() {} },
+    require: (name) =>
+      name === "@/models/schatBrand"
+        ? { __esModule: true, default: { read: async () => initial } }
+        : name === "@/utils/schatBrand"
+          ? rules()
+          : require(name),
+  });
+  const store = module.exports.createBrandStore({
+    read: async () => ({
+      ...initial,
+      announcement: {
+        enabled: true,
+        text: "공지",
+        start: "",
+        end: new Date(Date.now() + 60000).toISOString(),
+      },
+    }),
+  });
+  const stop = store.subscribe(() => {});
+  await store.refresh();
+  stop();
+});
