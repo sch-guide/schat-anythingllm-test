@@ -1,26 +1,28 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import SchatSynonyms from "@/models/schatSynonyms";
 import showToast from "@/utils/toast";
 import PdfPageViewer from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Citation/PdfPageViewer";
-import { Badge, Button, Card, Loading, Notice, inputClass } from "../ui";
+import { Button, Loading, Notice, inputClass } from "../ui";
 import {
   RUN_TRIGGER_LABELS,
-  SOURCE_LABELS,
   canOpenSource,
   cleanTerm,
-  confidenceText,
-  createdText,
   describeSources,
-  managementView,
+  groupSources,
+  isNewAiGroup,
+  reviewSelectedGroups,
   runTotals,
+  saveSynonymGroup,
+  synonymTableView,
   termKey,
   validateTerms,
 } from "../synonymReview";
+import "../synonymTable.css";
 
 export const SYNONYM_STATUS_LABELS = {
-  needs_review: { text: "검토 필요 · 꺼짐", tone: "neutral" },
-  active: { text: "사용", tone: "ok" },
-  off: { text: "꺼짐", tone: "neutral" },
+  needs_review: { text: "검토 대기", tone: "pending" },
+  active: { text: "사용 중", tone: "active" },
+  off: { text: "사용 안 함", tone: "off" },
 };
 export const SYNONYM_KIND_LABELS = { procedure: "시술·기구", drug: "약물" };
 export function splitTerms(value = "") {
@@ -30,67 +32,73 @@ export function splitTerms(value = "") {
     .filter(Boolean);
 }
 
-function SuggestionInfo({ suggestion }) {
+function Sources({ group }) {
   const [source, setSource] = useState(null);
   const [unavailable, setUnavailable] = useState(false);
-  if (!suggestion) return null;
+  const sources = groupSources(group);
+  const proposals = [
+    group.suggestion,
+    ...(group.pendingAdditions || []),
+  ].filter(Boolean);
   return (
-    <div className="mt-2 space-y-1 text-xs text-theme-text-secondary">
-      <div className="flex flex-wrap gap-1.5">
-        {suggestion.test && <Badge>검증용</Badge>}
-        {suggestion.lowConfidence && <Badge tone="warning">낮은 확신</Badge>}
-        {suggestion.sourceMissing && <Badge tone="danger">출처 없음</Badge>}
-        {suggestion.status !== "pending" && (
-          <Badge>
-            {suggestion.status === "approved" ? "승인됨" : "필요 없음으로 기록"}
-          </Badge>
-        )}
-      </div>
-      <p>근거: {suggestion.reason || "문서에서 같은 뜻으로 찾았어요."}</p>
-      {(suggestion.sources || []).map((item, index) => (
-        <div key={index} className="flex flex-wrap items-center gap-2">
-          <span>출처: {describeSources([item])}</span>
-          {canOpenSource(item) ? (
-            <button
-              type="button"
-              className="underline underline-offset-2"
-              onClick={() => {
-                setUnavailable(false);
-                setSource(item);
-              }}
-            >
-              원문 보기
-            </button>
-          ) : (
-            <span>원문을 열 수 없는 문서예요.</span>
+    <div className="synonym-sources">
+      {sources.length ? (
+        sources.map((item, index) => (
+          <div key={index}>
+            {canOpenSource(item) ? (
+              <button
+                type="button"
+                className="synonym-source-link"
+                onClick={() => {
+                  setUnavailable(false);
+                  setSource(item);
+                }}
+              >
+                {describeSources([item])} 원문
+              </button>
+            ) : (
+              <>
+                <span>{describeSources([item])}</span>
+                <small>원문을 열 수 없는 문서예요.</small>
+              </>
+            )}
+          </div>
+        ))
+      ) : (
+        <span>{group.source === "auto" ? "출처 없음" : "직접 등록"}</span>
+      )}
+      {proposals.map((item) => (
+        <div key={item.id}>
+          {item.reason && <small>{item.reason}</small>}
+          {(item.test || item.lowConfidence || item.sourceMissing) && (
+            <small>
+              {[
+                item.test && "검증용",
+                item.lowConfidence && "낮은 확신",
+                item.sourceMissing && "출처 없음",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </small>
+          )}
+          {item.status && item.status !== "pending" && (
+            <small>
+              {item.status === "approved"
+                ? "승인됨"
+                : "제외됨 · 필요 없음으로 기록"}
+            </small>
           )}
         </div>
       ))}
-      {!suggestion.sources?.length && <p>출처 정보가 없어요.</p>}
-      <details>
-        <summary className="cursor-pointer">제안 정보</summary>
-        <p>
-          {[
-            suggestion.category ? `분류: ${suggestion.category}` : "",
-            confidenceText(suggestion.confidence),
-            createdText(suggestion.createdAt),
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-        {(suggestion.lowConfidence || suggestion.sourceMissing) && (
-          <p>확신이 낮거나 출처가 없으면 원문을 따로 확인한 뒤 넣어 주세요.</p>
-        )}
-      </details>
       {source && (
         <div
           role="dialog"
           aria-modal="true"
           aria-label="동의어 근거 원문"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3"
+          className="synonym-source-dialog"
         >
-          <div className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-xl bg-theme-bg-primary p-4">
-            <div className="mb-3 flex justify-between gap-2">
+          <div className="synonym-source-dialog-body">
+            <div className="synonym-actions">
               <b>{source.documentName}</b>
               <Button variant="secondary" onClick={() => setSource(null)}>
                 닫기
@@ -220,59 +228,32 @@ function RunsCard({ runs }) {
   );
 }
 
-function Chips({ terms, onEdit, pending = false, active = false }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {terms.map((term, index) =>
-        onEdit ? (
-          <button
-            type="button"
-            key={index}
-            onClick={onEdit}
-            className={`rounded-full border px-3 py-1 text-sm ${active ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-gray-200 bg-gray-100 text-gray-600"}`}
-          >
-            {term}
-          </button>
-        ) : (
-          <span
-            key={index}
-            className={`rounded-full border px-3 py-1 text-sm ${pending ? "border-dashed border-amber-400 bg-amber-50 text-amber-950" : "border-theme-sidebar-border bg-theme-bg-primary"}`}
-          >
-            {term}
-          </span>
-        )
-      )}
-    </div>
-  );
-}
-
-function TermEditor({
+export function TermEditor({
   terms,
   setTerms,
   kind,
   setKind,
+  status,
+  setStatus,
+  pending,
   error,
   disabled,
   onSave,
   onCancel,
+  onRemove,
 }) {
   const [word, setWord] = useState("");
   function append() {
-    if (!word.trim()) return;
-    setTerms([...terms, ...splitTerms(word)]);
-    setWord("");
+    if (word.trim()) {
+      setTerms([...terms, ...splitTerms(word)]);
+      setWord("");
+    }
   }
   return (
-    <div
-      className="space-y-3 rounded-lg border border-teal-300 p-3"
-      data-testid="synonym-term-editor"
-    >
-      <div className="flex flex-wrap gap-2">
+    <div className="synonym-editor" data-testid="synonym-term-editor">
+      <div className="synonym-terms">
         {terms.map((term, index) => (
-          <span
-            key={index}
-            className="flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2 py-1 text-sm text-teal-950"
-          >
+          <span key={index} className="synonym-chip synonym-editor-chip">
             <input
               aria-label={`단어 ${index + 1}`}
               value={term}
@@ -284,11 +265,7 @@ function TermEditor({
                   )
                 )
               }
-              className="min-w-0 bg-transparent outline-none"
-              style={{
-                width: `${Math.max(4, term.length + 1)}ch`,
-                maxWidth: "45vw",
-              }}
+              style={{ width: `${Math.max(4, term.length + 1)}ch` }}
             />
             <button
               type="button"
@@ -301,7 +278,7 @@ function TermEditor({
           </span>
         ))}
       </div>
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="synonym-editor-fields">
         <input
           aria-label="추가할 단어"
           placeholder="+ 단어 (Enter로 추가)"
@@ -314,13 +291,12 @@ function TermEditor({
               append();
             }
           }}
-          className={`${inputClass} sm:flex-1`}
+          className={inputClass}
         />
         <button
           type="button"
           disabled={disabled || !word.trim()}
           onClick={append}
-          className="text-sm text-theme-text-secondary"
         >
           단어 추가
         </button>
@@ -329,7 +305,7 @@ function TermEditor({
           value={kind}
           disabled={disabled}
           onChange={(event) => setKind(event.target.value)}
-          className={`${inputClass} sm:w-36`}
+          className={inputClass}
         >
           {Object.entries(SYNONYM_KIND_LABELS).map(([value, label]) => (
             <option key={value} value={value}>
@@ -339,49 +315,52 @@ function TermEditor({
         </select>
       </div>
       {error && (
-        <p role="alert" className="text-xs text-red-600">
+        <p role="alert" className="synonym-error">
           {error}
         </p>
       )}
-      <div className="flex justify-end gap-2">
-        <Button variant="secondary" disabled={disabled} onClick={onCancel}>
-          취소
-        </Button>
-        <Button
-          disabled={disabled}
-          onClick={() =>
-            onSave(word.trim() ? [...terms, ...splitTerms(word)] : terms)
-          }
-        >
-          저장
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function Proposal({ suggestion, isGroup = false, disabled, onReview }) {
-  return (
-    <div
-      className="rounded-lg border border-dashed border-amber-400 bg-amber-50/70 p-3"
-      data-synonym-addition={isGroup ? undefined : suggestion.id}
-    >
-      <p className="mb-2 text-xs font-medium text-amber-950">
-        {isGroup ? "새 묶음 제안" : "추가 후보"}
-      </p>
-      <Chips terms={suggestion.terms} pending />
-      <SuggestionInfo suggestion={suggestion} />
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button disabled={disabled} onClick={() => onReview(suggestion, true)}>
-          {isGroup ? "묶음으로 만들기" : "넣기"}
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={disabled}
-          onClick={() => onReview(suggestion, false)}
-        >
-          {isGroup ? "필요 없음" : "빼기"}
-        </Button>
+      <div className="synonym-editor-footer">
+        <label className="synonym-toggle">
+          <button
+            type="button"
+            role="switch"
+            aria-label="묶음 사용"
+            aria-checked={status === "active"}
+            disabled={disabled || pending}
+            onClick={() => setStatus(status === "active" ? "off" : "active")}
+            className={`synonym-switch ${status === "active" ? "is-on" : ""}`}
+          >
+            <span />
+          </button>
+          {pending
+            ? "등록하면 사용돼요"
+            : status === "active"
+              ? "사용 중"
+              : "사용 안 함"}
+        </label>
+        {onRemove && (
+          <button
+            type="button"
+            className="synonym-delete"
+            disabled={disabled}
+            onClick={onRemove}
+          >
+            묶음 삭제
+          </button>
+        )}
+        <div className="synonym-actions">
+          <Button variant="secondary" disabled={disabled} onClick={onCancel}>
+            취소
+          </Button>
+          <Button
+            disabled={disabled}
+            onClick={() =>
+              onSave(word.trim() ? [...terms, ...splitTerms(word)] : terms)
+            }
+          >
+            {pending ? "저장 후 등록" : "저장"}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -392,9 +371,12 @@ export function GroupRow({
   groups,
   disabled,
   editingElsewhere,
-  onEditing,
+  onEditing = () => {},
   mutate,
   onReview,
+  onReviewGroup,
+  selected = false,
+  onSelect = () => {},
 }) {
   const [editing, setEditing] = useState(false);
   const [terms, setTerms] = useState(group.terms);
@@ -408,10 +390,13 @@ export function GroupRow({
       setStatus(group.status);
     }
   }, [group, editing]);
+  const pending = group.status === "needs_review";
+  const locked = disabled || editingElsewhere;
   function startEdit() {
-    if (disabled || editingElsewhere) return;
+    if (locked) return;
     setTerms([...group.terms]);
     setKind(group.kind);
+    setStatus(group.status);
     setError("");
     setEditing(true);
     onEditing(group.id);
@@ -427,248 +412,287 @@ export function GroupRow({
       setError(problem);
       return;
     }
-    const saved = await mutate(() =>
-      SchatSynonyms.update(group.id, {
-        terms: values.map(cleanTerm).filter(Boolean),
-        kind,
-      })
-    );
-    if (saved) cancel();
-  }
-  async function toggle() {
-    const next = status === "active" ? "off" : "active";
-    setStatus(next);
-    if (!(await mutate(() => SchatSynonyms.update(group.id, { status: next }))))
-      setStatus(group.status);
-  }
-  async function changeKind(next) {
-    setKind(next);
-    if (!(await mutate(() => SchatSynonyms.update(group.id, { kind: next }))))
-      setKind(group.kind);
+    if (
+      await mutate(() =>
+        saveSynonymGroup(group, values, kind, status, SchatSynonyms)
+      )
+    )
+      cancel();
   }
   async function remove() {
-    if (window.confirm("이 묶음을 지울까요?"))
-      await mutate(() => SchatSynonyms.remove(group.id));
+    if (
+      window.confirm("이 묶음을 삭제할까요? 삭제한 묶음은 되돌릴 수 없어요.") &&
+      (await mutate(() => SchatSynonyms.remove(group.id)))
+    )
+      cancel();
   }
-  const label = SYNONYM_STATUS_LABELS[status] || SYNONYM_STATUS_LABELS.off;
-  const pending = (group.pendingAdditions || []).length > 0;
+  const label =
+    SYNONYM_STATUS_LABELS[group.status] || SYNONYM_STATUS_LABELS.off;
   return (
-    <li
-      className={`schat-admin-synonym rounded-xl border p-4 ${pending ? "border-amber-200 bg-amber-50/50" : status === "active" ? "border-emerald-200 bg-emerald-50/40" : "border-theme-sidebar-border bg-black/[0.03]"}`}
+    <tr
+      className={editing ? "synonym-editing-row" : ""}
       data-synonym-group={group.id}
+      data-synonym-new-group={isNewAiGroup(group) ? group.id : undefined}
     >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={label.tone}>{label.text}</Badge>
-          {!editing && (
-            <select
-              aria-label="종류"
-              value={kind}
-              disabled={disabled || editingElsewhere}
-              onChange={(event) => changeKind(event.target.value)}
-              className={`${inputClass} !w-auto !py-1`}
-            >
-              {Object.entries(SYNONYM_KIND_LABELS).map(([value, text]) => (
-                <option key={value} value={value}>
-                  {text}
-                </option>
-              ))}
-            </select>
-          )}
-          <Badge>{SOURCE_LABELS[group.source] || group.source}</Badge>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            role="switch"
-            aria-label={`${group.terms[0]} 묶음 사용`}
-            aria-checked={status === "active"}
-            disabled={disabled || editing || editingElsewhere}
-            onClick={toggle}
-            className={`relative h-6 w-11 rounded-full disabled:opacity-50 ${status === "active" ? "bg-emerald-500" : "bg-gray-400"}`}
-          >
-            <span
-              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${status === "active" ? "left-[22px]" : "left-0.5"}`}
-            />
-          </button>
-          <button
-            type="button"
-            disabled={disabled || editing || editingElsewhere}
-            onClick={startEdit}
-            className="text-xs text-theme-text-secondary underline"
-          >
-            수정
-          </button>
-          <button
-            type="button"
-            aria-label="묶음 삭제"
-            title="묶음 삭제"
-            disabled={disabled || editing || editingElsewhere}
-            onClick={remove}
-            className="text-sm text-theme-text-secondary"
-          >
-            🗑
-          </button>
-        </div>
-      </div>
+      <td data-label="선택">
+        <input
+          type="checkbox"
+          aria-label={`${group.terms[0]} 묶음 선택`}
+          disabled={locked || editing || !pending}
+          checked={selected}
+          onChange={(event) => onSelect(group.id, event.target.checked)}
+        />
+      </td>
       {editing ? (
-        <TermEditor
-          terms={terms}
-          setTerms={setTerms}
-          kind={kind}
-          setKind={setKind}
-          error={error}
-          disabled={disabled}
-          onSave={save}
-          onCancel={cancel}
-        />
-      ) : (
-        <Chips
-          terms={group.terms}
-          onEdit={startEdit}
-          active={status === "active"}
-        />
-      )}
-      {group.status === "needs_review" && (
-        <p className="mt-2 text-xs text-theme-text-secondary">
-          확인한 뒤 사용을 켜면 검색에 적용돼요.
-        </p>
-      )}
-      <SuggestionInfo suggestion={group.suggestion} />
-      <div className="mt-3 space-y-2">
-        {(group.pendingAdditions || []).map((addition) => (
-          <Proposal
-            key={addition.id}
-            suggestion={addition}
-            disabled={disabled || editing || editingElsewhere}
-            onReview={onReview}
+        <td colSpan={5} className="synonym-editor-cell">
+          <TermEditor
+            terms={terms}
+            setTerms={setTerms}
+            kind={kind}
+            setKind={setKind}
+            status={status}
+            setStatus={setStatus}
+            pending={pending}
+            error={error}
+            disabled={disabled}
+            onSave={save}
+            onCancel={cancel}
+            onRemove={remove}
           />
-        ))}
-      </div>
-    </li>
+        </td>
+      ) : (
+        <>
+          <td data-label="동의어">
+            <div className="synonym-terms">
+              {group.terms.map((term, index) =>
+                pending ? (
+                  <button
+                    type="button"
+                    key={index}
+                    className="synonym-chip"
+                    disabled={locked}
+                    onClick={startEdit}
+                  >
+                    {term}
+                  </button>
+                ) : (
+                  <span key={index} className="synonym-chip">
+                    {term}
+                  </span>
+                )
+              )}
+            </div>
+            {(group.pendingAdditions || [])
+              .filter((item) => !item.status || item.status === "pending")
+              .map((addition) => (
+                <div
+                  key={addition.id}
+                  className="synonym-proposal-chip"
+                  data-synonym-addition={addition.id}
+                >
+                  <button
+                    type="button"
+                    disabled={locked}
+                    onClick={() => onReview(addition, true)}
+                  >
+                    제안 {addition.terms.join(", ")} 추가
+                  </button>
+                  <span>·</span>
+                  <button
+                    type="button"
+                    disabled={locked}
+                    onClick={() => onReview(addition, false)}
+                  >
+                    무시
+                  </button>
+                </div>
+              ))}
+          </td>
+          <td data-label="분류">
+            {SYNONYM_KIND_LABELS[group.kind] || group.kind}
+          </td>
+          <td data-label="출처">
+            <Sources group={group} />
+          </td>
+          <td data-label="상태">
+            <span className={`synonym-status synonym-status--${label.tone}`}>
+              <span aria-hidden="true" />
+              {label.text}
+            </span>
+          </td>
+          <td data-label="작업">
+            <div className="synonym-actions">
+              {pending ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={locked}
+                    onClick={() => onReviewGroup(group, true)}
+                  >
+                    등록
+                  </button>
+                  <button
+                    type="button"
+                    disabled={locked}
+                    onClick={() => onReviewGroup(group, false)}
+                  >
+                    제외
+                  </button>
+                </>
+              ) : (
+                <button type="button" disabled={locked} onClick={startEdit}>
+                  수정
+                </button>
+              )}
+            </div>
+          </td>
+        </>
+      )}
+    </tr>
   );
 }
 
 export default function SynonymsSection() {
   const [groups, setGroups] = useState(null);
-  const [query, setQuery] = useState("");
-  const [aiOnly, setAiOnly] = useState(false);
+  const [filters, setFilters] = useState({
+    query: "",
+    kind: "",
+    document: "",
+    status: "all",
+    page: 1,
+  });
+  const [selected, setSelected] = useState([]);
   const [creating, setCreating] = useState(false);
   const [newTerms, setNewTerms] = useState([]);
   const [newKind, setNewKind] = useState("procedure");
+  const [newStatus, setNewStatus] = useState("active");
   const [newError, setNewError] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
   const [loadError, setLoadError] = useState(false);
-  const [bulkNotice, setBulkNotice] = useState(null);
+  const [notice, setNotice] = useState(null);
   const [runs, setRuns] = useState([]);
   async function reload() {
-    const list = await SchatSynonyms.list();
-    if (list === null) {
+    try {
+      const list = await SchatSynonyms.list();
+      if (list === null) {
+        setLoadError(true);
+        return false;
+      }
+      setGroups(list);
+      setLoadError(false);
+      return true;
+    } catch {
       setLoadError(true);
       return false;
     }
-    setGroups(list);
-    setLoadError(false);
-    return true;
   }
   useEffect(() => {
     reload();
-    SchatSynonyms.runs().then(setRuns);
+    SchatSynonyms.runs()
+      .then(setRuns)
+      .catch(() => {});
   }, []);
   const view = useMemo(
-    () => managementView(groups || [], query, aiOnly),
-    [groups, query, aiOnly]
+    () => synonymTableView(groups || [], filters),
+    [groups, filters]
   );
+  function changeFilter(key, value) {
+    setSelected([]);
+    setFilters((current) => ({
+      ...current,
+      [key]: value,
+      ...(key !== "page" ? { page: 1 } : {}),
+    }));
+  }
   async function mutate(operation) {
     if (inFlight.current) return false;
     inFlight.current = true;
     setBusy(true);
-    setBulkNotice(null);
+    setNotice(null);
     try {
       const result = await operation();
-      if (!result.ok || !result.success) {
-        showToast(result.error || "저장하지 못했어요.", "error");
-        await reload();
-        return false;
-      }
-      showToast("저장했어요.", "success");
+      const success = Boolean(result.ok && result.success);
+      const message = success
+        ? result.message || "저장했어요."
+        : result.error || "저장하지 못했어요. 수정 내용은 그대로 남아 있어요.";
+      setNotice({ error: !success, text: message });
+      showToast(message, success ? "success" : "error");
       await reload();
-      return true;
+      setSelected([]);
+      return success;
     } catch {
-      showToast("서버에 연결하지 못했어요.", "error");
+      const message =
+        "서버에 연결하지 못했어요. 수정 내용은 그대로 남아 있어요. 목록을 다시 확인해 주세요.";
+      setNotice({ error: true, text: message });
+      showToast(message, "error");
       await reload();
       return false;
     } finally {
+      setSelected([]);
       inFlight.current = false;
       setBusy(false);
     }
   }
-  async function review(suggestion, approve) {
-    const group = (groups || []).find(
-      (item) =>
-        item.suggestion?.id === suggestion.id ||
-        item.pendingAdditions?.some((row) => row.id === suggestion.id)
+  async function reviewGroups(ids, approve) {
+    if (
+      inFlight.current ||
+      !ids.length ||
+      !window.confirm(
+        `${ids.length}개 묶음을 ${approve ? "등록" : "제외"}할까요?`
+      )
+    )
+      return;
+    await mutate(async () => {
+      const result = await reviewSelectedGroups(
+        groups || [],
+        ids,
+        approve,
+        SchatSynonyms
+      );
+      const message = `${result.completed.length}개 묶음을 ${approve ? "등록" : "제외"}했어요.`;
+      return result.failed.length
+        ? {
+            ok: false,
+            success: false,
+            error: `${message} ${result.failed.length}개는 처리하지 못했어요. ${result.failed.map((item) => `#${item.id}: ${item.error}`).join(" / ")}`,
+          }
+        : { ok: true, success: true, message };
+    });
+  }
+  async function reviewAddition(suggestion, approve) {
+    if (inFlight.current) return;
+    const group = (groups || []).find((item) =>
+      item.pendingAdditions?.some((row) => row.id === suggestion.id)
     );
     if (approve && group) {
-      const terms =
-        group.suggestion?.id === suggestion.id
-          ? group.terms
-          : [
-              ...group.terms,
-              ...suggestion.terms.filter(
-                (term) =>
-                  !group.terms.some((value) => termKey(value) === termKey(term))
-              ),
-            ];
+      const terms = [
+        ...group.terms,
+        ...suggestion.terms.filter(
+          (term) =>
+            !group.terms.some((value) => termKey(value) === termKey(term))
+        ),
+      ];
       const error = validateTerms(terms, groups, group);
       if (error) {
-        showToast(error, "error");
+        setNotice({ error: true, text: error });
         return;
       }
     }
-    await mutate(() =>
-      approve
-        ? SchatSynonyms.approveAddition(suggestion.id)
-        : SchatSynonyms.dismissAddition(suggestion.id)
-    );
-  }
-  async function bulk() {
     if (
-      inFlight.current ||
-      !view.proposalIds.length ||
-      !window.confirm(`제안 ${view.proposalIds.length}개를 넣을까요?`)
+      window.confirm(
+        approve ? "이 제안 단어를 묶음에 추가할까요?" : "이 제안을 무시할까요?"
+      )
     )
-      return;
-    const ids = [...view.proposalIds];
-    inFlight.current = true;
-    setBusy(true);
-    try {
-      const result = await SchatSynonyms.approveVisible(ids);
-      if (!result.ok || !result.success)
-        setBulkNotice({
-          error:
-            result.error || "제안을 넣지 못했어요. 목록을 다시 확인해 주세요.",
-        });
-      else {
-        setBulkNotice(result);
-        if (!result.failed?.length && !result.skipped?.length)
-          showToast("저장했어요.", "success");
-      }
-      await reload();
-    } catch {
-      setBulkNotice({
-        error: "서버에 연결하지 못했어요. 목록을 다시 확인해 주세요.",
-      });
-      await reload();
-    } finally {
-      inFlight.current = false;
-      setBusy(false);
-    }
+      await mutate(() =>
+        approve
+          ? SchatSynonyms.approveAddition(suggestion.id)
+          : SchatSynonyms.dismissAddition(suggestion.id)
+      );
   }
   async function create(values) {
-    const error = validateTerms(values, groups);
+    const error = validateTerms(values, groups || []);
     if (error) {
       setNewError(error);
       return;
@@ -678,7 +702,7 @@ export default function SynonymsSection() {
         SchatSynonyms.create({
           terms: values.map(cleanTerm).filter(Boolean),
           kind: newKind,
-          status: "active",
+          status: newStatus,
         })
       )
     )
@@ -686,56 +710,34 @@ export default function SynonymsSection() {
   }
   const locked = busy || loadError;
   const draftOpen = creating || editingId !== null;
+  const selectable = view.rows.filter(
+    (group) => group.status === "needs_review"
+  );
+  const pageNumbers = [
+    ...new Set([
+      1,
+      view.pages,
+      ...Array.from({ length: 5 }, (_, i) => view.page - 2 + i).filter(
+        (page) => page >= 1 && page <= view.pages
+      ),
+    ]),
+  ].sort((a, b) => a - b);
   if (groups === null && !loadError) return <Loading />;
   return (
-    <div className="flex flex-col gap-5" data-testid="synonym-management">
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <input
-          aria-label="단어로 찾기"
-          placeholder="단어로 찾기"
-          value={query}
-          disabled={draftOpen}
-          onChange={(event) => setQuery(event.target.value)}
-          className={`${inputClass} sm:flex-1`}
-        />
+    <div className="synonym-management" data-testid="synonym-management">
+      <div className="synonym-top-actions">
         <Button
           disabled={locked || draftOpen}
           onClick={() => {
+            setSelected([]);
             setCreating(true);
             setNewTerms([]);
             setNewKind("procedure");
+            setNewStatus("active");
             setNewError("");
           }}
         >
           + 새 묶음 추가
-        </Button>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          aria-pressed={!aiOnly}
-          disabled={draftOpen}
-          onClick={() => setAiOnly(false)}
-          className={`rounded-full border px-3 py-1.5 text-sm ${!aiOnly ? "border-teal-500 bg-teal-50 text-teal-950" : "border-theme-sidebar-border text-theme-text-secondary"}`}
-        >
-          전체 {view.total}묶음
-        </button>
-        <button
-          type="button"
-          aria-pressed={aiOnly}
-          disabled={draftOpen}
-          onClick={() => setAiOnly(true)}
-          className={`rounded-full border px-3 py-1.5 text-sm ${aiOnly ? "border-amber-400 bg-amber-50 text-amber-950" : "border-theme-sidebar-border text-theme-text-secondary"}`}
-        >
-          💡 AI 제안 있는 것만 {view.aiCount}
-        </button>
-        <Button
-          variant="secondary"
-          className="sm:ml-auto"
-          disabled={locked || draftOpen || !view.proposalIds.length}
-          onClick={bulk}
-        >
-          보이는 제안 모두 넣기
         </Button>
       </div>
       {loadError && (
@@ -751,91 +753,243 @@ export default function SynonymsSection() {
           </button>
         </Notice>
       )}
-      {bulkNotice && (
-        <Notice
-          tone={
-            bulkNotice.error || bulkNotice.failed?.length ? "warning" : "info"
-          }
-        >
-          {bulkNotice.error ||
-            `제안 ${bulkNotice.approved?.length || 0}개를 넣었어요. 이미 처리된 제안 ${bulkNotice.skipped?.length || 0}개, 넣지 못한 제안 ${bulkNotice.failed?.length || 0}개예요.`}
-          {bulkNotice.failed?.map((item) => (
-            <p key={item.id}>
-              제안 #{item.id}: {item.error}
-            </p>
-          ))}
-        </Notice>
+      {notice && (
+        <div role={notice.error ? "alert" : "status"}>
+          <Notice tone={notice.error ? "warning" : "info"}>
+            {notice.text}
+          </Notice>
+        </div>
       )}
-      {view.newGroups.length > 0 && (
-        <Card
-          title="AI가 찾은 새 묶음"
-          description="근거를 확인한 뒤 필요한 묶음만 넣어 주세요."
-        >
-          {view.newGroups.map((group) => (
-            <div key={group.id} data-synonym-new-group={group.id}>
-              <Proposal
-                suggestion={{ ...group.suggestion, terms: group.terms }}
-                isGroup
-                disabled={locked || draftOpen}
-                onReview={review}
-              />
-              {(group.pendingAdditions || []).map((item) => (
-                <div key={item.id} className="ml-3 mt-2">
-                  <Proposal
-                    suggestion={item}
-                    disabled={locked || draftOpen}
-                    onReview={review}
-                  />
-                </div>
-              ))}
-            </div>
+      <section className="synonym-table-card" aria-label="동의어 목록">
+        <div className="synonym-status-tabs" aria-label="상태 선택">
+          {[
+            ["all", "전체"],
+            ["needs_review", "검토 대기"],
+            ["active", "사용 중"],
+            ["off", "사용 안 함"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={filters.status === key}
+              disabled={busy || draftOpen}
+              onClick={() => changeFilter("status", key)}
+            >
+              {label}
+              <span
+                className={
+                  key === "needs_review"
+                    ? "synonym-count synonym-count--pending"
+                    : "synonym-count"
+                }
+              >
+                {view.counts[key]}
+              </span>
+            </button>
           ))}
-        </Card>
-      )}
-      <Card title="사용 중인 묶음">
-        <ul className="space-y-3">
-          {creating && (
-            <li>
-              <TermEditor
-                terms={newTerms}
-                setTerms={setNewTerms}
-                kind={newKind}
-                setKind={setNewKind}
-                error={newError}
-                disabled={locked}
-                onSave={create}
-                onCancel={() => setCreating(false)}
-              />
-            </li>
-          )}
-          {view.mainGroups.map((group) => (
-            <GroupRow
-              key={group.id}
-              group={group}
-              groups={groups || []}
-              disabled={locked}
-              editingElsewhere={
-                creating || (editingId !== null && editingId !== group.id)
-              }
-              onEditing={setEditingId}
-              mutate={mutate}
-              onReview={review}
-            />
-          ))}
-        </ul>
-        {!creating && !view.mainGroups.length && (
-          <p className="text-sm text-theme-text-secondary">
-            해당하는 묶음이 없어요.
-          </p>
+        </div>
+        <div className="synonym-filters">
+          <input
+            aria-label="단어로 찾기"
+            placeholder="단어로 찾기"
+            value={filters.query}
+            disabled={busy || draftOpen}
+            onChange={(event) => changeFilter("query", event.target.value)}
+            className={inputClass}
+          />
+          <select
+            aria-label="분류 전체"
+            value={filters.kind}
+            disabled={busy || draftOpen}
+            onChange={(event) => changeFilter("kind", event.target.value)}
+            className={inputClass}
+          >
+            <option value="">분류 전체</option>
+            {Object.entries(SYNONYM_KIND_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="문서 전체"
+            value={filters.document}
+            disabled={busy || draftOpen}
+            onChange={(event) => changeFilter("document", event.target.value)}
+            className={inputClass}
+          >
+            <option value="">문서 전체</option>
+            {view.documents.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+        {selected.length > 0 && (
+          <div className="synonym-selection">
+            <span>{selected.length}개 선택됨</span>
+            <Button
+              disabled={locked || draftOpen}
+              onClick={() => reviewGroups(selected, true)}
+            >
+              묶음으로 등록
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={locked || draftOpen}
+              onClick={() => reviewGroups(selected, false)}
+            >
+              제외
+            </Button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setSelected([])}
+            >
+              선택 해제
+            </button>
+          </div>
         )}
-      </Card>
+        <div className="synonym-table-scroll">
+          <table aria-label="동의어 관리 표" className="synonym-table">
+            <thead>
+              <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    aria-label="현재 페이지 검토 대기 전체 선택"
+                    disabled={locked || draftOpen || !selectable.length}
+                    checked={
+                      selectable.length > 0 &&
+                      selectable.every((group) => selected.includes(group.id))
+                    }
+                    onChange={(event) =>
+                      setSelected(
+                        event.target.checked
+                          ? selectable.map((group) => group.id)
+                          : []
+                      )
+                    }
+                  />
+                </th>
+                {["동의어", "분류", "출처", "상태", "작업"].map((label) => (
+                  <th key={label}>{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {creating && (
+                <tr className="synonym-editing-row" data-synonym-creating>
+                  <td data-label="선택" />
+                  <td colSpan={5} className="synonym-editor-cell">
+                    <TermEditor
+                      terms={newTerms}
+                      setTerms={setNewTerms}
+                      kind={newKind}
+                      setKind={setNewKind}
+                      status={newStatus}
+                      setStatus={setNewStatus}
+                      error={newError}
+                      disabled={locked}
+                      onSave={create}
+                      onCancel={() => setCreating(false)}
+                    />
+                  </td>
+                </tr>
+              )}
+              {view.sections.map((section) => (
+                <Fragment key={section.status}>
+                  {filters.status === "all" && (
+                    <tr className="synonym-section-row">
+                      <td colSpan={6}>
+                        {SYNONYM_STATUS_LABELS[section.status].text}
+                        {section.status === "needs_review" &&
+                          " · AI가 지침에서 찾은 새 묶음"}
+                      </td>
+                    </tr>
+                  )}
+                  {section.groups.map((group) => (
+                    <GroupRow
+                      key={group.id}
+                      group={group}
+                      groups={groups || []}
+                      disabled={locked}
+                      editingElsewhere={
+                        creating ||
+                        (editingId !== null && editingId !== group.id)
+                      }
+                      onEditing={setEditingId}
+                      mutate={mutate}
+                      onReview={reviewAddition}
+                      onReviewGroup={(item, approve) =>
+                        reviewGroups([item.id], approve)
+                      }
+                      selected={selected.includes(group.id)}
+                      onSelect={(id, checked) =>
+                        setSelected((current) =>
+                          checked
+                            ? [...new Set([...current, id])]
+                            : current.filter((item) => item !== id)
+                        )
+                      }
+                    />
+                  ))}
+                </Fragment>
+              ))}
+              {!creating && !view.rows.length && (
+                <tr>
+                  <td colSpan={6} className="synonym-empty">
+                    해당하는 묶음이 없어요.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="synonym-pagination">
+          <span>
+            {view.start}–{view.end} / {view.total}개
+          </span>
+          <nav aria-label="동의어 목록 페이지">
+            <button
+              type="button"
+              aria-label="이전 페이지"
+              disabled={busy || draftOpen || view.page === 1}
+              onClick={() => changeFilter("page", view.page - 1)}
+            >
+              이전
+            </button>
+            {pageNumbers.map((page) => (
+              <button
+                type="button"
+                key={page}
+                aria-label={`${page}페이지`}
+                aria-current={view.page === page ? "page" : undefined}
+                disabled={busy || draftOpen}
+                onClick={() => changeFilter("page", page)}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              type="button"
+              aria-label="다음 페이지"
+              disabled={busy || draftOpen || view.page === view.pages}
+              onClick={() => changeFilter("page", view.page + 1)}
+            >
+              다음
+            </button>
+          </nav>
+        </div>
+      </section>
       <details className="text-xs text-theme-text-secondary">
         <summary className="cursor-pointer">동의어 사용 안내</summary>
         <p className="mt-2 leading-6">
-          사용을 켠 묶음만 검색에 적용돼요. 초안은 확인한 뒤 직접 켜 주세요.
-          삽입과 제거처럼 다른 시술은 함께 묶을 수 없어요. 약물은 비슷한
-          이름이어도 다른 약일 수 있으니 확실한 것만 넣어 주세요. AI 제안은 낮은
-          확신·출처 없음·검증용 표시와 근거를 함께 확인해 주세요.
+          사용 중인 묶음만 검색에 적용돼요. 검토 대기 묶음은 근거를 확인한 뒤
+          등록해 주세요. 삽입과 제거처럼 다른 시술은 함께 묶을 수 없어요. 약물은
+          비슷한 이름이어도 다른 약일 수 있으니 확실한 것만 넣어 주세요. 낮은
+          확신·출처 없음·검증용 표시가 있으면 원문을 따로 확인해 주세요.
         </p>
       </details>
       <RunsCard key={runs[0]?.id ?? "none"} runs={runs} />

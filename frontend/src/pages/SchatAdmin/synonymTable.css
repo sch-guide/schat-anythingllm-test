@@ -1,0 +1,430 @@
+.synonym-management {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-size: 14px;
+  color: var(--theme-text-primary, #233138);
+}
+.synonym-top-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.synonym-table-card {
+  background: #fff;
+  border: 1px solid #e3e7e9;
+  border-radius: 12px;
+  overflow: hidden;
+  color: #253238;
+}
+.synonym-status-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 0 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.synonym-status-tabs > button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 0 12px;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.synonym-status-tabs > button[aria-pressed="true"] {
+  border-color: #16857d;
+  color: #167b74;
+  font-weight: 600;
+}
+.synonym-count {
+  border-radius: 5px;
+  background: #f0f1f3;
+  color: #6b7280;
+  padding: 1px 6px;
+  font-size: 11px;
+}
+.synonym-count--pending {
+  background: #fff3cb;
+  color: #947324;
+}
+.synonym-filters {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(100px, 150px) minmax(
+      120px,
+      220px
+    );
+  gap: 10px;
+  padding: 16px 20px;
+}
+.synonym-filters input,
+.synonym-filters select,
+.synonym-editor-fields input,
+.synonym-editor-fields select {
+  min-width: 0;
+  max-width: 100%;
+  color: #253238;
+  background: #f8f9fa;
+  border: 1px solid #e5e7eb;
+}
+.synonym-selection {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 20px;
+  background: #f0faf8;
+  border-top: 1px solid #ddede9;
+}
+.synonym-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+.synonym-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+.synonym-table th {
+  padding: 11px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #7b838c;
+  background: #fafbfc;
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+}
+.synonym-table td {
+  padding: 15px 12px;
+  border-bottom: 1px solid #ebedef;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.synonym-table th:first-child {
+  width: 42px;
+}
+.synonym-table th:nth-child(2) {
+  width: 34%;
+}
+.synonym-table th:nth-child(3) {
+  width: 90px;
+}
+.synonym-table th:nth-child(4) {
+  width: auto;
+}
+.synonym-table th:nth-child(5) {
+  width: 106px;
+}
+.synonym-table th:nth-child(6) {
+  width: 94px;
+}
+.synonym-table input[type="checkbox"] {
+  accent-color: #16857d;
+  width: 15px;
+  height: 15px;
+}
+.synonym-section-row td {
+  background: #f5f6f8;
+  padding: 9px 16px;
+  color: #737b85;
+  font-size: 12px;
+}
+.synonym-terms {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.synonym-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 6px;
+  background: #f1f3f5;
+  border: 1px solid #e8ebed;
+  padding: 4px 8px;
+  color: #3d4851;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.synonym-proposal-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 5px 8px;
+  border: 1px dashed #a6b6b7;
+  border-radius: 6px;
+  color: #527576;
+  font-size: 12px;
+}
+.synonym-proposal-chip button {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.synonym-sources {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.synonym-sources small {
+  display: block;
+  font-size: 11px;
+  color: #8b9299;
+  overflow-wrap: anywhere;
+}
+.synonym-source-link {
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+.synonym-status {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.synonym-status > span {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #9ba3aa;
+}
+.synonym-status--pending {
+  color: #b97618;
+}
+.synonym-status--pending > span {
+  background: #e4a244;
+}
+.synonym-status--active {
+  color: #32865e;
+}
+.synonym-status--active > span {
+  background: #46a573;
+}
+.synonym-status--off {
+  color: #7d858e;
+}
+.synonym-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.synonym-actions > button {
+  white-space: nowrap;
+  color: #267f79;
+}
+.synonym-actions > button:disabled,
+.synonym-management button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.synonym-editing-row {
+  background: #f2faf8;
+  border-left: 3px solid #1a968a;
+}
+.synonym-table .synonym-editor-cell {
+  padding: 16px;
+}
+.synonym-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.synonym-editor-chip {
+  background: #fff;
+  border-color: #d7e7e2;
+  gap: 6px;
+}
+.synonym-editor-chip input {
+  min-width: 0;
+  max-width: 45vw;
+  border: 0;
+  outline: none;
+  background: transparent;
+}
+.synonym-editor-chip button {
+  color: #80928c;
+}
+.synonym-editor-fields {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) auto minmax(100px, 150px);
+  gap: 10px;
+  align-items: center;
+}
+.synonym-editor-fields > button {
+  color: #56877e;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.synonym-editor-footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.synonym-editor-footer .synonym-actions {
+  margin-left: auto;
+}
+.synonym-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #6b7775;
+}
+.synonym-switch {
+  width: 34px;
+  height: 20px;
+  border-radius: 10px;
+  padding: 2px;
+  background: #b8c1c0;
+}
+.synonym-switch span {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+}
+.synonym-switch.is-on {
+  background: #20998b;
+}
+.synonym-switch.is-on span {
+  margin-left: 14px;
+}
+.synonym-delete {
+  color: #bc5151;
+  font-size: 12px;
+}
+.synonym-error {
+  font-size: 12px;
+  color: #b83a3a;
+}
+.synonym-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 20px;
+  color: #7b838c;
+  font-size: 12px;
+}
+.synonym-pagination nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.synonym-pagination button {
+  min-width: 28px;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+.synonym-pagination button[aria-current="page"] {
+  color: #16857d;
+  background: #eff9f6;
+  border-color: #c2e4dc;
+}
+.synonym-table .synonym-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: #858c93;
+}
+.synonym-source-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0008;
+  padding: 12px;
+}
+.synonym-source-dialog-body {
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow: auto;
+  background: #fff;
+  padding: 16px;
+  border-radius: 12px;
+}
+.synonym-source-dialog-body > .synonym-actions {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+@media (max-width: 700px) {
+  .synonym-status-tabs {
+    gap: 12px;
+    padding: 0 12px;
+  }
+  .synonym-status-tabs > button {
+    font-size: 12px;
+  }
+  .synonym-filters {
+    grid-template-columns: 1fr 1fr;
+    padding: 12px;
+  }
+  .synonym-filters > input {
+    grid-column: 1/-1;
+  }
+  .synonym-table thead {
+    display: none;
+  }
+  .synonym-table,
+  .synonym-table tbody,
+  .synonym-table tr,
+  .synonym-table td {
+    display: block;
+    width: auto;
+  }
+  .synonym-table tr[data-synonym-group],
+  .synonym-table tr[data-synonym-creating] {
+    padding: 10px 12px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .synonym-table td[data-label] {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 10px;
+    padding: 6px 0;
+    border: 0;
+  }
+  .synonym-table td[data-label]::before {
+    content: attr(data-label);
+    font-size: 11px;
+    color: #8b9299;
+    padding-top: 3px;
+  }
+  .synonym-table .synonym-section-row td {
+    padding: 9px 12px;
+  }
+  .synonym-table .synonym-editor-cell {
+    border: 0;
+    padding: 10px 0;
+  }
+  .synonym-editor-fields {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .synonym-editor-fields select {
+    grid-column: 1/-1;
+  }
+  .synonym-editor-footer .synonym-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .synonym-pagination {
+    padding: 12px;
+  }
+  .synonym-selection {
+    padding: 10px 12px;
+  }
+}

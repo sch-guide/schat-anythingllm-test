@@ -31,8 +31,9 @@ const sectionDeps = {
     () => null,
   "../ui": ui,
   "../synonymReview": review,
+  "../synonymTable.css": {},
 };
-const { GroupRow } = load("./sections/Synonyms.jsx", sectionDeps);
+const { GroupRow, TermEditor } = load("./sections/Synonyms.jsx", sectionDeps);
 function render(change = {}, props = {}) {
   const group = {
     id: 1,
@@ -53,19 +54,80 @@ function render(change = {}, props = {}) {
   );
 }
 
-test("active chips are green, off/draft groups are disabled visually and drafts remain available", () => {
-  assert.match(render(), /bg-emerald-50[^>]*>관/);
+test("표는 회색 사각 단어칩과 상태를 표시하며 기존 사용 중 묶음은 선택할 수 없다", () => {
+  assert.match(render(), /<tr/);
+  assert.match(render(), /synonym-chip/);
+  assert.match(render(), /type="checkbox"[^>]*disabled=""/);
   const draft = render({ status: "needs_review" });
-  assert.match(draft, /검토 필요 · 꺼짐/);
-  assert.match(draft, /aria-checked="false"/);
-  assert.match(draft, /확인한 뒤 사용을 켜면/);
+  assert.match(draft, /검토 대기/);
+  assert.match(draft, />등록</);
+  assert.match(draft, />제외</);
+  assert.doesNotMatch(draft, /type="checkbox"[^>]*disabled=""/);
+  assert.match(render({ status: "off" }), /사용 안 함/);
 });
 
-test("normal rows offer a category dropdown and disable immediate actions while another draft is open", () => {
-  assert.match(render(), /<select[^>]*aria-label="종류"/);
+test("표의 기본 작업은 수정이고 다른 행 편집 중에는 비활성이다", () => {
+  assert.match(render(), /<td[^>]*>시술·기구/);
+  assert.match(render(), />수정</);
+  assert.doesNotMatch(render(), /role="switch"/);
   const locked = render({}, { editingElsewhere: true });
-  assert.match(locked, /role="switch"[^>]*disabled=""/);
-  assert.match(locked, /<select[^>]*disabled=""/);
+  assert.match(locked, /<button[^>]*disabled=""[^>]*>수정</);
+});
+
+test("모바일용 항목 이름과 직접 등록 출처를 유지하고 편집기에서만 사용 상태와 삭제를 제공한다", () => {
+  const html = render();
+  for (const label of ["선택", "동의어", "분류", "출처", "상태", "작업"])
+    assert.ok(html.includes(`data-label="${label}"`), label);
+  assert.ok(html.includes("직접 등록"));
+  const editor = renderToStaticMarkup(
+    React.createElement(TermEditor, {
+      terms: ["관", "tube"],
+      kind: "procedure",
+      status: "off",
+      onRemove() {},
+      error: "단어를 2개 이상 넣어 주세요.",
+    })
+  );
+  assert.match(editor, /role="switch"[^>]*aria-checked="false"/);
+  assert.match(editor, /aria-label="관 삭제"/);
+  assert.match(editor, /aria-label="추가할 단어"/);
+  assert.match(editor, /role="alert"/);
+  assert.match(editor, />묶음 삭제</);
+  assert.match(editor, />저장</);
+});
+
+test("검토 대기 편집은 저장 후 등록이라고 표시하고 안전한 원문만 열 수 있다", () => {
+  const editor = renderToStaticMarkup(
+    React.createElement(TermEditor, {
+      terms: [],
+      kind: "drug",
+      status: "needs_review",
+      pending: true,
+    })
+  );
+  assert.match(editor, />저장 후 등록</);
+  const safe = render({
+    source: "auto",
+    suggestion: {
+      id: 6,
+      status: "pending",
+      reason: "가짜 근거",
+      sources: [
+        {
+          documentName: "synthetic.pdf",
+          pages: [7],
+          originalPdfAvailable: true,
+          workspaceSlug: "synthetic",
+          pdfRef: "a".repeat(43),
+        },
+      ],
+    },
+  });
+  assert.match(
+    safe,
+    /<button[^>]*class="synonym-source-link"[^>]*>synthetic.pdf p.7 원문/
+  );
+  assert.doesNotMatch(safe, /원문을 열 수 없는/);
 });
 
 test("suggestion safety badges, document pages and unsupported-source notice survive rendering", () => {
@@ -89,11 +151,12 @@ test("suggestion safety badges, document pages and unsupported-source notice sur
     "검증용",
     "missing.pdf p.2",
     "원문을 열 수 없는 문서예요.",
-    "넣기",
-    "빼기",
+    "제안 catheter 추가",
+    "무시",
   ])
     assert.ok(html.includes(value), value);
-  assert.match(html, /border-dashed border-amber/);
+  assert.match(html, /synonym-proposal-chip/);
+  assert.doesNotMatch(html, /제안 정보|추가 후보/);
 });
 
 test("loaded synonym screen uses the shared title and exact description once", () => {
@@ -131,4 +194,14 @@ test("loaded synonym screen uses the shared title and exact description once", (
     "같은 뜻의 말을 묶어 두면, 어떤 말로 물어도 지침을 잘 찾아요.";
   assert.equal(section.description, description);
   assert.equal(html.split(description).length - 1, 1);
+  assert.match(html, /<table[^>]*aria-label="동의어 관리 표"/);
+  for (const label of [
+    "분류 전체",
+    "문서 전체",
+    "사용 안 함",
+    "동의어",
+    "출처",
+    "작업",
+  ])
+    assert.ok(html.includes(label), label);
 });

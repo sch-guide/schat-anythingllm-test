@@ -179,3 +179,125 @@ export function runTotals(summary = {}) {
     ["재시도", summary.retries],
   ].map(([label, value]) => ({ label, value: Number(value) || 0 }));
 }
+
+export function groupSources(group = {}) {
+  return [
+    ...(group.suggestion?.sources || []),
+    ...(group.pendingAdditions || []).flatMap((item) => item.sources || []),
+  ];
+}
+
+// 표의 상태는 묶음 자체의 상태다. 사용 중 묶음의 추가 제안은 칸 안에서 검토한다.
+export function synonymTableView(groups = [], filters = {}) {
+  const listed = groups.filter((group) => !isRejectedAiGroup(group));
+  const counts = { all: listed.length, needs_review: 0, active: 0, off: 0 };
+  for (const group of listed)
+    counts[group.status] = (counts[group.status] || 0) + 1;
+  const key = termKey(filters.query);
+  const shown = listed.filter(
+    (group) =>
+      (!filters.status ||
+        filters.status === "all" ||
+        group.status === filters.status) &&
+      (!filters.kind || group.kind === filters.kind) &&
+      (!filters.document ||
+        groupSources(group).some(
+          (source) => source.documentName === filters.document
+        )) &&
+      (!key ||
+        [
+          ...group.terms,
+          ...(group.pendingAdditions || []).flatMap((item) => item.terms || []),
+        ].some((term) => termKey(term).includes(key)))
+  );
+  const statuses = ["needs_review", "active", "off"];
+  const ordered = statuses.flatMap((status) =>
+    shown.filter((group) => group.status === status)
+  );
+  const pages = Math.max(1, Math.ceil(ordered.length / 20));
+  const page = Math.min(pages, Math.max(1, Number(filters.page) || 1));
+  const rows = ordered.slice((page - 1) * 20, page * 20);
+  return {
+    counts,
+    rows,
+    page,
+    pages,
+    total: ordered.length,
+    start: ordered.length ? (page - 1) * 20 + 1 : 0,
+    end: Math.min(page * 20, ordered.length),
+    documents: [
+      ...new Set(
+        listed
+          .flatMap(groupSources)
+          .map((source) => source.documentName)
+          .filter(Boolean)
+      ),
+    ].sort(),
+    sections: statuses
+      .map((status) => ({
+        status,
+        groups: rows.filter((group) => group.status === status),
+      }))
+      .filter((section) => section.groups.length),
+  };
+}
+
+export async function reviewSelectedGroups(groups, ids, approve, api) {
+  const selected = new Set(ids);
+  const completed = [];
+  const failed = [];
+  for (const group of groups.filter(
+    (item) => selected.has(item.id) && item.status === "needs_review"
+  )) {
+    try {
+      const problem = approve
+        ? validateTerms(group.terms, groups, { ...group, terms: [] })
+        : "";
+      if (problem) {
+        failed.push({ id: group.id, error: problem });
+        continue;
+      }
+      const result = isNewAiGroup(group)
+        ? await (approve
+            ? api.approveAddition(group.suggestion.id)
+            : api.dismissAddition(group.suggestion.id))
+        : await api.update(group.id, { status: approve ? "active" : "off" });
+      if (result.ok && result.success) completed.push(group.id);
+      else
+        failed.push({
+          id: group.id,
+          error: result.error || "처리하지 못했어요.",
+        });
+    } catch {
+      failed.push({ id: group.id, error: "서버에 연결하지 못했어요." });
+    }
+  }
+  return { completed, failed };
+}
+
+export async function saveSynonymGroup(group, terms, kind, status, api) {
+  const pending = group.status === "needs_review";
+  const proposal = isNewAiGroup(group);
+  const saved = await api.update(group.id, {
+    terms: terms.map(cleanTerm).filter(Boolean),
+    kind,
+    ...(!proposal ? { status: pending ? "active" : status } : {}),
+  });
+  if (!saved.ok || !saved.success || !proposal) return saved;
+  try {
+    const approved = await api.approveAddition(group.suggestion.id);
+    if (approved.ok && approved.success) return approved;
+    return {
+      ...approved,
+      success: false,
+      error: `수정 내용은 저장됐지만 등록에 실패했어요. 검토 대기 목록에서 다시 등록해 주세요. ${approved.error || ""}`,
+    };
+  } catch {
+    return {
+      ok: false,
+      success: false,
+      error:
+        "수정 내용은 저장됐지만 등록에 실패했어요. 서버에 다시 연결한 뒤 검토 대기 목록에서 등록해 주세요.",
+    };
+  }
+}
