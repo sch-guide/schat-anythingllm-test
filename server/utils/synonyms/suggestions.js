@@ -31,6 +31,14 @@ const MAX_BATCHES = 30;
 const TITLE_LINES_PER_PAGE = 3;
 const TERM_LINES_PER_PAGE = 6;
 
+// 문서별 AI 호출·재시도는 순차 처리하되 관리자 저장을 기다리게 하지 않는다.
+let generationQueue = Promise.resolve();
+function serializeGeneration(task) {
+  const run = generationQueue.then(task, task);
+  generationQueue = run.catch(() => null);
+  return run;
+}
+
 const CATEGORIES = Object.freeze([
   "검사·시술",
   "수술",
@@ -700,18 +708,23 @@ async function processDocument(
     }
     const merged = mergeCandidates(candidates);
     row.candidates = merged.length;
-    const groups = (
-      await prisma.schat_synonym_groups.findMany({ orderBy: [{ id: "asc" }] })
-    ).map((item) => ({
-      id: item.id,
-      terms: parseJson(item.terms, []),
-      status: item.status,
-    }));
-    const suggestions = (await prisma.schat_synonym_suggestions.findMany()).map(
-      toSuggestionRow
-    );
-    const plan = planSuggestions(merged, { groups, suggestions, source });
-    if (!dryRun) await storePlan(plan, { prisma, method, source, runId, test });
+    // AI 대기가 끝난 뒤 최신 자료 조회부터 저장까지만 관리자 변경과 묶는다.
+    const plan = await serialized(async () => {
+      const groups = (
+        await prisma.schat_synonym_groups.findMany({ orderBy: [{ id: "asc" }] })
+      ).map((item) => ({
+        id: item.id,
+        terms: parseJson(item.terms, []),
+        status: item.status,
+      }));
+      const suggestions = (
+        await prisma.schat_synonym_suggestions.findMany()
+      ).map(toSuggestionRow);
+      const plan = planSuggestions(merged, { groups, suggestions, source });
+      if (!dryRun)
+        await storePlan(plan, { prisma, method, source, runId, test });
+      return plan;
+    });
     row.newGroups = plan.newGroups.length;
     row.additions = plan.additions.length;
     row.duplicates = plan.duplicates;
@@ -830,7 +843,7 @@ async function suggestForDocuments(
       rows.push({ ...emptyRow(document), status: "stopped" });
       continue;
     }
-    const row = await serialized(() =>
+    const row = await serializeGeneration(() =>
       processDocument(document, {
         llm,
         prisma,

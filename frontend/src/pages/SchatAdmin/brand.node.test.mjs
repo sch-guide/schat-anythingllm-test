@@ -363,6 +363,65 @@ test("공지 띠: 제목 기본값, ✕는 그날만 숨김, 제목·내용이 �
   assert.equal(r.noticeScrollSeconds(952), 20);
 });
 
+test("공지 저장 실패: 이번 탭에서 닫힘을 유지하고 제목·내용·날짜가 바뀌면 다시 보임", () => {
+  const notice = { title: "알림", text: "점검 안내" };
+  const today = new Date(2026, 9, 11, 9);
+  const tonight = new Date(2026, 9, 11, 23, 59);
+  const tomorrow = new Date(2026, 9, 12, 0, 1);
+  for (const storage of [
+    null,
+    {
+      getItem() {
+        throw Error("blocked");
+      },
+      setItem() {
+        throw Error("blocked");
+      },
+    },
+    {
+      getItem() {
+        return null;
+      },
+      setItem() {
+        throw Error("quota exceeded");
+      },
+    },
+  ]) {
+    const r = rules();
+    r.dismissNotice(notice, { storage, now: today });
+    assert.equal(r.noticeDismissed(notice, { storage, now: tonight }), true);
+    assert.equal(
+      r.noticeDismissed({ ...notice, title: "안내" }, { storage, now: today }),
+      false
+    );
+    assert.equal(
+      r.noticeDismissed(
+        { ...notice, text: "새 점검 안내" },
+        { storage, now: today }
+      ),
+      false
+    );
+    assert.equal(r.noticeDismissed(notice, { storage, now: tomorrow }), false);
+    // 저장하지 못한 닫힘은 새로고침에 해당하는 새 모듈에는 남지 않는다.
+    assert.equal(
+      rules().noticeDismissed(notice, { storage, now: today }),
+      false
+    );
+  }
+});
+
+test("공지 저장 성공: 새로고침 뒤에도 오늘 숨김을 읽음", () => {
+  const store = new Map();
+  const storage = {
+    getItem: (key) => store.get(key),
+    setItem: (key, value) => store.set(key, value),
+  };
+  const notice = { title: "알림", text: "점검 안내" };
+  const now = new Date(2026, 9, 11, 9);
+  rules().dismissNotice(notice, { storage, now });
+  assert.equal(rules().noticeDismissed(notice, { storage, now }), true);
+});
+
 test("공지 띠 모양: 아이콘·제목·구분선·글·✕, 자세히 보기 없음, 버튼과 대화는 띠만큼 내려감", () => {
   const brand = {
     ...initial,

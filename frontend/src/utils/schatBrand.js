@@ -5,6 +5,8 @@ export const NOTICE_TITLE_MAX = 8;
 export const NOTICE_SCROLL_SPEED = 50;
 export const NOTICE_SCROLL_GAP = 48;
 const NOTICE_DISMISS_KEY = "schat-notice-dismissed";
+// 브라우저 저장이 막혀도 이번 탭에서는 닫힘을 기억한다. 새로고침하면 사라진다.
+let memoryNoticeDismissal = null;
 
 export const defaultBrand = () => ({
   logo: null,
@@ -133,28 +135,34 @@ export function noticeDismissed(
   notice,
   { storage = browserStorage(), now = new Date() } = {}
 ) {
+  const sig = noticeSignature(notice);
+  const day = localDay(now);
   try {
     const saved = JSON.parse(storage?.getItem(NOTICE_DISMISS_KEY) || "null");
-    return (
-      saved?.sig === noticeSignature(notice) && saved?.day === localDay(now)
-    );
+    if (saved?.sig === sig && saved?.day === day) return true;
   } catch {
-    return false;
+    /* 저장소를 읽지 못해도 이번 탭의 닫힘은 확인한다. */
   }
+  return (
+    memoryNoticeDismissal?.sig === sig && memoryNoticeDismissal?.day === day
+  );
 }
 
 export function dismissNotice(
   notice,
   { storage = browserStorage(), now = new Date() } = {}
 ) {
+  const saved = { sig: noticeSignature(notice), day: localDay(now) };
   try {
-    storage?.setItem(
-      NOTICE_DISMISS_KEY,
-      JSON.stringify({ sig: noticeSignature(notice), day: localDay(now) })
-    );
+    if (storage) {
+      storage.setItem(NOTICE_DISMISS_KEY, JSON.stringify(saved));
+      memoryNoticeDismissal = null;
+      return;
+    }
   } catch {
     /* Without storage the notice simply closes until the page reloads. */
   }
+  memoryNoticeDismissal = saved;
 }
 
 export function noticeScrollSeconds(textWidth) {

@@ -676,8 +676,125 @@ test("the switch SCHAT_SYNONYM_SUGGESTIONS=off stops automatic suggestions", asy
 
 // ---- 한 번 실행, 순차 처리, 재시도, 텍스트 부족, 검증용 실행 ----------------------
 
+test("manual CRUD finishes during a pending AI response and generation uses the latest groups", async () => {
+  const { prisma, db } = memoryPrisma([
+    { terms: ["임시", "temporary"] },
+    { terms: ["삭제", "delete"] },
+  ]);
+  let release;
+  let started;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const waiting = new Promise((resolve) => {
+    started = resolve;
+  });
+  const generation = Suggestions.suggestForDocuments(document(), {
+    prisma,
+    llm: {
+      getChatCompletion: async () => {
+        started();
+        await gate;
+        return {
+          textResponse: JSON.stringify({
+            groups: [
+              candidate(["기관지내시경", "BFS"]),
+              candidate(["흉관", "chest tube"], { pages: [14] }),
+            ],
+          }),
+        };
+      },
+    },
+    logEvent: async () => null,
+  });
+  await waiting;
+  let completed = false;
+  const edits = (async () => {
+    await Synonyms.createGroup({ terms: ["기관지내시경", "BFS"] }, prisma);
+    await Synonyms.updateGroup(1, { terms: ["흉관", "chest tube"] }, prisma);
+    await Synonyms.deleteGroup(2, prisma);
+    completed = true;
+  })();
+  try {
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(
+      completed,
+      true,
+      "manual CRUD must finish before the AI response"
+    );
+  } finally {
+    release();
+    await Promise.allSettled([edits, generation]);
+  }
+  await edits;
+  const result = await generation;
+  assert.equal(result.newGroups, 0);
+  assert.equal(result.additions, 0);
+  assert.equal(result.duplicates, 2);
+  assert.equal(db.groups.length, 2);
+  assert.equal(db.suggestions.length, 0);
+});
+
+test("generation rereads a rejection recorded while its AI response is pending", async () => {
+  const { prisma, db } = memoryPrisma([{ terms: ["기관지내시경", "BFS"] }]);
+  const proposal = await prisma.schat_synonym_suggestions.create({
+    data: {
+      type: "addition",
+      group_id: 1,
+      terms: '["Bronchofiberscopy"]',
+      sources: "[]",
+    },
+  });
+  let release;
+  let started;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const waiting = new Promise((resolve) => {
+    started = resolve;
+  });
+  const generation = Suggestions.suggestForDocuments(document(), {
+    prisma,
+    llm: {
+      getChatCompletion: async () => {
+        started();
+        await gate;
+        return {
+          textResponse: JSON.stringify({
+            groups: [candidate(["기관지내시경", "BFS", "Bronchofiberscopy"])],
+          }),
+        };
+      },
+    },
+    logEvent: async () => null,
+  });
+  await waiting;
+  let completed = false;
+  const rejection = Suggestions.dismissAddition(proposal.id, prisma).then(
+    () => {
+      completed = true;
+    }
+  );
+  try {
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(
+      completed,
+      true,
+      "rejection must finish before the AI response"
+    );
+  } finally {
+    release();
+    await rejection;
+    await generation;
+  }
+  const result = await generation;
+  assert.equal(result.additions, 0);
+  assert.equal(db.suggestions.length, 1);
+  assert.equal(db.suggestions[0].status, "dismissed");
+});
+
 test("documents are processed one at a time, even when uploads overlap", async () => {
-  const { prisma } = memoryPrisma(draftGroups, ["doc-a", "doc-b"]);
+  const { prisma, db } = memoryPrisma([], ["doc-a", "doc-b"]);
   let inFlight = 0;
   let most = 0;
   const llm = {
@@ -687,7 +804,11 @@ test("documents are processed one at a time, even when uploads overlap", async (
       most = Math.max(most, inFlight);
       await new Promise((resolve) => setTimeout(resolve, 20));
       inFlight -= 1;
-      return { textResponse: JSON.stringify({ groups: [] }) };
+      return {
+        textResponse: JSON.stringify({
+          groups: [candidate(["기관지내시경", "BFS"])],
+        }),
+      };
     },
   };
   await Promise.all([
@@ -703,6 +824,14 @@ test("documents are processed one at a time, even when uploads overlap", async (
     }),
   ]);
   assert.equal(most, 1);
+  assert.equal(db.groups.length, 1);
+  assert.equal(db.suggestions.length, 1);
+  assert.deepEqual(
+    JSON.parse(db.suggestions[0].sources)
+      .map((source) => source.documentId)
+      .sort(),
+    ["doc-a", "doc-b"]
+  );
 });
 
 test("a rate limit is retried after waiting, then succeeds", async () => {
