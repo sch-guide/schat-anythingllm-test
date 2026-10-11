@@ -8,11 +8,11 @@ function maskMemo(value) {
     (name.length > 2 ? name.at(-1) : "");
   return value
     .replace(
-      /(?<![가-힣])([가-힣]{2,4})(\s*(?:님|환자|씨))(?=$|[^가-힣])/gu,
+      /(?<![가-힣])([가-힣]{2,4})(\s*(?:님|환자|씨))(?=(?:은|는|이|가|을|를|의|께서|에게|께|도|만|과|와|으로|로)?(?:$|[^가-힣]))/gu,
       (_, name, suffix) => hide(name) + suffix
     )
     .replace(
-      /((?:환자|성명|이름)\s*[:：]?\s*)([가-힣]{2,4})(?=$|[^가-힣])/gu,
+      /((?:환자|성명|이름)\s*[:：]?\s*)([가-힣]{2,4}?)(?=(?:은|는|이|가|을|를|의|께서|에게|께|도|만|과|와|으로|로)?(?:$|[^가-힣]))/gu,
       (_, prefix, name) => prefix + hide(name)
     )
     .replace(
@@ -139,8 +139,8 @@ function createAnswerFeedbackStore(db, clock = Date.now) {
               `${row.question} ${row.memo || ""}`
                 .toLowerCase()
                 .includes(String(filters.q).toLowerCase())) &&
-            (!filters.from || row.createdAt.slice(0, 10) >= filters.from) &&
-            (!filters.to || row.createdAt.slice(0, 10) <= filters.to)
+            (!filters.from || require("./aiUsageFees").kstDay(row.createdAt) >= filters.from) &&
+            (!filters.to || require("./aiUsageFees").kstDay(row.createdAt) <= filters.to)
         );
     },
     async detail(id) {

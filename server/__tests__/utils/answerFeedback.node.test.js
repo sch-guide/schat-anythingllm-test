@@ -14,6 +14,17 @@ const migration = path.join(
   __dirname,
   "../../prisma/migrations/20261012010000_answer_feedback/migration.sql"
 );
+test("이름 호칭 뒤 조사도 가리고 지침 용어는 그대로 보존", () => {
+  const masked = api.maskMemo("김민지님은 홍길동환자가 이름: 이영희는 확인 / 산소포화도 환자는 유지");
+  assert.equal(masked,"김○지님은 홍○동환자가 이름: 이○희는 확인 / 산소포화도 환자는 유지");
+});
+test("한국 오전 평가도 같은 한국 날짜 범위에 포함", async t => {
+  const {db} = setup(t);
+  const store = api.createAnswerFeedbackStore(db, () => Date.parse("2026-10-12T08:00:00+09:00"));
+  await store.save(7,2,11,{feedback:false,reason:"wrong"});
+  assert.equal((await store.list({from:"2026-10-12",to:"2026-10-12"})).length,1);
+  assert.equal((await store.list({from:"2026-10-11",to:"2026-10-11"})).length,0);
+});
 function setup(t) {
   const sqlite = new DatabaseSync(":memory:");
   t.after(() => sqlite.close());
