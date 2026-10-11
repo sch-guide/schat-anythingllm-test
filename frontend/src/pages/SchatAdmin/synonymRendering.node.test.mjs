@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import vm from "node:vm";
+import { setImmediate } from "node:timers/promises";
 import * as review from "./synonymReview.js";
 import { findSchatAdminSection } from "./menu.js";
 
@@ -204,4 +205,176 @@ test("loaded synonym screen uses the shared title and exact description once", (
     "작업",
   ])
     assert.ok(html.includes(label), label);
+});
+
+test("분류 수정 저장 후 등록만 실패해 편집행이 필터 밖으로 사라져도 화면 조작 잠금이 풀린다", async () => {
+  // 실제 화면과 행의 hooks/처리기를 실행하고 외부 모델 경계만 가짜 자료로 대체한다.
+  const instances = new Map();
+  let current;
+  let cursor;
+  const hooks = {
+    ...React,
+    useState(initial) {
+      const instance = current;
+      const index = cursor++;
+      if (!(index in instance.slots)) instance.slots[index] = initial;
+      return [
+        instance.slots[index],
+        (next) => {
+          instance.slots[index] =
+            typeof next === "function" ? next(instance.slots[index]) : next;
+        },
+      ];
+    },
+    useRef(initial) {
+      const index = cursor++;
+      return (current.slots[index] ||= { current: initial });
+    },
+    useMemo(callback) {
+      return callback();
+    },
+    useEffect(callback, dependencies) {
+      const index = cursor++;
+      const previous = current.slots[index];
+      if (
+        !previous ||
+        dependencies.some((value, i) => !Object.is(value, previous[i]))
+      ) {
+        current.slots[index] = dependencies;
+        current.effects.push(callback);
+      }
+    },
+  };
+  function draw(key, component, props) {
+    if (!instances.has(key)) instances.set(key, { slots: [], effects: [] });
+    current = instances.get(key);
+    cursor = 0;
+    current.effects = [];
+    const tree = component(props);
+    for (const callback of current.effects) callback();
+    return tree;
+  }
+  function nodes(tree) {
+    return !React.isValidElement(tree)
+      ? []
+      : [tree, ...React.Children.toArray(tree.props.children).flatMap(nodes)];
+  }
+  function byLabel(tree, label) {
+    return nodes(tree).find((node) => node.props["aria-label"] === label);
+  }
+  const original = {
+    id: 9,
+    terms: ["생검", "biopsy"],
+    kind: "procedure",
+    source: "auto",
+    status: "needs_review",
+    suggestion: { id: 91, status: "pending" },
+  };
+  let stored = { ...original };
+  const otherGroups = Array.from({ length: 21 }, (_, index) => ({
+    id: 100 + index,
+    terms: [`약${index}`, `drug${index}`],
+    kind: "drug",
+    source: "admin",
+    status: "off",
+  }));
+  const api = {
+    list: async () => [{ ...stored }, ...otherGroups],
+    runs: async () => [],
+    update: async (id, change) => {
+      assert.equal(id, 9);
+      stored = { ...stored, ...change };
+      return { ok: true, success: true };
+    },
+    approveAddition: async (id) => {
+      assert.equal(id, 91);
+      return { ok: false, success: false, error: "가짜 승인 실패" };
+    },
+  };
+  const module = load("./sections/Synonyms.jsx", {
+    ...sectionDeps,
+    react: hooks,
+    "@/models/schatSynonyms": api,
+  });
+  const drawSection = () => draw("section", module.default);
+  drawSection();
+  await setImmediate();
+  let tree = drawSection();
+  nodes(tree)
+    .find(
+      (node) =>
+        node.props["aria-pressed"] !== undefined &&
+        node.props.children[0] === "검토 대기"
+    )
+    .props.onClick();
+  tree = drawSection();
+  byLabel(tree, "분류 전체").props.onChange({ target: { value: "procedure" } });
+  tree = drawSection();
+  const rowElement = nodes(tree).find((node) => node.type === module.GroupRow);
+  let row = draw("row9", module.GroupRow, rowElement.props);
+  nodes(row)
+    .find(
+      (node) => node.props.className === "synonym-chip" && node.props.onClick
+    )
+    .props.onClick();
+  tree = drawSection();
+  assert.equal(byLabel(tree, "분류 전체").props.disabled, true);
+  row = draw(
+    "row9",
+    module.GroupRow,
+    nodes(tree).find((node) => node.type === module.GroupRow).props
+  );
+  let editor = nodes(row).find((node) => node.type === module.TermEditor);
+  editor.props.setKind("drug");
+  row = draw(
+    "row9",
+    module.GroupRow,
+    nodes(tree).find((node) => node.type === module.GroupRow).props
+  );
+  editor = nodes(row).find((node) => node.type === module.TermEditor);
+  await editor.props.onSave(["생검", "biopsy"]);
+  tree = drawSection();
+  tree = drawSection(); // 효과가 편집 잠금을 해제한 뒤의 실제 화면 상태.
+  assert.equal(stored.kind, "drug");
+  assert.equal(stored.status, "needs_review");
+  assert.equal(
+    nodes(tree).some((node) => node.type === module.GroupRow),
+    false
+  );
+  assert.equal(byLabel(tree, "분류 전체").props.disabled, false);
+  assert.equal(byLabel(tree, "다음 페이지").props.disabled, true); // 현재 결과가 빈 한 페이지.
+  const newButton = nodes(tree).find(
+    (node) => node.props.children === "+ 새 묶음 추가"
+  );
+  assert.equal(newButton.props.disabled, false);
+  const failure = nodes(tree).find((node) => node.props.role === "alert");
+  assert.match(
+    failure.props.children.props.children,
+    /수정 내용은 저장.*등록에 실패/
+  );
+  byLabel(tree, "분류 전체").props.onChange({ target: { value: "drug" } });
+  tree = drawSection();
+  assert.equal(
+    nodes(tree).some((node) => node.type === module.GroupRow),
+    true
+  );
+  assert.equal(byLabel(tree, "분류 전체").props.disabled, false);
+  nodes(tree)
+    .find(
+      (node) =>
+        node.props["aria-pressed"] !== undefined &&
+        node.props.children[0] === "전체"
+    )
+    .props.onClick();
+  tree = drawSection();
+  assert.equal(byLabel(tree, "다음 페이지").props.disabled, false);
+  byLabel(tree, "다음 페이지").props.onClick();
+  tree = drawSection();
+  assert.equal(byLabel(tree, "2페이지").props["aria-current"], "page");
+  newButton.props.onClick();
+  tree = drawSection();
+  assert.equal(
+    nodes(tree).some((node) => node.props["data-synonym-creating"]),
+    true
+  );
 });

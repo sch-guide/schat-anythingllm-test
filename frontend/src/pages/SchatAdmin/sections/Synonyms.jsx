@@ -598,6 +598,14 @@ export default function SynonymsSection() {
     () => synonymTableView(groups || [], filters),
     [groups, filters]
   );
+  useEffect(() => {
+    // 저장된 분류가 현재 필터 밖으로 이동하면 사라진 편집행의 잠금을 해제한다.
+    if (
+      editingId !== null &&
+      !view.rows.some((group) => group.id === editingId)
+    )
+      setEditingId(null);
+  }, [editingId, view.rows]);
   function changeFilter(key, value) {
     setSelected([]);
     setFilters((current) => ({
