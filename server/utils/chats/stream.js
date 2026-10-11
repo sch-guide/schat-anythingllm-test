@@ -101,7 +101,7 @@ async function streamChatWithWorkspace(
         });
   if (isAgentChat) return;
 
-  // Only standalone SCHAT query answers are eligible. Preflight checks the raw
+  // Only standalone SCHAT query/chat answers are eligible. Preflight checks the raw
   // history/private-file records and captures document generation before I/O.
   const answerCacheRequest = await prepareAnswerCache({
     workspace, message, updatedMessage, chatMode, user, thread, attachments,

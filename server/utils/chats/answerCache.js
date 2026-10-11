@@ -4,7 +4,8 @@ const { normalizeQuestion } = require('../answerCache');
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 // SCHAT grounded completion does not inject chatPrompt's private memories or
-// user variables. Generic chat and the model router therefore stay out of scope.
+// user variables. Only its history-free query/chat requests qualify; generic
+// (non-SCHAT) chat and the model router remain out of scope.
 async function prepareAnswerCache(input, injected) {
   const {workspace, message, updatedMessage, chatMode, user, thread, attachments=[]} = input;
   const env = injected?.env || process.env;
@@ -13,7 +14,7 @@ async function prepareAnswerCache(input, injected) {
       // Native/default embeddings write from another process, outside this
       // cache generation boundary. Match EmbeddingWorkerManager's routing.
       !env.EMBEDDING_ENGINE || env.EMBEDDING_ENGINE === 'native' ||
-      chatMode !== 'query' || workspace?.chatMode === 'automatic' ||
+      !['query', 'chat'].includes(chatMode) || workspace?.chatMode === 'automatic' ||
       !Number.isSafeInteger(workspace?.id) || workspace.id <= 0 ||
       !provider || provider === 'anythingllm-router' || attachments.length ||
       message !== updatedMessage || /(^|\s)[/@]/u.test(message) || !normalizeQuestion(message)) return null;

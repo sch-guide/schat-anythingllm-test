@@ -45,9 +45,9 @@ function fixture() {
   };
   const sandbox={module:{exports:{}},require:name=>{if(!(name in modules))throw new Error(`Unmocked dependency: ${name}`);return modules[name];},process:{env},console};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../utils/chats/stream.js'),'utf8'),sandbox);
-  async function ask(message='CT 준비?',user={id:1}) {
+  async function ask(message='CT 준비?',user={id:1},mode='query') {
     const response=new EventEmitter();response.destroyed=!!state.disconnected;response.writableEnded=false;response.end=()=>{};
-    await sandbox.module.exports.streamChatWithWorkspace(response,workspace,message,'query',user);
+    await sandbox.module.exports.streamChatWithWorkspace(response,workspace,message,mode,user);
   }
   return {cache,state,ask,workspace};
 }
@@ -72,6 +72,20 @@ test('fallbacks, cancelled answers and changes during generation are never store
     if(kind==='change')f.state.onCompletion=()=>{const finish=f.cache.beginMutation([1]);finish();};
     await f.ask();assert.equal(f.cache.stats().entries,0,kind);
   }
+});
+
+test('normal chat first-question hit skips admission and generation but a follow-up does not',async()=>{
+  const f=fixture();f.workspace.chatMode='chat';
+  await f.ask('CT 준비?',{id:1},'chat');
+  await f.ask('ct준비！',{id:2},'chat');
+  assert.equal(f.state.completions,1);
+  assert.equal(f.state.admissions,1);
+  assert.equal(f.state.records[1].response.metrics.answerCacheHit,true);
+  assert.equal(f.state.records[1].response.sources[0].exact_text,'가짜 원문');
+  f.state.history=[{id:99}];
+  await f.ask('CT 준비?',{id:2},'chat');
+  assert.equal(f.state.completions,2);
+  assert.equal(f.state.admissions,2);
 });
 test('history, private files, document replacement, workspace and model changes cannot reuse old answers',async()=>{
   for(const kind of ['history','files','documents','workspace','model']) {

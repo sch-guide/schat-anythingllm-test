@@ -23,7 +23,7 @@ test('history, parsed files, attachments, commands, agents and personalized mode
   for(const change of [
     {message:'/preset',updatedMessage:'expanded'}, {message:'@agent CT?',updatedMessage:'@agent CT?'},
     {message:'CT /custom',updatedMessage:'CT /custom'}, {attachments:[{type:'synthetic'}]},
-    {chatMode:'chat'}, {workspace:{id:1,chatMode:'automatic'}},
+    {chatMode:'automatic'}, {workspace:{id:1,chatMode:'automatic'}},
   ]) {
     const f=fixture();
     assert.equal(await prepareAnswerCache({...f.input,...change},f.deps),null,JSON.stringify(change));
@@ -44,6 +44,19 @@ test('failed state checks fail closed and changed document fingerprint cannot hi
   const next=await prepareAnswerCache(f.input,f.deps);
   assert.equal(f.cache.get(1,'CT 준비?',next.context),null);
   f.deps.prisma.workspace_chats.findMany=async()=>{throw new Error('synthetic failure');};
+  assert.equal(await prepareAnswerCache(f.input,f.deps),null);
+});
+
+test('normal chat reuses only the first question and keeps query mode separate',async()=>{
+  const f=fixture();f.input.chatMode='chat';f.input.workspace.chatMode='chat';
+  const prepared=await prepareAnswerCache(f.input,f.deps);
+  assert.ok(prepared);
+  f.cache.put({...prepared,question:f.input.message,value:{answer:'shared first answer'}});
+  const next=await prepareAnswerCache({...f.input,user:{id:2},thread:{id:20}},f.deps);
+  assert.equal(f.cache.get(1,f.input.message,next.context).answer,'shared first answer');
+  const query=await prepareAnswerCache({...f.input,chatMode:'query'},f.deps);
+  assert.equal(f.cache.get(1,f.input.message,query.context),null);
+  f.state.history=[{id:99}];
   assert.equal(await prepareAnswerCache(f.input,f.deps),null);
 });
 test('watched corpus and a mutation during eligibility checks cannot be reused',async()=>{
