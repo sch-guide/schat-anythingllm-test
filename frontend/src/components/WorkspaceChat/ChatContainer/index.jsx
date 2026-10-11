@@ -38,6 +38,8 @@ import { ChatSidebarProvider } from "./ChatSidebar";
 import SourcesSidebar from "./SourcesSidebar";
 import MemoriesSidebar from "./MemoriesSidebar";
 import ActiveGenerationGuard from "./ActiveGenerationGuard";
+import useUser from "@/hooks/useUser";
+import { regenerateAnswer } from "@/utils/answerActions.mjs";
 
 export default function ChatContainer({
   workspace,
@@ -45,8 +47,12 @@ export default function ChatContainer({
   knownHistory = [],
 }) {
   const navigate = useNavigate();
+  const { user } = useUser();
   const brandPanelStyle = useBrandPanelStyle();
   const [loadingResponse, setLoadingResponse] = useState(false);
+  const loadingResponseRef = useRef(loadingResponse);
+  loadingResponseRef.current = loadingResponse;
+  const regeneratingRef = useRef(false);
   const [chatHistory, setChatHistory] = useState(knownHistory);
   const [socketId, setSocketId] = useState(null);
   const [websocket, setWebsocket] = useState(null);
@@ -257,23 +263,25 @@ export default function ChatContainer({
   chatHistoryRef2.current = chatHistory;
 
   const regenerateAssistantMessage = useCallback(
-    (chatId) => {
-      const filteredHistory = chatHistoryRef2.current.slice(0, -1);
-      const lastUserMessage = filteredHistory.findLast(
-        (msg) => msg.role === "user"
-      );
-      Workspace.deleteChats(workspace.slug, [chatId])
-        .then(() =>
-          sendCommandRef.current({
-            text: lastUserMessage.content,
-            autoSubmit: true,
-            history: filteredHistory,
-            attachments: lastUserMessage?.attachments,
-          })
-        )
-        .catch((e) => console.error(e));
+    async (chatId) => {
+      if (loadingResponseRef.current || regeneratingRef.current) return;
+      regeneratingRef.current = true;
+      try {
+        await regenerateAnswer({
+          user,
+          history: chatHistoryRef2.current,
+          chatId,
+          isLoading: loadingResponseRef.current,
+          deleteChats: (id) => Workspace.deleteChats(workspace.slug, [id]),
+          sendCommand: (command) => sendCommandRef.current(command),
+        });
+      } catch (error) {
+        console.error(error);
+      } finally {
+        regeneratingRef.current = false;
+      }
     },
-    [workspace.slug]
+    [workspace.slug, user]
   );
 
   useEffect(() => {

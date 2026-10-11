@@ -5,6 +5,10 @@ const {
   safeJsonParse,
 } = require("../utils/http");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
+const {
+  requireAnswerManagement,
+  requireChatEditPermission,
+} = require("../utils/middleware/answerActionPermission");
 const { Telemetry } = require("../models/telemetry");
 const {
   flexUserRoleValid,
@@ -192,6 +196,7 @@ function workspaceThreadEndpoints(app) {
     [
       validatedRequest,
       flexUserRoleValid([ROLES.all]),
+      requireAnswerManagement,
       validWorkspaceAndThreadSlug,
     ],
     async (request, response) => {
@@ -221,6 +226,7 @@ function workspaceThreadEndpoints(app) {
     [
       validatedRequest,
       flexUserRoleValid([ROLES.all]),
+      requireChatEditPermission,
       validWorkspaceAndThreadSlug,
     ],
     async (request, response) => {

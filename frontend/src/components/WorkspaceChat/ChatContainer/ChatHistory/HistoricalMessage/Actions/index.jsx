@@ -5,6 +5,8 @@ import Workspace from "@/models/workspace";
 import { EditMessageAction } from "./EditMessage";
 import ActionMenu from "./ActionMenu";
 import { useTranslation } from "react-i18next";
+import useUser from "@/hooks/useUser";
+import { canEditMessage, canManageAnswers } from "@/utils/answerActions.mjs";
 
 const Actions = ({
   message,
@@ -18,6 +20,7 @@ const Actions = ({
   role,
 }) => {
   const { t } = useTranslation();
+  const { user } = useUser();
   const [selectedFeedback, setSelectedFeedback] = useState(feedbackScore);
   const handleFeedback = async (newFeedback) => {
     const updatedFeedback =
@@ -31,16 +34,18 @@ const Actions = ({
       className={`flex w-full flex-wrap items-center gap-y-1 ${role === "user" ? "justify-end" : "justify-between"}`}
     >
       <div className="flex justify-start items-center gap-x-[8px]">
-        <div className="md:group-hover:opacity-100 transition-all duration-300 md:opacity-0 flex justify-start items-center gap-x-[8px]">
+        <div className="md:group-hover:opacity-100 transition-all duration-300 md:opacity-0 flex flex-wrap justify-start items-center gap-x-[8px] gap-y-1">
           <div
             className={`flex justify-start items-center gap-x-[8px] ${role === "user" ? "flex-row-reverse" : ""}`}
           >
             <CopyMessage message={message} />
-            <EditMessageAction
-              chatId={chatId}
-              role={role}
-              isEditing={isEditing}
-            />
+            {canEditMessage(user, role) && (
+              <EditMessageAction
+                chatId={chatId}
+                role={role}
+                isEditing={isEditing}
+              />
+            )}
           </div>
           {isLastMessage && !isEditing && (
             <RegenerateMessage
@@ -58,12 +63,14 @@ const Actions = ({
               IconComponent={ThumbsUp}
             />
           )}
-          <ActionMenu
-            chatId={chatId}
-            forkThread={forkThread}
-            isEditing={isEditing}
-            role={role}
-          />
+          {canManageAnswers(user) && (
+            <ActionMenu
+              chatId={chatId}
+              forkThread={forkThread}
+              isEditing={isEditing}
+              role={role}
+            />
+          )}
         </div>
       </div>
     </div>

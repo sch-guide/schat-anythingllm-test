@@ -16,6 +16,10 @@ const {
   handleOriginalPdfUpload,
 } = require("../utils/files/multer");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
+const {
+  requireAnswerManagement,
+  requireChatEditPermission,
+} = require("../utils/middleware/answerActionPermission");
 const { Telemetry } = require("../models/telemetry");
 const {
   flexUserRoleValid,
@@ -920,7 +924,12 @@ function workspaceEndpoints(app) {
 
   app.delete(
     "/workspace/:slug/delete-chats",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      flexUserRoleValid([ROLES.all]),
+      requireAnswerManagement,
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const { chatIds = [] } = reqBody(request);
@@ -951,7 +960,12 @@ function workspaceEndpoints(app) {
 
   app.delete(
     "/workspace/:slug/delete-edited-chats",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      flexUserRoleValid([ROLES.all]),
+      requireAnswerManagement,
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const { startingId } = reqBody(request);
@@ -975,7 +989,12 @@ function workspaceEndpoints(app) {
 
   app.post(
     "/workspace/:slug/update-chat",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      flexUserRoleValid([ROLES.all]),
+      requireChatEditPermission,
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const { chatId, newText = null, role = "assistant" } = reqBody(request);
@@ -1163,7 +1182,12 @@ function workspaceEndpoints(app) {
 
   app.post(
     "/workspace/:slug/thread/fork",
-    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    [
+      validatedRequest,
+      flexUserRoleValid([ROLES.all]),
+      requireAnswerManagement,
+      validWorkspaceSlug,
+    ],
     async (request, response) => {
       try {
         const user = await userFromSession(request, response);
@@ -1239,7 +1263,7 @@ function workspaceEndpoints(app) {
 
   app.put(
     "/workspace/workspace-chats/:id",
-    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    [validatedRequest, flexUserRoleValid([ROLES.all]), requireAnswerManagement],
     async (request, response) => {
       try {
         const { id } = request.params;

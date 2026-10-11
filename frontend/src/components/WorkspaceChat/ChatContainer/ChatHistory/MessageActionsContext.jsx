@@ -5,6 +5,8 @@ import {
   useEffect,
   useCallback,
 } from "react";
+import useUser from "@/hooks/useUser";
+import { canEditMessage, canManageAnswers } from "@/utils/answerActions.mjs";
 
 const EDIT_EVENT = "toggle-message-edit";
 const DELETE_EVENT = "delete-message";
@@ -17,13 +19,14 @@ const MessageActionsContext = createContext(null);
  * this provider registers just 2 listeners total and dispatches to messages via context.
  */
 export function MessageActionsProvider({ children }) {
+  const { user } = useUser();
   const [editingMessage, setEditingMessage] = useState(null);
   const [deletedMessages, setDeletedMessages] = useState(new Set());
 
   useEffect(() => {
     function handleEditEvent(e) {
-      const { chatId, role } = e.detail;
-      if (!chatId || !role) return;
+      const { chatId, role } = e.detail || {};
+      if (!chatId || !canEditMessage(user, role)) return;
 
       setEditingMessage((prev) => {
         if (prev?.chatId === chatId && prev?.role === role) {
@@ -34,8 +37,8 @@ export function MessageActionsProvider({ children }) {
     }
 
     function handleDeleteEvent(e) {
-      const { chatId } = e.detail;
-      if (!chatId) return;
+      const { chatId } = e.detail || {};
+      if (!chatId || !canManageAnswers(user)) return;
 
       setDeletedMessages((prev) => {
         const next = new Set(prev);
@@ -51,13 +54,17 @@ export function MessageActionsProvider({ children }) {
       window.removeEventListener(EDIT_EVENT, handleEditEvent);
       window.removeEventListener(DELETE_EVENT, handleDeleteEvent);
     };
-  }, []);
+  }, [user]);
 
   const isEditing = useCallback(
     (chatId, role) => {
-      return editingMessage?.chatId === chatId && editingMessage?.role === role;
+      return (
+        canEditMessage(user, role) &&
+        editingMessage?.chatId === chatId &&
+        editingMessage?.role === role
+      );
     },
-    [editingMessage]
+    [editingMessage, user]
   );
 
   const isDeleted = useCallback(

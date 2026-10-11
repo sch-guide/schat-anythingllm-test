@@ -34,6 +34,8 @@ import Checklist from "@/models/checklist";
 import { matchChecklists } from "@/utils/checklistMatcher";
 import ChecklistFloatingPanel from "./Checklist/ChecklistFloatingPanel";
 import { openChecklistPopup } from "@/utils/checklistPopup";
+import useUser from "@/hooks/useUser";
+import { canEditMessage, submitEditedQuestion } from "@/utils/answerActions.mjs";
 
 export default forwardRef(function (
   {
@@ -49,6 +51,7 @@ export default forwardRef(function (
   const { chatHistoryRef, isAtBottom, scrollToBottom, scrollHandlers } =
     useAutoScroll(history, ref);
   const navigate = useNavigate();
+  const { user } = useUser();
   const { threadSlug = null } = useParams();
   const { showing, hideModal } = useManageWorkspaceModal();
   const { showScrollbar } = Appearance.getSettings();
@@ -112,7 +115,7 @@ export default forwardRef(function (
       attachments = [],
       saveOnly = false,
     }) => {
-      if (!editedMessage) return;
+      if (!editedMessage || !canEditMessage(user, role)) return;
 
       if (role === "user" && saveOnly) {
         const updatedHistory = [...history];
@@ -131,17 +134,15 @@ export default forwardRef(function (
       }
 
       if (role === "user") {
-        const updatedHistory = history.slice(
-          0,
-          history.findIndex((msg) => msg.chatId === chatId) + 1
-        );
-        updatedHistory[updatedHistory.length - 1].content = editedMessage;
-        await Workspace.deleteEditedChats(workspace.slug, threadSlug, chatId);
-        sendCommand({
-          text: editedMessage,
-          autoSubmit: true,
-          history: updatedHistory,
+        await submitEditedQuestion({
+          user,
+          history,
+          chatId,
+          editedMessage,
           attachments,
+          deleteEditedChats: (id) =>
+            Workspace.deleteEditedChats(workspace.slug, threadSlug, id),
+          sendCommand,
         });
         return;
       }
@@ -163,7 +164,7 @@ export default forwardRef(function (
         return;
       }
     },
-    [workspace.slug, threadSlug, updateHistory, history, sendCommand]
+    [workspace.slug, threadSlug, updateHistory, history, sendCommand, user]
   );
 
   const forkThread = useCallback(
