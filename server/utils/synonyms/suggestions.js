@@ -558,7 +558,7 @@ async function askOnce(llm, batch) {
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: batch.text },
     ],
-    { temperature: 0, responseSchema: SUGGESTION_SCHEMA }
+    { temperature: 0, responseSchema: SUGGESTION_SCHEMA, maxRetries: 0 }
   );
   const text = result?.textResponse;
   if (!text) throw Object.assign(new Error("empty"), { code: "empty" });

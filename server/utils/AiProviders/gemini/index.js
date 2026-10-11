@@ -413,7 +413,7 @@ class GeminiLLM {
 
   async getChatCompletion(
     messages = null,
-    { responseSchema = null } = {}
+    { responseSchema = null, maxRetries = undefined } = {}
   ) {
     const result = await LLMPerformanceMonitor.measureAsyncFunction(
       this.openai.chat.completions
@@ -422,7 +422,9 @@ class GeminiLLM {
             model: this.model,
             messages,
             responseSchema,
-          })
+          }),
+          // C는 문서 확인 후 직접 재시도한다. 일반 답변은 SDK 기본값을 유지한다.
+          maxRetries === 0 ? { maxRetries: 0 } : undefined
         )
         .catch((e) => {
           console.error(e);
