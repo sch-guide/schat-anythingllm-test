@@ -150,6 +150,7 @@ export default function SettingsSidebar() {
 const SECTION_ICONS = {
   brand: PaintBrush,
   answer: ChatText,
+  "answer-cache": Swap,
   users: UsersThree,
   reports: Megaphone,
   quiz: Exam,

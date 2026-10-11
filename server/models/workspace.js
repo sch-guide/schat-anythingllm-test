@@ -390,6 +390,9 @@ const Workspace = {
   },
 
   delete: async function (clause = {}) {
+    const finish = require('../utils/answerCacheRuntime').beginMutation(
+      Number.isSafeInteger(clause.id) && clause.id > 0 ? [clause.id] : null
+    );
     try {
       await prisma.workspaces.delete({
         where: clause,
@@ -398,6 +401,8 @@ const Workspace = {
     } catch (error) {
       console.error(error.message);
       return false;
+    } finally {
+      finish();
     }
   },
 

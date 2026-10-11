@@ -196,6 +196,10 @@ test("HTTP cancelled during model selection cannot reach retrieval or generation
     "./index": { grepCommand: async (x) => x, VALID_COMMANDS: {} },
     "./searchQueries": { buildChatSearchQueries: () => ({}) },
     "./expandedBodySearch": {},
+    "../answerCacheRuntime": { cache: require("../../utils/answerCache").createAnswerCache() },
+    "./answerCache": {
+      prepareAnswerCache: input => require("../../utils/chats/answerCache").prepareAnswerCache(input, { env: {} }),
+    },
     "../schatSafety/imageAttachment": {},
   });
   const work = stream.streamChatWithWorkspace(response, {}, "test", "chat", {

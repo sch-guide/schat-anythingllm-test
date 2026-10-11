@@ -19,6 +19,8 @@ const {
 } = require("./index");
 const { buildChatSearchQueries } = require("./searchQueries");
 const { runExpandedBodySearch } = require("./expandedBodySearch");
+const { cache: answerCache } = require("../answerCacheRuntime");
+const { prepareAnswerCache } = require("./answerCache");
 
 const VALID_CHAT_MODE = ["automatic", "chat", "query"];
 
@@ -98,6 +100,37 @@ async function streamChatWithWorkspace(
           attachments,
         });
   if (isAgentChat) return;
+
+  // Only standalone SCHAT query answers are eligible. Preflight checks the raw
+  // history/private-file records and captures document generation before I/O.
+  const answerCacheRequest = await prepareAnswerCache({
+    workspace, message, updatedMessage, chatMode, user, thread, attachments,
+  });
+  if (response.destroyed || response.writableEnded) return;
+  const cachedAnswer = answerCacheRequest
+    ? answerCache.get(workspace.id, message, answerCacheRequest.context)
+    : null;
+  if (cachedAnswer && !response.destroyed && !response.writableEnded) {
+    // A cache hit consumes neither a generation queue slot nor a provider call.
+    // Original provider usage/cost must not be attributed to this new request.
+    const metrics = { answerCacheHit: true, prompt_tokens: 0,
+      completion_tokens: 0, total_tokens: 0, duration: 0 };
+    const { answer, ...evidence } = cachedAnswer;
+    writeResponseChunk(response, {
+      uuid, type: "textResponseChunk", textResponse: answer,
+      ...evidence, close: true, error: false, metrics,
+    });
+    const { chat } = await WorkspaceChats.new({
+      workspaceId: workspace.id, prompt: message,
+      response: { text: answer, ...evidence, type: chatMode, attachments: [], metrics },
+      threadId: thread?.id || null, user,
+    });
+    writeResponseChunk(response, {
+      uuid, type: "finalizeResponseStream", close: true, error: false,
+      chatId: chat.id, metrics,
+    });
+    return;
+  }
 
   let session;
   const admissionFailure = (error) => {
@@ -514,6 +547,24 @@ async function streamChatWithWorkspace(
           threadId: thread?.id || null,
           user,
         });
+
+        // Sources are mandatory: grounded fallbacks (including swallowed model
+        // errors) have none and must never become a shared cached answer.
+        // Files/history may have appeared while this request waited for a slot.
+        // Anything actually consumed from private context must never be shared.
+        if (answerCacheRequest && parsedFiles.length === 0 && rawHistory.length === 0 &&
+            sources.length > 0 && !response.destroyed &&
+            !response.writableEnded && (!safety || safety.passed === true)) {
+          session.check();
+          answerCache.put({
+            ...answerCacheRequest, question: message,
+            value: { answer: completeText, sources,
+              ...(presentation ? { presentation } : {}),
+              ...(relatedImages.length ? { relatedImages } : {}),
+              ...(safety ? { safety } : {}),
+            },
+          });
+        }
 
         writeResponseChunk(response, {
           uuid,

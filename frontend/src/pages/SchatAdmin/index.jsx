@@ -14,6 +14,7 @@ import {
 import { inputClass } from "./ui";
 import BrandSection from "./sections/Brand";
 import AnswerSection from "./sections/Answer";
+import AnswerCacheSection from "./sections/AnswerCache";
 import UsersSection from "./sections/Users";
 import ReportsSection from "./sections/Reports";
 import QuizSection from "./sections/Quiz";
@@ -30,6 +31,7 @@ import ChatAdmissionPanel from "./ChatAdmissionPanel";
 const SECTIONS = {
   brand: BrandSection,
   answer: AnswerSection,
+  "answer-cache": AnswerCacheSection,
   users: UsersSection,
   reports: ReportsSection,
   quiz: QuizSection,
@@ -43,9 +45,16 @@ const SECTIONS = {
 };
 
 // Sections that change one workspace show a picker when there is more than one.
-const WORKSPACE_SECTIONS = ["brand", "answer", "checklists", "danger"];
+const WORKSPACE_SECTIONS = [
+  "brand",
+  "answer",
+  "answer-cache",
+  "checklists",
+  "danger",
+];
 // Table-heavy sections get more width so rows stay on one line.
 const WIDE_SECTIONS = [
+  "answer-cache",
   "users",
   "reports",
   "quiz",

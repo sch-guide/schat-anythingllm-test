@@ -361,4 +361,23 @@ const Document = {
   },
 };
 
+// Keep this inside the existing document-update read guard. It protects cache
+// generations without weakening that independent filesystem safety boundary.
+for (const name of ['addDocuments', 'removeDocuments', 'update', 'delete', '_updateAll']) {
+  const method = Document[name].bind(Document);
+  Document[name] = async (...args) => {
+    let workspaceId;
+    if (name === 'addDocuments' || name === 'removeDocuments') workspaceId = args[0]?.id;
+    else if (name === 'update') {
+      try { workspaceId = (await prisma.workspace_documents.findFirst({ where: { id: args[0] }, select: { workspaceId: true } }))?.workspaceId; }
+      catch { /* Unknown scope: conservatively invalidate every workspace. */ }
+    } else workspaceId = args[0]?.workspaceId;
+    const finish = require('../utils/answerCacheRuntime').beginMutation(
+      Number.isSafeInteger(workspaceId) && workspaceId > 0 ? [workspaceId] : null
+    );
+    try { return await method(...args); }
+    finally { finish(); }
+  };
+}
+
 module.exports = { Document };

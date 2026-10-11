@@ -16,6 +16,12 @@ export const SCHAT_ADMIN_SECTIONS = [
       "답변에 사용하는 AI 모델, 이전 대화 참고 수와 기본 답변 규칙을 관리합니다.",
   },
   {
+    key: "answer-cache",
+    label: "답변 재사용",
+    description:
+      "같은 작업 공간의 안전한 독립 질문에 쓰는 답변 저장본과 아낀 답변 호출 수를 확인하고 정리합니다.",
+  },
+  {
     key: "users",
     label: "사용자 관리",
     description:

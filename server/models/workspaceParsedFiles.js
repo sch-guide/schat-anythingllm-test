@@ -259,4 +259,26 @@ const WorkspaceParsedFiles = {
   },
 };
 
+// Personal context can change after a chat cache preflight and while generation
+// is queued. Bound both creation and deletion to reject every late shared put.
+for (const name of ['create', 'delete']) {
+  const method = WorkspaceParsedFiles[name].bind(WorkspaceParsedFiles);
+  WorkspaceParsedFiles[name] = async (...args) => {
+    let workspaceIds = null;
+    const workspaceId = Number.parseInt(args[0]?.workspaceId, 10);
+    if (Number.isSafeInteger(workspaceId) && workspaceId > 0) workspaceIds = [workspaceId];
+    else if (name === 'delete') {
+      try {
+        const rows = await prisma.workspace_parsed_files.findMany({
+          where: args[0] || {}, select: { workspaceId: true },
+        });
+        workspaceIds = [...new Set(rows.map(row => row.workspaceId))];
+      } catch { /* Unknown scope: block every workspace conservatively. */ }
+    }
+    const finish = require('../utils/answerCacheRuntime').beginMutation(workspaceIds);
+    try { return await method(...args); }
+    finally { finish(); }
+  };
+}
+
 module.exports = { WorkspaceParsedFiles };
