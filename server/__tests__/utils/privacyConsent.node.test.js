@@ -99,6 +99,8 @@ test("동의서가 없으면 v1 초안을 한 번만 넣고, 병원 이름은 '�
   assert.match(first.content.fullText, /체크리스트 메모: AI\(Gemini\)로 보내지 않습니다/);
   assert.match(first.content.fullText, /질문 입력창에는 환자 이름/);
   assert.doesNotMatch(JSON.stringify(first.content), /김민지|김○지/);
+  assert.match(first.content.fullText, /문의:\n- 간호교육파트 \(내선 6741\)\n- 정보보호\/보안 \(내선 7028\)$/);
+  assert.doesNotMatch(JSON.stringify(first.content), /\[[^\]]*\]|담당 부서|내선번호/);
   assert.equal(first.items[2].label, "질문 입력창에 환자 개인정보를 입력하지 않겠습니다.");
 });
 

@@ -51,7 +51,9 @@ const DEFAULT_CONSENT_CONTENT = Object.freeze({
 6. 꼭 지켜 주세요
 질문 입력창에는 환자 이름, 등록번호, 생년월일 등 개인정보를 입력하지 마세요. 질문은 외부 AI 서비스로 전송됩니다. 체크리스트 메모의 환자 정보는 이름을 가려 저장하며 AI로 보내지 않습니다.
 
-문의: [개인정보 담당 부서 / 내선번호]`,
+문의:
+- 간호교육파트 (내선 6741)
+- 정보보호/보안 (내선 7028)`,
 });
 
 // 체크박스 3개는 모두 필수이며 문구는 고정한다(동의 기록의 항목 이름).
@@ -72,6 +74,7 @@ const CONSENT_ITEMS = Object.freeze([
 const LEGACY_V1_SEED_HASHES = Object.freeze([
   "f0c297cd970e88e5ef3651344dc907eaa79972898acb7948fc7ee420a8a9b32c",
   "8d2ef33631288eee02da4ae88214890aabdbd6f450047f329d130e1cebae8c71",
+  "9c559a79103a938ee8599b1b2e9505e5844df80a0584c3fc816ca86c6f79f36e",
 ]);
 
 module.exports = {
