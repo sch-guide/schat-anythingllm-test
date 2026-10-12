@@ -19,7 +19,7 @@ const NOTICE_COLORS = {
   title: "#0f766e",
   text: "#134e4a",
 };
-const SCROLL_KEYFRAMES = `@keyframes schat-notice-scroll{from{transform:translateX(0)}to{transform:translateX(var(--schat-notice-shift))}}`;
+const SCROLL_KEYFRAMES = `@keyframes schat-notice-scroll{from{transform:translateX(var(--schat-notice-start))}to{transform:translateX(var(--schat-notice-shift))}}`;
 const EDGE_FADE =
   "linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent)";
 
@@ -38,9 +38,8 @@ function usePrefersReducedMotion() {
   return reduced;
 }
 
-// Short text stays still. Long text flows right to left (about 50px a second)
-// and repeats; hovering or pressing pauses it. With "reduce motion" it is cut
-// with … and opens fully on a click.
+// 짧은 공지도 오른쪽 끝에서 진입해 왼쪽 끝으로 퇴장한다.
+// 긴 공지는 두 사본을 연결해 반복하며, 동작 줄이기에서는 정지한다.
 function NoticeText({ text }) {
   const viewport = useRef(null);
   const measure = useRef(null);
@@ -64,6 +63,7 @@ function NoticeText({ text }) {
     if (typeof ResizeObserver === "undefined") return undefined;
     const observer = new ResizeObserver(update);
     if (viewport.current) observer.observe(viewport.current);
+    if (measure.current) observer.observe(measure.current);
     return () => observer.disconnect();
   }, [text]);
 
@@ -78,7 +78,7 @@ function NoticeText({ text }) {
     </span>
   );
 
-  if (!overflows)
+  if (!size.text || !size.box || (reduced && !overflows))
     return (
       <div ref={viewport} className="relative min-w-0 flex-1 overflow-hidden">
         {measuring}
@@ -109,7 +109,7 @@ function NoticeText({ text }) {
       </div>
     );
 
-  const shift = size.text + NOTICE_SCROLL_GAP;
+  const shift = overflows ? size.text + NOTICE_SCROLL_GAP : size.text;
   return (
     <div
       ref={viewport}
@@ -126,18 +126,24 @@ function NoticeText({ text }) {
     >
       {measuring}
       <div
+        key={overflows ? "connected" : "crossing"}
         className="inline-flex whitespace-nowrap"
         data-schat-notice-text="scrolling"
         style={{
+          "--schat-notice-start": overflows ? "0px" : `${size.box}px`,
           "--schat-notice-shift": `-${shift}px`,
-          animation: `schat-notice-scroll ${noticeScrollSeconds(size.text)}s linear infinite`,
+          animation: `schat-notice-scroll ${noticeScrollSeconds(size.text, size.box)}s linear infinite`,
           animationPlayState: paused ? "paused" : "running",
         }}
       >
-        <span style={{ paddingRight: NOTICE_SCROLL_GAP }}>{text}</span>
-        <span aria-hidden="true" style={{ paddingRight: NOTICE_SCROLL_GAP }}>
+        <span style={{ paddingRight: overflows ? NOTICE_SCROLL_GAP : 0 }}>
           {text}
         </span>
+        {overflows && (
+          <span aria-hidden="true" style={{ paddingRight: NOTICE_SCROLL_GAP }}>
+            {text}
+          </span>
+        )}
       </div>
     </div>
   );

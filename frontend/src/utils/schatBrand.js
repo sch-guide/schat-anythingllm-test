@@ -165,6 +165,10 @@ export function dismissNotice(
   memoryNoticeDismissal = saved;
 }
 
-export function noticeScrollSeconds(textWidth) {
-  return Math.max(4, (textWidth + NOTICE_SCROLL_GAP) / NOTICE_SCROLL_SPEED);
+export function noticeScrollSeconds(textWidth, boxWidth = 0) {
+  const distance =
+    textWidth > boxWidth + 1
+      ? textWidth + NOTICE_SCROLL_GAP
+      : textWidth + boxWidth;
+  return Math.max(0.02, distance / NOTICE_SCROLL_SPEED);
 }

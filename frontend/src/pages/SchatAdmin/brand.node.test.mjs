@@ -56,6 +56,164 @@ function noticeView(brand = initial) {
     "@/components/lib/SuggestedMessages": { default: () => null },
   });
 }
+
+// DOM 측정 경계만 대신하고 실제 공지의 상태·이벤트·출력은 실행한다.
+function noticeHarness({ textWidth, boxWidth, reduced = false }) {
+  const slots = [];
+  let cursor = 0;
+  let effects = [];
+  let resize;
+  let mediaChange;
+  const media = {
+    matches: reduced,
+    addEventListener(_, fn) {
+      mediaChange = fn;
+    },
+    removeEventListener() {},
+  };
+  const hookReact = {
+    ...React,
+    useState(initialValue) {
+      const index = cursor++;
+      if (!(index in slots))
+        slots[index] =
+          typeof initialValue === "function" ? initialValue() : initialValue;
+      return [
+        slots[index],
+        (value) => {
+          slots[index] =
+            typeof value === "function" ? value(slots[index]) : value;
+        },
+      ];
+    },
+    useRef(value) {
+      const index = cursor++;
+      if (!(index in slots)) slots[index] = { current: value };
+      return slots[index];
+    },
+    useEffect(fn) {
+      effects.push(fn);
+    },
+    useLayoutEffect(fn) {
+      effects.push(fn);
+    },
+  };
+  const module = { exports: {} };
+  const code = transformSync(
+    readFileSync(
+      new URL("../../components/SchatBrandContent.jsx", import.meta.url),
+      "utf8"
+    ),
+    { loader: "jsx", format: "cjs", jsx: "automatic" }
+  ).code;
+  vm.runInNewContext(code, {
+    module,
+    exports: module.exports,
+    window: { matchMedia: () => media },
+    ResizeObserver: class {
+      constructor(fn) {
+        resize = fn;
+      }
+      observe() {}
+      disconnect() {}
+    },
+    require: (name) =>
+      name === "react"
+        ? hookReact
+        : name === "@/utils/schatBrand"
+          ? rules()
+          : name === "@/hooks/useSchatBrand" ||
+              name === "@/components/lib/SuggestedMessages"
+            ? { __esModule: true, default: () => null }
+            : require(name),
+  });
+  const bar = module.exports.NoticeBar({ title: "공지", text: "측정할 공지" });
+  const notice = React.Children.toArray(bar.props.children).find(
+    (child) => typeof child.type === "function"
+  );
+  let tree;
+  function render(runEffects = false) {
+    cursor = 0;
+    effects = [];
+    tree = notice.type(notice.props);
+    tree.ref.current = { clientWidth: boxWidth };
+    const measuring = React.Children.toArray(tree.props.children)[0];
+    measuring.ref.current = { scrollWidth: textWidth };
+    if (runEffects) for (const effect of effects) effect();
+    return tree;
+  }
+  render(true);
+  return {
+    render,
+    content: () => React.Children.toArray(render().props.children)[1],
+    resize(width) {
+      boxWidth = width;
+      render();
+      resize();
+    },
+    reduce(value) {
+      media.matches = value;
+      mediaChange();
+    },
+  };
+}
+
+test("짧은 공지도 오른쪽에서 들어와 왼쪽으로 나가며 50px/초로 반복함", () => {
+  const h = noticeHarness({ textWidth: 80, boxWidth: 300 });
+  const content = h.content();
+  assert.equal(content.props["data-schat-notice-text"], "scrolling");
+  assert.equal(content.props.style["--schat-notice-start"], "300px");
+  assert.equal(content.props.style["--schat-notice-shift"], "-80px");
+  assert.equal(
+    content.props.style.animation,
+    "schat-notice-scroll 7.6s linear infinite"
+  );
+  assert.equal(React.Children.toArray(content.props.children).length, 1);
+});
+
+test("긴 공지는 연결 반복하고 너비가 바뀌면 짧은 공지 이동으로 전환함", () => {
+  const h = noticeHarness({ textWidth: 952, boxWidth: 300 });
+  assert.equal(
+    h.content().props.style.animation,
+    "schat-notice-scroll 20s linear infinite"
+  );
+  assert.equal(h.content().props.style["--schat-notice-shift"], "-1000px");
+  assert.equal(React.Children.toArray(h.content().props.children).length, 2);
+  h.resize(1200);
+  assert.equal(h.content().props.style["--schat-notice-start"], "1200px");
+  assert.equal(
+    h.content().props.style.animation,
+    "schat-notice-scroll 43.04s linear infinite"
+  );
+  assert.equal(React.Children.toArray(h.content().props.children).length, 1);
+});
+
+test("마우스 hover·누름은 멈추고 손가락 해제·취소 뒤에는 다시 흐름", () => {
+  const h = noticeHarness({ textWidth: 80, boxWidth: 300 });
+  h.render().props.onPointerEnter({ pointerType: "mouse" });
+  assert.equal(h.content().props.style.animationPlayState, "paused");
+  h.render().props.onPointerLeave({ pointerType: "mouse" });
+  assert.equal(h.content().props.style.animationPlayState, "running");
+  h.render().props.onPointerEnter({ pointerType: "touch" });
+  h.render().props.onPointerDown();
+  assert.equal(h.content().props.style.animationPlayState, "paused");
+  h.render().props.onPointerUp();
+  assert.equal(h.content().props.style.animationPlayState, "running");
+  h.render().props.onPointerDown();
+  h.render().props.onPointerCancel();
+  assert.equal(h.content().props.style.animationPlayState, "running");
+});
+
+test("동작 줄이기는 짧은 공지도 정지하고 긴 공지를 눌러 전체 표시함", () => {
+  const short = noticeHarness({ textWidth: 80, boxWidth: 300, reduced: true });
+  assert.notEqual(short.content().props["data-schat-notice-text"], "scrolling");
+  const long = noticeHarness({ textWidth: 952, boxWidth: 300, reduced: true });
+  assert.equal(long.content().props["data-schat-notice-text"], "ellipsis");
+  long.content().props.onClick();
+  assert.equal(long.content().props["data-schat-notice-text"], "expanded");
+  long.reduce(false);
+  assert.equal(long.content().props["data-schat-notice-text"], "scrolling");
+});
 test("로고 선택 전에 파일 종류·크기를 검사하고 읽기 실패시 기존 미리보기를 보존함", async () => {
   const c = controller();
   await c.start();
