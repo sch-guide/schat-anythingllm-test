@@ -24,6 +24,17 @@ const { prepareAnswerCache } = require("./answerCache");
 
 const VALID_CHAT_MODE = ["automatic", "chat", "query"];
 
+// The answer is already delivered at these call sites. Persistence failure is
+// bookkeeping failure, not a failure to find evidence or generate the answer.
+async function persistDeliveredAnswer(record) {
+  try {
+    const result = await WorkspaceChats.new(record);
+    if (result?.chat?.id) return result.chat;
+  } catch {}
+  console.warn("[SCHAT] CHAT_HISTORY_SAVE_FAILED");
+  return null;
+}
+
 async function streamChatWithWorkspace(
   response,
   workspace,
@@ -120,14 +131,15 @@ async function streamChatWithWorkspace(
       uuid, type: "textResponseChunk", textResponse: answer,
       ...evidence, close: true, error: false, metrics,
     });
-    const { chat } = await WorkspaceChats.new({
+    const chat = await persistDeliveredAnswer({
       workspaceId: workspace.id, prompt: message,
       response: { text: answer, ...evidence, type: chatMode, attachments: [], metrics },
       threadId: thread?.id || null, user,
     });
     writeResponseChunk(response, {
       uuid, type: "finalizeResponseStream", close: true, error: false,
-      chatId: chat.id, metrics,
+      chatId: chat?.id ?? null, metrics,
+      ...(!chat ? { persistenceError: "CHAT_HISTORY_SAVE_FAILED" } : {}),
     });
     return;
   }
@@ -252,6 +264,7 @@ async function streamChatWithWorkspace(
           response: {
             text: textResponse,
             sources: [],
+            searchOutcome: { version: 2, status: "not_found" },
             type: chatMode,
             attachments: attachmentsForChatRecord(attachments, safetyEnabled),
           },
@@ -410,6 +423,7 @@ async function streamChatWithWorkspace(
           response: {
             text: textResponse,
             sources: [],
+            searchOutcome: { version: 2, status: "not_found" },
             type: chatMode,
             attachments: attachmentsForChatRecord(attachments, safetyEnabled),
           },
@@ -535,7 +549,7 @@ async function streamChatWithWorkspace(
           attachments,
           safetyEnabled
         );
-        const { chat } = await WorkspaceChats.new({
+        const chat = await persistDeliveredAnswer({
           workspaceId: workspace.id,
           prompt: message,
           response: {
@@ -575,7 +589,8 @@ async function streamChatWithWorkspace(
           type: "finalizeResponseStream",
           close: true,
           error: false,
-          chatId: chat.id,
+          chatId: chat?.id ?? null,
+          ...(!chat ? { persistenceError: "CHAT_HISTORY_SAVE_FAILED" } : {}),
           metrics,
         });
         return;

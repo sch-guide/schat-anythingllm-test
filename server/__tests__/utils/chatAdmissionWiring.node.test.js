@@ -55,7 +55,8 @@ function agentSetup(
     async init() {
       return this;
     }
-    async createAIbitat() {
+    async createAIbitat({ socket }) {
+      this.socket = socket;
       await create(this);
       this.aibitat = {
         abort: () => {
@@ -160,6 +161,53 @@ test("Agent generation deadline aborts and closes real route; slot becomes reusa
   assert.equal(socket.messages.at(-1).errorCode, "SCHAT_GENERATION_TIMEOUT");
   const next = await gate.acquire("u");
   next.release();
+});
+
+test("Agent 완료 후 대기에는 시간이 초과되지 않고 다음 질문은 새 자리를 얻음", async () => {
+  const timers = new Map();
+  let id = 0;
+  const gate = createAdmission({ setTimer: (fn, ms) => { timers.set(++id, { fn, ms }); return id; }, clearTimer: id => timers.delete(id) });
+  gate.configure({ maxActive: 1 });
+  const app = agentSetup(gate);
+  const socket = new Socket();
+  await app.connect('idle-agent', socket);
+  assert.equal(typeof socket.completeGeneration, 'function');
+  socket.completeGeneration();
+  assert.equal(gate.snapshot().active, 0);
+  assert.equal(timers.size, 0);
+  const other = await gate.acquire('other');
+  let ran = false;
+  const next = socket.runGeneration(async () => { ran = true; });
+  await tick();
+  assert.equal(ran, false);
+  assert.equal(gate.snapshot().waiting, 1);
+  other.release();
+  await next;
+  assert.equal(ran, true);
+  assert.equal(gate.snapshot().active, 1);
+  socket.completeGeneration();
+  assert.equal(gate.snapshot().active, 0);
+  socket.close();
+});
+
+test("Agent 다음 질문이 대기 중 연결을 닫으면 늦은 실행이나 자리 누수가 없음", async () => {
+  const gate = createAdmission();
+  gate.configure({ maxActive: 1 });
+  const app = agentSetup(gate);
+  const socket = new Socket();
+  await app.connect('closing-agent', socket);
+  assert.equal(typeof socket.completeGeneration, 'function');
+  socket.completeGeneration();
+  const other = await gate.acquire('other');
+  let ran = false;
+  const next = socket.runGeneration(async () => { ran = true; });
+  await tick();
+  socket.close();
+  await next;
+  other.release();
+  assert.equal(ran, false);
+  assert.equal(gate.snapshot().active, 0);
+  assert.equal(gate.snapshot().waiting, 0);
 });
 test("HTTP cancelled during model selection cannot reach retrieval or generation", async () => {
   const gate = createAdmission();

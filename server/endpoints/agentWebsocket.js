@@ -39,6 +39,18 @@ function agentWebsocket(app) {
     connectedInvocations.add(invocationId);
     let session;
     let agentHandler;
+    let acquiring = null;
+    const failGeneration = (e) => {
+      agentHandler?.aibitat?.abort();
+      session?.release();
+      session = null;
+      if (socket.readyState === socket.OPEN && e?.code !== "SCHAT_CANCELLED")
+        socket.send(JSON.stringify({
+          type: "wssFailure", errorCode: e?.code,
+          content: e?.code?.startsWith("SCHAT_") ? admissionMessage(e.code) : e.message,
+        }));
+      socket.close();
+    };
     socket.once("close", () => {
       connectedInvocations.delete(invocationId);
       agentHandler?.aibitat?.abort();
@@ -87,7 +99,7 @@ function agentWebsocket(app) {
       };
 
       const gate = await admissionRuntime.ready();
-      session = await openSession(
+      const acquireGeneration = () => openSession(
         gate,
         agentHandler.invocation.user_id ?? "single-user",
         socket,
@@ -110,6 +122,26 @@ function agentWebsocket(app) {
           },
         }
       );
+      socket.completeGeneration = () => {
+        session?.release();
+        session = null;
+      };
+      socket.runGeneration = async (work) => {
+        try {
+          // Only a new user turn can call this; tool approval/clarification
+          // remain inside the running turn and retain its deadline.
+          if (!session) {
+            if (acquiring) return;
+            acquiring = acquireGeneration();
+            try { session = await acquiring; } finally { acquiring = null; }
+            session.check();
+            socket.send(JSON.stringify({ type: "admissionStatus", position: 0 }));
+          }
+          session.check();
+          return await withAdmissionSignal(session.signal, work);
+        } catch (error) { failGeneration(error); }
+      };
+      session = await acquireGeneration();
       session.check();
       socket.send(JSON.stringify({ type: "admissionStatus", position: 0 }));
       await Telemetry.sendTelemetry("agent_chat_started");
@@ -127,20 +159,7 @@ function agentWebsocket(app) {
         agentHandler.startAgentCluster()
       );
     } catch (e) {
-      agentHandler?.aibitat?.abort();
-      session?.release();
-      console.error(e.message, e);
-      if (socket.readyState === socket.OPEN && e?.code !== "SCHAT_CANCELLED")
-        socket.send(
-          JSON.stringify({
-            type: "wssFailure",
-            errorCode: e?.code,
-            content: e?.code?.startsWith("SCHAT_")
-              ? admissionMessage(e.code)
-              : e.message,
-          })
-        );
-      socket?.close();
+      failGeneration(e);
     }
   });
 }

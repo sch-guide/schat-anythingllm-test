@@ -34,6 +34,13 @@ async function openSession(
   };
   lease.signal.addEventListener("abort", aborted, { once: true });
   if (lease.signal.aborted) aborted();
+  const release = () => {
+    cleanup();
+    transport.removeListener("schat:answer-complete", release);
+    lease.signal.removeEventListener("abort", aborted);
+    lease.release();
+  };
+  transport.once("schat:answer-complete", release);
   return {
     signal: lease.signal,
     check: () => lease.signal.throwIfAborted(),
@@ -43,11 +50,7 @@ async function openSession(
         attachAbortSignal(connector.embedder, lease.signal);
       return connector;
     },
-    release: () => {
-      cleanup();
-      lease.signal.removeEventListener("abort", aborted);
-      lease.release();
-    },
+    release,
   };
 }
 

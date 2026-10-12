@@ -89,6 +89,16 @@ export function websocketURI() {
 export default function handleSocketResponse(socket, event, setChatHistory) {
   const data = safeJsonParse(event.data, null);
   if (data === null) return;
+  if (data.type === "WAITING_ON_INPUT") {
+    setChatHistory(prev => {
+      const userIndex = prev.findLastIndex(item => item.role === "user");
+      return prev.map((item, index) => index < userIndex ? item : {
+        ...item, animate: false,
+        ...(index === userIndex ? { generationComplete: true } : {}),
+      });
+    });
+    return;
+  }
   if (data.type === "admissionStatus") {
     setChatHistory(prev => updateAdmission(prev, data.position));
     return;

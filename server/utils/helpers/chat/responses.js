@@ -371,7 +371,15 @@ function writeResponseChunk(response, data) {
   // Writing then is a no-op at best and an ERR_STREAM_WRITE_AFTER_END at worst,
   // so chunks queued after the socket closed are dropped instead.
   if (response.writableEnded || response.destroyed) return;
+  // Generation is finished once the terminal answer has been delivered. A
+  // later history/telemetry failure must not replace that answer with an abort.
+  if (response.schatAnswerComplete && data.type === "abort") return;
   response.write(`data: ${safeJSONStringify(data)}\n\n`);
+  if (!response.schatAnswerComplete && !data.error && data.close === true &&
+      ["textResponse", "textResponseChunk", "finalizeResponseStream"].includes(data.type)) {
+    response.schatAnswerComplete = true;
+    response.emit?.("schat:answer-complete");
+  }
   return;
 }
 

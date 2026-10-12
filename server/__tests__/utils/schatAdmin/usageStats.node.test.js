@@ -16,6 +16,22 @@ const chat = (prompt, createdAt, user_id, response) => ({
 });
 const src = (documentName, page, section) => ({ documentName, page, section });
 
+test('새 검색 결과는 정상 무출처·오류·캐시를 실패로 세지 않고 과거 수치는 유지', () => {
+  const responses = [
+    {text:'과거 정상 답변',sources:[]},
+    {text:'확인되지 않습니다.',sources:[{}]},
+    {text:'정상 답변',sources:[],searchOutcome:{version:2,status:'answered'}},
+    {text:'캐시 답변',sources:[],cached:true,searchOutcome:{version:2,status:'answered'}},
+    {text:'오류',sources:[],searchOutcome:{version:2,status:'unknown'}},
+    {text:'없음',sources:[],searchOutcome:{version:2,status:'not_found'}},
+    {text:'없음',sources:[{}],searchOutcome:{version:2,status:'not_found'}},
+  ];
+  const stats=computeUsageStats({now:NOW,chats:responses.map((r,i)=>chat(`질문 ${i}`,at('2026-09-29T09:00:00'),1,r))});
+  assert.equal(stats.searchFailures.total,3);
+  assert.deepEqual(stats.searchFailures.items.map(x=>x.question),['질문 0','질문 5','질문 6']);
+  assert.equal(stats.notFoundAnswers.total,1);
+});
+
 test("patient-like numbers are masked", () => {
   assert.equal(maskSensitive("등록번호 12345678 환자"), "등록번호 *** 환자");
   assert.equal(maskSensitive("900101-1234567 확인"), "*** 확인");

@@ -2,6 +2,7 @@
 const { randomUUID } = require("node:crypto");
 const { termKey, validateSynonymGroup } = require("./index");
 const { containsPrivateInfo } = require("./suggestions");
+const { readSearchOutcome } = require('../chatSearchOutcome');
 const LABEL = "schat_question_synonym_budget_v1";
 const STOP = new Set([
   "알려줘",
@@ -60,10 +61,9 @@ function collectExpressions(rows = []) {
     } catch {
       continue;
     }
-    if (
-      !row.notFound &&
-      (!Array.isArray(response?.sources) || response.sources.length)
-    )
+    const outcome = readSearchOutcome(response);
+    if (outcome !== null ? outcome !== 'not_found' :
+      !row.notFound && (!Array.isArray(response?.sources) || response.sources.length))
       continue;
     seen.add(Number(row.id));
     const example = safeExample(row.prompt);

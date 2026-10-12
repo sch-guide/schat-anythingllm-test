@@ -5,6 +5,7 @@
 // - 질문 원문은 응답을 만들 때 환자 정보로 보이는 숫자를 *** 로 가린다.
 
 const { estimateChatCost } = require('../aiUsageFees');
+const { readSearchOutcome } = require('../chatSearchOutcome');
 const PERIODS = Object.freeze({ today: 1, "7d": 7, "30d": 30, "90d": 90 });
 const QUESTION_TEXT_MAX_DAYS = 90;
 const MIN_DEPARTMENT_USERS = 5;
@@ -170,17 +171,18 @@ function computeUsageStats({
     for (const name of new Set(sources.map(sourceDocument).filter(Boolean)))
       cited.set(name, (cited.get(name) || 0) + 1);
 
-    // (4) 검색 실패: 인용된 근거가 0건. (5) 근거 없음: 근거는 있었지만
-    // 답변이 "찾을 수 없다"는 취지. 두 목록은 겹치지 않는다.
+    // 새 기록은 실제 못 찾음만 검색 실패로 센다. 표기 없는 과거 기록은
+    // 무출처/근거 없음의 기존 두 목록 분류를 그대로 유지한다.
     const listed = new Date(chat.createdAt) >= textSince;
     const entry = listed && {
       question: maskSensitive(chat.prompt).slice(0, 300),
       date: day,
     };
-    if (sources.length === 0) {
+    const outcome = readSearchOutcome(response);
+    if (outcome === 'not_found' || (outcome === null && sources.length === 0)) {
       searchFailureCount += 1;
       if (entry) searchFailures.push(entry);
-    } else if (NOT_FOUND_PATTERN.test(String(response.text || ""))) {
+    } else if (outcome === null && NOT_FOUND_PATTERN.test(String(response.text || ""))) {
       notFoundCount += 1;
       if (entry) notFoundAnswers.push(entry);
     }

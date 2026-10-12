@@ -1,5 +1,10 @@
 export function updateAdmission(history, position, now = Date.now()) {
   const rest = history.filter((item) => !item.admission);
+  const completedIndex = rest.findLastIndex(item => item.role === "user");
+  if (completedIndex >= 0 && rest[completedIndex].generationComplete) {
+    const { admissionStartedAt, ...question } = rest[completedIndex];
+    rest[completedIndex] = { ...question, generationComplete: false };
+  }
   // Keep the admission time on the current question: Agent status entries can
   // be replaced as tools run. Never restart the clock for a repeated event.
   if (position === 0) {

@@ -22,7 +22,7 @@ function fixture() {
     uuid:{v4:()=>`uuid-${state.records.length}`},
     '../DocumentManager':{DocumentManager:class {async pinnedDocs(){if(state.onPins)await state.onPins();return [];}}},
     '../documentUpdates/searchSnapshot':{withSearchSnapshot:(_workspace,operation)=>state.withSnapshot?state.withSnapshot(operation):operation(),filterArchivedHistory:async(_workspace,history)=>history},
-    '../../models/workspaceChats':{WorkspaceChats:{new:async record=>{state.records.push(structuredClone(record));return{chat:{id:state.records.length}};}}},
+    '../../models/workspaceChats':{WorkspaceChats:{new:async record=>{if(state.onSave)return state.onSave(record);state.records.push(structuredClone(record));return{chat:{id:state.records.length}};}}},
     '../../models/workspaceParsedFiles':{WorkspaceParsedFiles:{getContextFiles:async()=>state.files}},
     '../helpers':{getVectorDbClass:()=>vector,resolveProviderConnector:async()=>({connector})},
     '../helpers/modelPricing':{addChatCostToMetrics:value=>value || {}},
@@ -68,6 +68,21 @@ test('직원 답변은 고정문서와 검색 사이 교체를 막고 다른 부
   await f.ask();
   assert.equal(f.state.completions,1);
   const release=await guard.acquire('after-retrieval',['search:synthetic']);await release();
+});
+
+test('완료한 답변과 캐시 답변은 기록 실패에도 정상 종료되며 저장 실패가 구분됨',async()=>{
+  for(const cached of [false,true]) {
+    const f=fixture();
+    if(cached)await f.ask();
+    f.state.events=[];
+    f.state.onSave=async()=>{throw new Error('synthetic persistence failure');};
+    await f.ask('CT 준비?',{id:2});
+    assert.equal(f.state.events.some(event=>event.type==='abort'),false);
+    const final=f.state.events.at(-1);
+    assert.equal(final.type,'finalizeResponseStream');
+    assert.equal(final.chatId,null);
+    assert.equal(final.persistenceError,'CHAT_HISTORY_SAVE_FAILED');
+  }
 });
 
 test('cache hit bypasses admission and model while preserving fresh chat IDs, prompt, evidence and presentation',async()=>{

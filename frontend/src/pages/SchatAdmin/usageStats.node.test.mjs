@@ -31,3 +31,9 @@ test("usage statistics never show who asked", () => {
   );
   assert.doesNotMatch(source, /1등|꼴찌|순위/);
 });
+
+test("검색 실패 카드는 바뀐 집계 기준을 작게 표시함", () => {
+  assert.match(source, /data-testid="search-failure-basis"/);
+  assert.match(source, /실제로 답을 찾지 못한 경우만/);
+  assert.match(source, /예전 기준\(인용된 근거 0건\)/);
+});

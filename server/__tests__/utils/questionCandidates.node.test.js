@@ -6,6 +6,13 @@ try {
   api = require("../../utils/synonyms/questionCandidates");
 } catch {}
 
+test('새 정상 무출처·중단 답변은 후보에서 빼고 명시된 못 찾음만 수집', () => {
+  for(const status of ['answered','unknown','not_found']) {
+    const rows=[1,2].map(id=>({id,prompt:'산포도 확인',notFound:true,response:JSON.stringify({sources:[],searchOutcome:{version:2,status}})}));
+    assert.equal(api.collectExpressions(rows).length,status==='not_found'?1:0);
+  }
+});
+
 test("검색 실패와 못 찾음의 같은 대화는 한 번, 서로 다른 질문에서 두 번 나온 표현만 수집", () => {
   assert.equal(typeof api.collectExpressions, "function");
   const rows = [

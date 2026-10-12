@@ -444,7 +444,9 @@ const websocket = {
             return;
           }
 
-          await aibitat.continue(feedback, attachments);
+          const continueTurn = () => aibitat.continue(feedback, attachments);
+          if (socket.runGeneration) await socket.runGeneration(continueTurn);
+          else await continueTurn();
         });
 
         /**
@@ -456,6 +458,7 @@ const websocket = {
          */
         socket.askForFeedback = (socket, node) => {
           socket.awaitResponse = (question = "waiting...") => {
+            socket.completeGeneration?.();
             socket.send(JSON.stringify({ type: "WAITING_ON_INPUT", question }));
 
             return new Promise(function (resolve) {
@@ -487,12 +490,16 @@ const websocket = {
                 // The agent session stays paused and awaiting the next message.
                 if (isImageCommand(data.feedback)) {
                   armTimeout();
-                  const attachments = await handleImageCommand({
-                    aibitat,
-                    socket,
-                    message: data.feedback,
-                  });
-                  pendingImageAttachments.push(...attachments);
+                  const generate = () => handleImageCommand({ aibitat, socket, message: data.feedback });
+                  try {
+                    const attachments = socket.runGeneration
+                      ? await socket.runGeneration(generate) : await generate();
+                    pendingImageAttachments.push(...(attachments || []));
+                  } finally {
+                    socket.completeGeneration?.();
+                    if (socket.readyState === socket.OPEN)
+                      socket.send(JSON.stringify({ type: "WAITING_ON_INPUT", question }));
+                  }
                   return;
                 }
 

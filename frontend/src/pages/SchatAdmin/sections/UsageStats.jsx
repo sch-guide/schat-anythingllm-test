@@ -247,11 +247,18 @@ export default function UsageStatsSection() {
           <Card
             title={`검색 실패 질문 ${n(stats.searchFailures.total)}건`}
             help={[
-              "답변에 인용된 근거가 한 건도 없었던 질문이에요.",
+              "실제로 답을 찾지 못한 질문이에요.",
               "질문 내용과 날짜만 보여요.",
               "환자 정보로 보이는 숫자는 ***로 가려요.",
             ]}
           >
+            <p
+              className="m-0 mb-2 text-xs text-theme-text-secondary"
+              data-testid="search-failure-basis"
+            >
+              기준: 이번 업데이트 이후 질문은 실제로 답을 찾지 못한 경우만
+              셉니다. 그 전 질문은 예전 기준(인용된 근거 0건)으로 셉니다.
+            </p>
             <QuestionList
               items={stats.searchFailures.items}
               total={stats.searchFailures.total}

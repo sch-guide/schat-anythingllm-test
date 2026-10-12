@@ -1,5 +1,6 @@
 const prisma = require("../utils/prisma");
 const { safeJSONStringify } = require("../utils/helpers/chat/responses");
+const { withSearchOutcome, readSearchOutcome } = require('../utils/chatSearchOutcome');
 
 const WorkspaceChats = {
   new: async function ({
@@ -16,7 +17,7 @@ const WorkspaceChats = {
         data: {
           workspaceId,
           prompt,
-          response: safeJSONStringify(response),
+          response: safeJSONStringify(withSearchOutcome(response)),
           user_id: user?.id || null,
           thread_id: threadId,
           api_session_id: apiSessionId,
@@ -373,9 +374,21 @@ const WorkspaceChats = {
     }
   ) {
     try {
+      const existing = chatId ? await prisma.workspace_chats.findFirst({
+        where: { id: Number(chatId), user_id: data.user?.id || null },
+        select: { response: true },
+      }) : null;
+      let previous = null;
+      try { previous = JSON.parse(existing?.response || 'null'); } catch {}
+      const legacy = existing && existing.response !== '{}' && readSearchOutcome(previous) === null;
+      let response = withSearchOutcome(data.response);
+      if (legacy && response && typeof response === 'object') {
+        response = { ...response };
+        delete response.searchOutcome;
+      }
       const payload = {
         workspaceId: data.workspaceId,
-        response: safeJSONStringify(data.response),
+        response: safeJSONStringify(response),
         user_id: data.user?.id || null,
         thread_id: data.threadId,
         api_session_id: data.apiSessionId,

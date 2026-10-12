@@ -30,6 +30,17 @@ export default function handleChat(
     relatedImages = [],
   } = chatResult;
 
+  if (type === "abort") {
+    const turnStart = _chatHistory.findLastIndex(item => item.role === "user");
+    const completedAnswer = _chatHistory.slice(turnStart + 1).some(item =>
+      item.role === "assistant" && !item.type && item.closed === true &&
+      !item.error && typeof item.content === "string" && item.content.length > 0);
+    if (completedAnswer) {
+      setLoadingResponse(false);
+      return;
+    }
+  }
+
   if (type === "generationPhase") {
     _chatHistory.push({type: "statusResponse", role: "assistant", phase: chatResult.phase,
       content: "답변 작성 중", animate: true});
@@ -157,6 +168,7 @@ export default function handleChat(
     type === "textResponseChunk" ||
     type === "finalizeResponseStream"
   ) {
+    if (close === true) setLoadingResponse(false);
     const chatIdx = _chatHistory.findIndex((chat) => chat.uuid === uuid);
     if (chatIdx !== -1) {
       const existingHistory = { ..._chatHistory[chatIdx] };

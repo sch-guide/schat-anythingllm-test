@@ -218,7 +218,8 @@ export default forwardRef(function (
   // while covering the gaps between activities (thought closed, tool still
   // running, next status not yet arrived).
   const isLastMessageAnimating = !!history?.[history.length - 1]?.animate;
-  const runIsLive = !!websocket || isLastMessageAnimating;
+  const generationComplete = history.findLast(item => item.role === "user")?.generationComplete === true;
+  const runIsLive = (!!websocket && !generationComplete) || isLastMessageAnimating;
   const answerHasStarted = hasVisibleAssistantAnswer(history);
   const isWaitingForAnswer = runIsLive && !answerHasStarted;
   const phase = waitingPhase(history);
