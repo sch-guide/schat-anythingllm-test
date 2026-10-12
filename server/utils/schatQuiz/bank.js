@@ -554,6 +554,8 @@ async function wrongNotes(userId) {
       wrongCount: n.wrong_count,
       lastWrongAt: n.lastWrongAt,
       available: q.status === "approved" && live.has(q.document_id),
+      // 삭제했거나 문서가 바뀐 문제: 지난 지침 기준이라 현재와 다를 수 있다.
+      previousGuideline: q.status === "deleted" || !live.has(q.document_id),
       ...presentReveal(q, live),
     };
   });
@@ -613,8 +615,13 @@ async function adminList(filters = {}) {
 
 // Listing and bulk deletion share the same uncapped selection.
 async function adminRows(filters, live, db = prisma) {
+  const deletedView = filters.documentState === "deleted";
   const where = {
-    status: core.STATUS[filters.status] ? filters.status : { not: "deleted" },
+    status: deletedView
+      ? "deleted"
+      : core.STATUS[filters.status]
+        ? filters.status
+        : { not: "deleted" },
     ...(core.DIFFICULTY[filters.difficulty]
       ? { difficulty: filters.difficulty }
       : {}),
@@ -635,6 +642,7 @@ async function adminRows(filters, live, db = prisma) {
       (q) => !filters.docKey || core.docKeyOf(q.document_id) === filters.docKey
     )
     .filter((q) => {
+      if (deletedView) return true;
       const state =
         filters.documentState ||
         (filters.outdated === "1" ? "outdated" : "all");
@@ -802,6 +810,23 @@ async function deleteQuestions(
   });
 }
 
+// 되살리기: 삭제한 문제를 사용중지 상태로 되돌린다. 공개는 관리자가 다시
+// 검토한 뒤 직접 한다. 이전 문서 문제는 공개할 수 없으므로 계속 풀이 불가다.
+async function restoreQuestions(ids = [], { adminId = null } = {}) {
+  const list = questionIds(ids);
+  return prisma.$transaction(async (tx) => {
+    const { count } = await tx.schat_quiz_questions.updateMany({
+      where: { id: { in: list }, status: "deleted" },
+      data: { status: "inactive", updated_by: adminId, updatedAt: new Date() },
+    });
+    if (count !== list.length)
+      throw userError(
+        "되살릴 문제의 상태가 바뀌었습니다. 목록을 새로 불러온 뒤 다시 확인해 주세요."
+      );
+    return { count };
+  });
+}
+
 async function adminSets() {
   const live = await liveDocuments();
   const sets = await prisma.schat_quiz_sets.findMany({
@@ -864,10 +889,12 @@ async function usageToday() {
 // ---- admin statistics (aggregates only; no individual results) --------------------
 
 async function adminStats() {
-  const answers = await prisma.schat_quiz_answers.findMany({
+  let answers = await prisma.schat_quiz_answers.findMany({
     select: { question_id: true, is_correct: true, attempt_id: true },
   });
+  // 삭제한 문제의 풀이는 기록으로 보존하지만 통계에서는 뺀다.
   const questions = await prisma.schat_quiz_questions.findMany({
+    where: { status: { not: "deleted" } },
     select: {
       id: true,
       question: true,
@@ -877,6 +904,8 @@ async function adminStats() {
     },
   });
   const byId = new Map(questions.map((q) => [q.id, q]));
+  const allAnswers = answers;
+  answers = allAnswers.filter((a) => byId.has(a.question_id));
   const perQuestion = core
     .questionStats(answers)
     .map((s) => ({ ...s, ...(byId.get(s.questionId) || {}) }))
@@ -899,7 +928,7 @@ async function adminStats() {
     if (a.is_correct) t.correct += 1;
     topicMap.set(topic, t);
   }
-  const attempts = await prisma.schat_quiz_attempts.findMany({
+  const completed = await prisma.schat_quiz_attempts.findMany({
     where: { status: "completed" },
     select: {
       id: true,
@@ -910,6 +939,24 @@ async function adminStats() {
       total: true,
     },
   });
+  // 삭제한 문제가 들어 있던 회차는 그 문제를 뺀 점수로 다시 계산한다.
+  const removedByAttempt = new Map();
+  for (const a of allAnswers) {
+    if (byId.has(a.question_id)) continue;
+    const r = removedByAttempt.get(a.attempt_id) || { total: 0, correct: 0 };
+    r.total += 1;
+    if (a.is_correct) r.correct += 1;
+    removedByAttempt.set(a.attempt_id, r);
+  }
+  const attempts = completed
+    .map((a) => {
+      const r = removedByAttempt.get(a.id);
+      if (!r) return a;
+      const total = a.total - r.total;
+      const correct = a.correct_count - r.correct;
+      return { ...a, total, correct_count: correct, score: core.scoreOf(correct, total) };
+    })
+    .filter((a) => a.total > 0);
   const answersByAttempt = new Map();
   for (const a of answers) {
     const list = answersByAttempt.get(a.attempt_id) || [];
@@ -919,6 +966,7 @@ async function adminStats() {
   return {
     ok: true,
     minRespondents: core.MIN_DEPARTMENT_RESPONDENTS,
+    excludedDeletedAnswers: allAnswers.length - answers.length,
     totals: {
       completedAttempts: attempts.length,
       answers: answers.length,
@@ -1067,6 +1115,8 @@ module.exports = {
   adminUpdate: (...args) => withQuizWrite(() => adminUpdate(...args)),
   setStatus: (...args) => withQuizWrite(() => setStatus(...args)),
   deleteQuestions: (...args) => withQuizWrite(() => deleteQuestions(...args)),
+  restoreQuestions: (...args) =>
+    withQuizWrite(() => restoreQuestions(...args)),
   adminSets,
   updateSet: (...args) => withQuizWrite(() => updateSet(...args)),
   usageToday,

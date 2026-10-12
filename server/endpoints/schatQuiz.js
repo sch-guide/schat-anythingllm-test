@@ -218,6 +218,18 @@ function schatQuizEndpoints(app) {
   );
 
   app.post(
+    "/schat-admin/quiz/questions/restore",
+    adminOnly,
+    handle(async (request, response) => {
+      const { ids = [] } = reqBody(request);
+      response.status(200).json({
+        success: true,
+        ...(await bank.restoreQuestions(ids, { adminId: me(response) })),
+      });
+    })
+  );
+
+  app.post(
     "/schat-admin/quiz/questions/delete",
     adminOnly,
     handle(async (request, response) => {

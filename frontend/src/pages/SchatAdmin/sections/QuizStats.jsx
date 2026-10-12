@@ -31,6 +31,14 @@ export default function QuizStats() {
             <InfoRow label="제출된 답">{stats.totals.answers}개</InfoRow>
             <InfoRow label="전체 정답률">{stats.totals.rate}%</InfoRow>
           </div>
+          <p
+            className="m-0 mt-2 text-xs text-theme-text-secondary"
+            data-testid="quiz-stats-basis"
+          >
+            기준: 삭제한 퀴즈의 풀이는 빼고 계산합니다.
+            {stats.excludedDeletedAnswers > 0 &&
+              ` (제외한 답 ${stats.excludedDeletedAnswers}개)`}
+          </p>
         </Card>
         <Card title="주제별 정답률">
           <div>

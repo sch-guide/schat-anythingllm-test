@@ -47,8 +47,8 @@ export default function QuizDeleteDialog({
           {target.ids.length}개 퀴즈를 지울까요? 직원 풀이 기록은 남아요.
         </p>
         <p className="text-xs text-theme-text-secondary">
-          삭제한 문제는 새 퀴즈에 나오지 않으며 다시 공개할 수 없습니다. 확인을
-          위해 '삭제'를 정확히 입력해 주세요.
+          삭제한 문제는 새 퀴즈에 나오지 않습니다. [삭제한 퀴즈]에서 되살릴 수
+          있어요. 확인을 위해 '삭제'를 정확히 입력해 주세요.
         </p>
         <input
           aria-label="삭제 확인 입력"

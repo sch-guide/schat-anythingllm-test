@@ -187,7 +187,14 @@ test("일반 삭제 후 과거 기록·점수·오답노트·통계를 보존하
   assert.equal(f.answers.length, 1);
   assert.equal(f.notes.length, 1);
   assert.equal(JSON.stringify(await f.bank.history(7)), history);
-  assert.equal(JSON.stringify(await f.bank.adminStats()), stats);
+  // 통계는 삭제한 문제의 풀이를 빼고 계산하며 뺀 개수를 알려 준다.
+  const before = JSON.parse(stats);
+  assert.equal(before.totals.answers, 1);
+  const after = await f.bank.adminStats();
+  assert.equal(after.totals.answers, 0);
+  assert.equal(after.excludedDeletedAnswers, 1);
+  assert.equal(after.perQuestion.length, 0);
+  assert.equal(after.totals.completedAttempts, 0);
   assert.equal(
     (await f.bank.attemptView(7, 11)).questions[0].answer.correctOx,
     "O"
@@ -424,4 +431,38 @@ test("퀴즈 세트의 문제 수에도 삭제한 문제가 포함되지 않는�
     },
   ];
   assert.equal((await f.bank.adminSets())[0].questions, 1);
+});
+
+test("삭제한 퀴즈 목록과 되살리기: 기록은 그대로, 되살린 문제는 사용중지이고 이전 문서는 계속 풀이 불가", async () => {
+  const f = fixture();
+  await f.bank.deleteQuestions([1, 2]);
+  const deleted = await f.bank.adminList({ documentState: "deleted" });
+  assert.deepEqual(Array.from(deleted.map((q) => q.id)).sort(), [1, 2, 4]);
+  assert.equal(deleted.every((q) => q.status === "deleted"), true);
+  const notes = await f.bank.wrongNotes(7);
+  assert.equal(notes[0].previousGuideline, true);
+  assert.equal(notes[0].available, false);
+  await assert.rejects(() => f.bank.startWrongReview(7), /다시 풀 틀린 문제가 없습니다/);
+
+  const restored = await f.bank.restoreQuestions([1, 2]);
+  assert.equal(restored.count, 2);
+  assert.equal(f.questions.find((q) => q.id === 1).status, "inactive");
+  assert.equal(f.questions.find((q) => q.id === 2).status, "inactive");
+  assert.equal(f.answers.length, 1);
+  assert.equal(f.notes.length, 1);
+  await assert.rejects(
+    () => f.bank.setStatus(1, [2], "approved"),
+    /이전 문서 기반 문제는 공개할 수 없습니다/
+  );
+  await f.bank.setStatus(1, [1], "approved");
+  assert.equal((await f.bank.staffOptions()).total, 1);
+  await assert.rejects(() => f.bank.restoreQuestions([1]), /상태가 바뀌었습니다/);
+});
+
+test("현재 문서의 공개 문제 오답노트는 이전 지침 표시가 없다", async () => {
+  const f = fixture();
+  f.notes[0].question_id = 1;
+  const [note] = await f.bank.wrongNotes(7);
+  assert.equal(note.previousGuideline, false);
+  assert.equal(note.available, true);
 });

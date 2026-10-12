@@ -32,9 +32,11 @@ const query = (params = {}) => {
 const SchatQuiz = {
   options: () => call("/schat/quiz/options"),
   resetNotice: () => call("/schat/quiz/reset-notice"),
-  acknowledgeReset: (generation) => call("/schat/quiz/reset-notice", {
-    method: "POST", body: { generation },
-  }),
+  acknowledgeReset: (generation) =>
+    call("/schat/quiz/reset-notice", {
+      method: "POST",
+      body: { generation },
+    }),
   start: (filters) =>
     call("/schat/quiz/attempts", { method: "POST", body: filters }),
   startWrongReview: (count) =>
@@ -53,9 +55,11 @@ const SchatQuiz = {
   // ---- admin -----------------------------------------------------------------
   documents: () => call("/schat-admin/quiz/documents"),
   resetPreview: () => call("/schat-admin/quiz/reset/preview"),
-  resetRecords: (confirm, token) => call("/schat-admin/quiz/reset", {
-    method: "POST", body: { confirm, token },
-  }),
+  resetRecords: (confirm, token) =>
+    call("/schat-admin/quiz/reset", {
+      method: "POST",
+      body: { confirm, token },
+    }),
   questions: (filters) => call(`/schat-admin/quiz/questions${query(filters)}`),
   question: (id) => call(`/schat-admin/quiz/questions/${id}`),
   updateQuestion: (id, changes) =>
@@ -67,6 +71,11 @@ const SchatQuiz = {
     call("/schat-admin/quiz/questions/status", {
       method: "POST",
       body: { ids, status },
+    }),
+  restoreQuestions: (ids) =>
+    call("/schat-admin/quiz/questions/restore", {
+      method: "POST",
+      body: { ids },
     }),
   deleteQuestions: (ids, confirm, filters) =>
     call("/schat-admin/quiz/questions/delete", {

@@ -120,7 +120,7 @@ test("현재/이전 문서 필터와 각 행 삭제 및 이전 문서 전체 삭
   assert.equal(filter.props.role, "group");
   assert.deepEqual(
     React.Children.toArray(filter.props.children).map((n) => n.props.children),
-    ["전체", "사용 중", "이전 문서"]
+    ["전체", "사용 중", "이전 문서", "삭제한 퀴즈"]
   );
   React.Children.toArray(filter.props.children)
     .find((n) => n.props.children === "이전 문서")
@@ -276,4 +276,57 @@ test("삭제 요청에는 행의 번호와 전체 삭제의 최신 대상 확인
       filters: { documentState: "outdated", status: "draft" },
     },
   ]);
+});
+
+test("삭제한 퀴즈 보기는 되살리기만 보여 주고 되살리면 같은 문제 번호를 보낸다", async () => {
+  const h = harness();
+  const restored = [];
+  const toasts = [];
+  const rows = [
+    { id: 8, question: "가상 8", documentName: "이전.pdf", outdated: true, status: "deleted", statusLabel: "deleted" },
+  ];
+  const { QuestionList } = load(
+    "./sections/Quiz.jsx",
+    {
+      react: h.hooks,
+      "../ui": ui,
+      "./quizLabels": labels,
+      "@/utils/toast": (message) => toasts.push(message),
+      "./QuizReview": () => null,
+      "./QuizStats": () => null,
+      "./QuizDelete": () => null,
+      "./QuizReset": () => null,
+      "@/models/schatQuiz": {
+        questions: async () => ({ success: true, questions: rows }),
+        documents: async () => ({ documents: [] }),
+        restoreQuestions: async (ids) => {
+          restored.push(ids);
+          return { success: true, count: ids.length };
+        },
+      },
+    },
+    h.globals
+  );
+  h.draw(QuestionList, { initialFilter: { documentState: "deleted" } });
+  await h.flush();
+  const tree = h.draw(QuestionList, { initialFilter: { documentState: "deleted" } });
+  const all = nodes(tree);
+  assert.ok(all.find((n) => n.props["data-testid"] === "quiz-deleted-help"));
+  assert.equal(all.some((n) => n.props["aria-label"] === "8번 문제 삭제"), false);
+  assert.equal(all.some((n) => n.props.type === "checkbox"), false);
+  const button = all.find((n) => n.props["aria-label"] === "8번 문제 되살리기");
+  assert.ok(button);
+  await button.props.onClick();
+  assert.equal(JSON.stringify(restored), "[[8]]");
+  assert.match(toasts[0], /이전 문서 문제라 직원은 풀 수 없습니다/);
+});
+
+test("삭제 안내·통계 기준·직원 오답노트 배지 문구", () => {
+  const read = (f) => readFileSync(new URL(f, import.meta.url), "utf8");
+  assert.doesNotMatch(read("./sections/QuizDelete.jsx"), /다시 공개할 수 없습니다/);
+  assert.match(read("./sections/QuizDelete.jsx"), /되살릴 수/);
+  assert.match(read("./sections/QuizStats.jsx"), /삭제한 퀴즈의 풀이는 빼고 계산합니다/);
+  const staff = read("../Quiz/index.jsx");
+  assert.match(staff, /이전 지침 기준 · 현재 지침과 다를 수 있어요/);
+  assert.match(staff, /n\.previousGuideline &&/);
 });
