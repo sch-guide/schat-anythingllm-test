@@ -90,6 +90,8 @@ test("동의서가 없으면 v1 초안을 한 번만 넣고, 병원 이름은 '�
   assert.match(first.content.external.storage, /Google Cloud \(서울 지역\)/);
   // 체크리스트 메모 줄과 전문
   assert.match(first.content.summary.checklist, /홍○동/);
+  assert.match(first.content.summary.checklist, /환자정보·기타메모의 이름은 가운데 글자를 가려 저장/);
+  assert.match(first.content.fullText, /환자정보·기타메모 칸의 이름은 가운데 글자를 가려 저장합니다/);
   assert.match(first.content.summary.checklist, /24시간 보관 후 자동 삭제/);
   assert.match(first.content.summary.checklist, /그 PC에만 남습니다/);
   assert.match(first.content.summary.checklist, /AI\(Gemini\)로 보내지 않습니다/);

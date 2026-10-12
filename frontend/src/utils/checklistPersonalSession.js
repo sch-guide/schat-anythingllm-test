@@ -1,4 +1,7 @@
-import { maskChecklistPatient } from "./checklistPatientMask.js";
+import {
+  maskChecklistOther,
+  maskChecklistPatient,
+} from "./checklistPatientMask.js";
 const empty = () => ({
   checks: {},
   patient: "",
@@ -64,6 +67,7 @@ export function createPersonalSession(api, notify, clock = Date.now) {
     mask() {
       if (disposed) return;
       state.patient = maskChecklistPatient(state.patient);
+      state.other = maskChecklistOther(state.other);
       publish();
     },
     save() {
@@ -84,7 +88,7 @@ export function createPersonalSession(api, notify, clock = Date.now) {
               revision: state.revision,
               checks: { ...state.checks },
               patient: maskChecklistPatient(state.patient),
-              other: state.other,
+              other: maskChecklistOther(state.other),
             };
             state.saving = true;
             publish();

@@ -1,5 +1,8 @@
 import { createPersonalSession } from "./checklistPersonalSession.js";
-import { maskChecklistPatient } from "./checklistPatientMask.js";
+import {
+  maskChecklistOther,
+  maskChecklistPatient,
+} from "./checklistPatientMask.js";
 
 const DAY = 86400000;
 const blank = () => ({
@@ -75,7 +78,7 @@ export function createPopupSession({
         JSON.stringify({
           checks: state.checks,
           patient: maskChecklistPatient(state.patient),
-          other: state.other,
+          other: maskChecklistOther(state.other),
           updatedAt: state.updatedAt,
           expiresAt: state.expiresAt,
           checklist,
@@ -94,9 +97,10 @@ export function createPopupSession({
     api,
     (next) => {
       if (closed || localOnly) return;
-      state = next.error && next.error !== "EXPIRED" && !next.ready
-        ? { ...state, ready: false, saving: false, error: next.error }
-        : { ...next };
+      state =
+        next.error && next.error !== "EXPIRED" && !next.ready
+          ? { ...state, ready: false, saving: false, error: next.error }
+          : { ...next };
       if (next.error === "EXPIRED") editedAt = 0;
       if (editedAt > (next.updatedAt || 0)) {
         state.updatedAt = editedAt;
@@ -128,6 +132,7 @@ export function createPopupSession({
       state = {
         ...state,
         patient: maskChecklistPatient(state.patient),
+        other: maskChecklistOther(state.other),
         ready: true,
         saving: false,
         error: null,
@@ -171,6 +176,7 @@ export function createPopupSession({
     mask() {
       if (localOnly) {
         state.patient = maskChecklistPatient(state.patient);
+        state.other = maskChecklistOther(state.other);
         persist();
         publish();
       } else server.mask();

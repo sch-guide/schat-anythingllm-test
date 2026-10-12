@@ -22,6 +22,25 @@ test("network payload masks patient name but keeps free memo", async () => {
   assert.equal(sent.patient, "612호 / 홍○동");
   assert.equal(sent.other, "합성 메모");
 });
+test("기타메모도 이름처럼 보이는 부분만 가려 보내고 간호 용어는 그대로 둔다", async () => {
+  let sent;
+  let shown;
+  const session = createPersonalSession(
+    {
+      read: async () => null,
+      write: async (body) => {
+        sent = body;
+        return { ...body, revision: "r", expiresAt: Date.now() + 86400000 };
+      },
+    },
+    (next) => (shown = next)
+  );
+  await session.load();
+  session.edit({ patient: "", other: "612호 홍길동 NPO, 낙상 고위험 재평가" });
+  await session.save();
+  assert.equal(sent.other, "612호 홍○동 NPO, 낙상 고위험 재평가");
+  assert.equal(shown.other, "612호 홍○동 NPO, 낙상 고위험 재평가");
+});
 test("conflict is not retried against a new revision", async () => {
   let writes = 0;
   let state;

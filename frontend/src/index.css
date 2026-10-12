@@ -1166,3 +1166,41 @@ select,
 textarea {
   font-family: var(--schat-font-sans) !important;
 }
+
+/* Employee checklist checkbox (blue outline, blue when checked). The panel
+   and separate window use it through checklistTone "blue". */
+.schat-blue-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 2px solid #60a5fa;
+  border-radius: 4px;
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 80%;
+  cursor: pointer;
+}
+.light .schat-blue-checkbox {
+  border-color: #2563eb;
+  background-color: #ffffff;
+}
+.schat-blue-checkbox:checked,
+.light .schat-blue-checkbox:checked {
+  border-color: #2563eb;
+  background-color: #2563eb;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+}
+.schat-blue-checkbox:indeterminate,
+.light .schat-blue-checkbox:indeterminate {
+  border-color: #2563eb;
+  background-color: #2563eb;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
+}
+.schat-blue-checkbox:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+.schat-blue-checkbox:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
