@@ -864,6 +864,52 @@ async function deletePreview(ids = [], { filters = null } = {}) {
   return prisma.$transaction((tx) => deleteTargets(list, filters, tx));
 }
 
+// 문제와 그 문제의 직원 풀이 기록·오답노트를 지우고, 그 문제가 들어 있던
+// 풀이 회차는 남은 문제로 점수를 다시 맞춘다(남은 문제가 없으면 회차 삭제).
+async function removeQuestionsWithRecords(tx, list) {
+  const removed = new Set(list);
+  const attempts = (
+    await tx.schat_quiz_attempts.findMany({
+      select: { id: true, question_ids: true, status: true, completedAt: true },
+    })
+  ).filter((a) =>
+    JSON.parse(a.question_ids || "[]").some((id) => removed.has(id))
+  );
+  await tx.schat_quiz_answers.deleteMany({ where: { question_id: { in: list } } });
+  await tx.schat_quiz_wrong_notes.deleteMany({ where: { question_id: { in: list } } });
+  await tx.schat_quiz_questions.deleteMany({ where: { id: { in: list } } });
+  // 삭제한 문제가 들어 있던 풀이 회차는 남은 문제로 점수를 다시 맞춘다.
+  for (const a of attempts) {
+    const rest = JSON.parse(a.question_ids || "[]").filter((id) => !removed.has(id));
+    if (!rest.length) {
+      await tx.schat_quiz_attempts.deleteMany({ where: { id: a.id } });
+      continue;
+    }
+    const left = await tx.schat_quiz_answers.findMany({
+      where: { attempt_id: a.id },
+      select: { is_correct: true },
+    });
+    const correct = left.filter((x) => x.is_correct).length;
+    const done = left.length >= rest.length;
+    await tx.schat_quiz_attempts.update({
+      where: { id: a.id },
+      data: {
+        question_ids: JSON.stringify(rest),
+        total: rest.length,
+        answered_count: left.length,
+        correct_count: correct,
+        ...(done
+          ? {
+              status: "completed",
+              completedAt: a.completedAt || new Date(),
+              score: core.scoreOf(correct, rest.length),
+            }
+          : {}),
+      },
+    });
+  }
+}
+
 // 삭제: 문제와 그 문제의 직원 풀이 기록·오답노트를 바로 완전히 지운다.
 // 되살리기나 별도 보관은 없다. 퀴즈가 아닌 자료는 건드리지 않는다.
 async function deleteQuestions(
@@ -881,47 +927,7 @@ async function deleteQuestions(
       throw userError(
         "지울 기록 수가 바뀌었습니다. 확인 창을 닫고 다시 시도해 주세요."
       );
-    const removed = new Set(list);
-    const attempts = (
-      await tx.schat_quiz_attempts.findMany({
-        select: { id: true, question_ids: true, status: true, completedAt: true },
-      })
-    ).filter((a) =>
-      JSON.parse(a.question_ids || "[]").some((id) => removed.has(id))
-    );
-    await tx.schat_quiz_answers.deleteMany({ where: { question_id: { in: list } } });
-    await tx.schat_quiz_wrong_notes.deleteMany({ where: { question_id: { in: list } } });
-    await tx.schat_quiz_questions.deleteMany({ where: { id: { in: list } } });
-    // 삭제한 문제가 들어 있던 풀이 회차는 남은 문제로 점수를 다시 맞춘다.
-    for (const a of attempts) {
-      const rest = JSON.parse(a.question_ids || "[]").filter((id) => !removed.has(id));
-      if (!rest.length) {
-        await tx.schat_quiz_attempts.deleteMany({ where: { id: a.id } });
-        continue;
-      }
-      const left = await tx.schat_quiz_answers.findMany({
-        where: { attempt_id: a.id },
-        select: { is_correct: true },
-      });
-      const correct = left.filter((x) => x.is_correct).length;
-      const done = left.length >= rest.length;
-      await tx.schat_quiz_attempts.update({
-        where: { id: a.id },
-        data: {
-          question_ids: JSON.stringify(rest),
-          total: rest.length,
-          answered_count: left.length,
-          correct_count: correct,
-          ...(done
-            ? {
-                status: "completed",
-                completedAt: a.completedAt || new Date(),
-                score: core.scoreOf(correct, rest.length),
-              }
-            : {}),
-        },
-      });
-    }
+    await removeQuestionsWithRecords(tx, list);
     return counts;
   });
 }
@@ -950,6 +956,69 @@ async function adminSets() {
     draft: s.questions.filter((q) => q.status === "draft").length,
     createdAt: s.createdAt,
   }));
+}
+
+// 세트 삭제 확인용 개수: 세트의 문제 수, 같이 지워질 풀이 기록 수와 직원 수.
+async function setDeleteTargets(id, tx) {
+  const setId = Number(id);
+  if (!Number.isSafeInteger(setId) || setId <= 0)
+    throw userError("퀴즈 세트를 찾을 수 없습니다.");
+  const set = await tx.schat_quiz_sets.findUnique({ where: { id: setId } });
+  if (!set) throw userError("퀴즈 세트를 찾을 수 없습니다.");
+  if (set.status === "approved")
+    throw userError("공개 중인 세트는 먼저 사용중지한 뒤 삭제할 수 있습니다.");
+  const questionIdsOfSet = (
+    await tx.schat_quiz_questions.findMany({
+      where: { quiz_set_id: setId },
+      select: { id: true },
+    })
+  ).map((q) => q.id);
+  const answers = await tx.schat_quiz_answers.findMany({
+    where: { question_id: { in: questionIdsOfSet } },
+    select: { user_id: true },
+  });
+  const notes = await tx.schat_quiz_wrong_notes.findMany({
+    where: { question_id: { in: questionIdsOfSet } },
+    select: { user_id: true },
+  });
+  return {
+    setId,
+    title: set.title,
+    questionIds: questionIdsOfSet,
+    counts: {
+      questions: questionIdsOfSet.length,
+      answers: answers.length,
+      wrongNotes: notes.length,
+      staff: new Set([...answers, ...notes].map((r) => r.user_id)).size,
+    },
+  };
+}
+
+async function setDeletePreview(id) {
+  return prisma.$transaction(async (tx) => {
+    const { title, counts } = await setDeleteTargets(id, tx);
+    return { title, ...counts };
+  });
+}
+
+// 세트 삭제: 세트와 그 문제, 문제에 대한 직원 풀이 기록·오답노트를 지운다.
+// 확인 창에서 본 개수와 다르면 지우지 않는다. 퀴즈가 아닌 자료는 그대로다.
+async function deleteSet(id, { expected = null } = {}) {
+  return prisma.$transaction(async (tx) => {
+    const { setId, questionIds: list, counts } = await setDeleteTargets(id, tx);
+    if (
+      !expected ||
+      ["questions", "answers", "wrongNotes", "staff"].some(
+        (key) => Number(expected[key]) !== counts[key]
+      )
+    )
+      throw userError(
+        "지울 문제나 기록 수가 바뀌었습니다. 확인 창을 닫고 다시 시도해 주세요."
+      );
+    if (list.length) await removeQuestionsWithRecords(tx, list);
+    await tx.schat_quiz_sets.deleteMany({ where: { id: setId } });
+    return counts;
+  });
 }
 
 async function updateSet(id, input = {}) {
@@ -1177,6 +1246,8 @@ module.exports = {
   deletePreview,
   adminSets,
   updateSet: (...args) => withQuizWrite(() => updateSet(...args)),
+  setDeletePreview,
+  deleteSet: (...args) => withQuizWrite(() => deleteSet(...args)),
   usageToday,
   adminStats,
   presentAdminQuestion,

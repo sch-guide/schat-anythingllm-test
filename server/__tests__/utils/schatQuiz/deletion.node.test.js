@@ -642,3 +642,75 @@ test("퀴즈 세트의 문제 수에도 삭제한 문제가 포함되지 않는�
   assert.equal((await f.bank.adminSets())[0].questions, 1);
 });
 
+
+// ---- 퀴즈 세트 삭제 -------------------------------------------------------------
+
+function setFixture() {
+  const f = fixture();
+  const sets = [
+    { id: 1, title: "공개 세트", status: "approved", document_id: "current" },
+    { id: 2, title: "중지 세트", status: "inactive", document_id: "archived" },
+    { id: 3, title: "빈 세트", status: "draft", document_id: "current" },
+  ];
+  f.sets = sets;
+  f.db.schat_quiz_sets = {
+    findUnique: async ({ where }) => sets.find((s) => s.id === where.id) || null,
+    deleteMany: async ({ where }) => {
+      const before = sets.length;
+      for (const s of [...sets]) if (s.id === where.id) sets.splice(sets.indexOf(s), 1);
+      return { count: before - sets.length };
+    },
+  };
+  f.questions.find((q) => q.id === 1).quiz_set_id = 1;
+  f.questions.find((q) => q.id === 2).quiz_set_id = 2;
+  // 다른 직원(8)도 문제 2를 풀었다.
+  f.attempts.push({ id: 21, user_id: 8, status: "completed", total: 1, answered_count: 1, correct_count: 1, score: 100, question_ids: "[2]", choice_orders: "{}", filters: "{}" });
+  f.answers.push({ id: 31, user_id: 8, attempt_id: 21, question_id: 2, selected_ox: "O", is_correct: true });
+  return f;
+}
+
+test("공개 중인 세트는 확인도 삭제도 거절한다", async () => {
+  const f = setFixture();
+  await assert.rejects(f.bank.setDeletePreview(1), /먼저 사용중지/);
+  await assert.rejects(
+    f.bank.deleteSet(1, { expected: { questions: 1, answers: 0, wrongNotes: 0, staff: 0 } }),
+    /먼저 사용중지/
+  );
+  assert.equal(f.sets.length, 3);
+  assert.ok(f.questions.some((q) => q.id === 1));
+});
+
+test("빈 세트는 문제·기록 0으로 확인되고 세트만 지운다", async () => {
+  const f = setFixture();
+  const snapshot = addOtherData(f);
+  const before = snapshot();
+  const answersBefore = f.answers.length;
+  const preview = await f.bank.setDeletePreview(3);
+  assert.deepEqual({ ...preview }, { title: "빈 세트", questions: 0, answers: 0, wrongNotes: 0, staff: 0 });
+  await f.bank.deleteSet(3, { expected: preview });
+  assert.deepEqual(Array.from(f.sets.map((s) => s.id)), [1, 2]);
+  assert.equal(f.answers.length, answersBefore);
+  assert.equal(f.questions.length, 4);
+  assert.equal(snapshot(), before);
+});
+
+test("기록이 있는 세트는 직원 수와 기록 수를 보여 주고, 그 수가 맞을 때만 문제·기록과 함께 지운다", async () => {
+  const f = setFixture();
+  const preview = await f.bank.setDeletePreview(2);
+  assert.deepEqual({ ...preview }, { title: "중지 세트", questions: 1, answers: 2, wrongNotes: 1, staff: 2 });
+  await assert.rejects(
+    f.bank.deleteSet(2, { expected: { ...preview, staff: 1 } }),
+    /수가 바뀌었습니다/
+  );
+  await assert.rejects(f.bank.deleteSet(2), /수가 바뀌었습니다/);
+  assert.equal(f.sets.length, 3);
+  await f.bank.deleteSet(2, { expected: preview });
+  assert.deepEqual(Array.from(f.sets.map((s) => s.id)), [1, 3]);
+  assert.equal(f.questions.some((q) => q.id === 2), false);
+  assert.equal(f.answers.some((a) => a.question_id === 2), false);
+  assert.equal(f.notes.length, 0);
+  assert.equal(f.attempts.some((a) => a.id === 11 || a.id === 21), false);
+  // 다른 세트의 문제는 그대로.
+  assert.ok(f.questions.some((q) => q.id === 1));
+  await assert.rejects(f.bank.setDeletePreview(2), /찾을 수 없습니다/);
+});

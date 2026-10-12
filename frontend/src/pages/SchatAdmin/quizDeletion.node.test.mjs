@@ -98,6 +98,7 @@ test("현재/이전 문서 필터와 각 행 삭제 및 이전 문서 전체 삭
       "./QuizReview": () => null,
       "./QuizStats": () => null,
       "./QuizDelete": Dialog,
+      "./QuizSetDelete": () => null,
       "@/models/schatQuiz": {
         questions: async (filters) => {
           requests.push({ ...filters });
@@ -292,4 +293,57 @@ test("초기화·되살리기·이전 지침 배지는 화면에 남아 있지 �
   assert.doesNotMatch(staff, /ResetNotice|이전 지침 기준|previousGuideline/);
   const model = read("../../models/schatQuiz.js");
   assert.doesNotMatch(model, /reset|restore/i);
+});
+
+test("세트 삭제 확인창: '정말 삭제할까요?'와 직원 수·기록 수를 보여 주고 그 수로만 지운다", async () => {
+  const h = harness();
+  const requests = [];
+  let deleted = 0;
+  const { default: Dialog } = load("./sections/QuizSetDelete.jsx", {
+    react: h.hooks,
+    "../ui": ui,
+    "@/utils/toast": () => {},
+    "@/components/lib/Modal": { __esModule: true, default: () => null, ModalBody: () => null, ModalHeader: () => null },
+    "@/models/schatQuiz": {
+      setDeletePreview: async () => ({ success: true, title: "가짜 세트", questions: 5, answers: 12, wrongNotes: 3, staff: 4 }),
+      deleteSet: async (...args) => {
+        requests.push(args);
+        return { success: true };
+      },
+    },
+  });
+  const props = { set: { id: 7, title: "가짜 세트" }, onClose() {}, onDeleted: () => deleted++ };
+  h.draw(Dialog, props);
+  await h.flush();
+  await Promise.resolve();
+  const tree = h.draw(Dialog, props);
+  const text = (id) => React.Children.toArray(nodes(tree).find((n) => n.props["data-testid"] === id).props.children).join("");
+  assert.equal(text("quiz-set-delete-question"), "정말 삭제할까요?");
+  assert.equal(text("quiz-set-delete-message"), "'가짜 세트' 세트와 문제 5개를 지워요. 되돌릴 수 없어요.");
+  assert.equal(text("quiz-set-delete-records"), "직원 4명의 풀이 기록 12건도 같이 지워져요. 오답노트 3건도 함께 지워져요.");
+  await nodes(tree).find((n) => n.props["data-testid"] === "quiz-set-delete-confirm").props.onClick();
+  assert.equal(JSON.stringify(requests[0]), JSON.stringify([7, { questions: 5, answers: 12, wrongNotes: 3, staff: 4 }]));
+  assert.equal(deleted, 1);
+});
+
+test("빈 세트는 직원 기록 문구 없이 확인하고, 공개 세트는 삭제 버튼이 꺼져 있다", async () => {
+  const h = harness();
+  const { default: Dialog } = load("./sections/QuizSetDelete.jsx", {
+    react: h.hooks,
+    "../ui": ui,
+    "@/utils/toast": () => {},
+    "@/components/lib/Modal": { __esModule: true, default: () => null, ModalBody: () => null, ModalHeader: () => null },
+    "@/models/schatQuiz": {
+      setDeletePreview: async () => ({ success: true, title: "빈 세트", questions: 0, answers: 0, wrongNotes: 0, staff: 0 }),
+    },
+  });
+  const props = { set: { id: 8, title: "빈 세트" }, onClose() {} };
+  h.draw(Dialog, props);
+  await h.flush();
+  await Promise.resolve();
+  const tree = h.draw(Dialog, props);
+  assert.equal(nodes(tree).some((n) => n.props["data-testid"] === "quiz-set-delete-records"), false);
+  const admin = readFileSync(new URL("./sections/Quiz.jsx", import.meta.url), "utf8");
+  assert.match(admin, /disabled=\{s\.status === "approved"\}/);
+  assert.match(admin, /삭제하려면 먼저 상태를 사용중지로 바꿔 주세요/);
 });

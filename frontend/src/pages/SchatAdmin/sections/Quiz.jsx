@@ -5,6 +5,7 @@ import { Badge, Button, Card, Field, Loading, Notice, inputClass } from "../ui";
 import QuizReviewDialog from "./QuizReview";
 import QuizStats from "./QuizStats";
 import QuizDeleteDialog from "./QuizDelete";
+import QuizSetDeleteDialog from "./QuizSetDelete";
 import { DIFFICULTIES, STATUSES, STATUS_TONE, TYPES } from "./quizLabels";
 
 const when = (iso) =>
@@ -579,6 +580,7 @@ export function QuestionList({ initialFilter = {} }) {
 
 function SetList({ onOpen }) {
   const [sets, setSets] = useState(null);
+  const [deletingSet, setDeletingSet] = useState(null);
   const load = useCallback(
     () => SchatQuiz.sets().then((r) => setSets(r?.sets || [])),
     []
@@ -625,6 +627,14 @@ function SetList({ onOpen }) {
                   {s.questionTypeLabel} · 문제 {s.questions}개 (공개{" "}
                   {s.approved} · 작성중 {s.draft}) · {when(s.createdAt)}
                 </p>
+                {s.status === "approved" && (
+                  <p
+                    className="text-xs text-theme-text-secondary"
+                    data-testid="quiz-set-delete-hint"
+                  >
+                    삭제하려면 먼저 상태를 사용중지로 바꿔 주세요.
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <select
@@ -642,10 +652,30 @@ function SetList({ onOpen }) {
                 <Button variant="secondary" onClick={() => onOpen(s)}>
                   문제 보기
                 </Button>
+                <Button
+                  variant="danger"
+                  aria-label={`${s.title} 세트 삭제`}
+                  disabled={s.status === "approved"}
+                  title={
+                    s.status === "approved"
+                      ? "공개 중인 세트는 먼저 사용중지해야 삭제할 수 있어요."
+                      : undefined
+                  }
+                  onClick={() => setDeletingSet(s)}
+                >
+                  삭제
+                </Button>
               </div>
             </li>
           ))}
         </ul>
+      )}
+      {deletingSet && (
+        <QuizSetDeleteDialog
+          set={deletingSet}
+          onClose={() => setDeletingSet(null)}
+          onDeleted={load}
+        />
       )}
     </Card>
   );

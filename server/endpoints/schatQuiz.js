@@ -240,6 +240,35 @@ function schatQuizEndpoints(app) {
     })
   );
 
+  app.post(
+    "/schat-admin/quiz/sets/:id/delete-preview",
+    adminOnly,
+    handle(async (request, response) => {
+      response.status(200).json({
+        success: true,
+        ...(await bank.setDeletePreview(request.params.id)),
+      });
+    })
+  );
+
+  // 세트 삭제: 확인 창에서 본 개수(expected)와 같을 때만 지운다.
+  app.post(
+    "/schat-admin/quiz/sets/:id/delete",
+    adminOnly,
+    handle(async (request, response) => {
+      const { confirm, expected = null } = reqBody(request);
+      if (confirm !== "삭제")
+        return response.status(400).json({
+          success: false,
+          error: "삭제 확인이 필요합니다.",
+        });
+      response.status(200).json({
+        success: true,
+        ...(await bank.deleteSet(request.params.id, { expected })),
+      });
+    })
+  );
+
   app.get(
     "/schat-admin/quiz/stats",
     adminOnly,

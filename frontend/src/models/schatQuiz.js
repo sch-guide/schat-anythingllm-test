@@ -71,6 +71,13 @@ const SchatQuiz = {
       body: { ids, confirm: "삭제", expected, ...(filters ? { filters } : {}) },
     }),
   sets: () => call("/schat-admin/quiz/sets"),
+  setDeletePreview: (id) =>
+    call(`/schat-admin/quiz/sets/${id}/delete-preview`, { method: "POST" }),
+  deleteSet: (id, expected) =>
+    call(`/schat-admin/quiz/sets/${id}/delete`, {
+      method: "POST",
+      body: { confirm: "삭제", expected },
+    }),
   updateSet: (id, changes) =>
     call(`/schat-admin/quiz/sets/${id}`, { method: "PATCH", body: changes }),
   stats: () => call("/schat-admin/quiz/stats"),
