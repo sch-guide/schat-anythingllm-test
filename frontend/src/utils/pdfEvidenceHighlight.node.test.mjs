@@ -91,7 +91,7 @@ test("keeps all original chunks with metadata removed; never replaces full chunk
     ["First", "Second"]
   );
 });
-test("creates pale blue borderless PDF highlights in PDF coordinates and an initial destination", () => {
+test("creates pale green borderless PDF highlights in PDF coordinates and an initial destination", () => {
   const annotations = highlightAnnotations(
     [
       [10, 20, 90, 32],
@@ -100,8 +100,14 @@ test("creates pale blue borderless PDF highlights in PDF coordinates and an init
     3
   );
   assert.equal(annotations[0].pageIndex, 2);
-  assert.deepEqual(annotations[0].color, [96, 165, 250]);
-  assert.equal(annotations[0].opacity, 0.22);
+  assert.deepEqual(
+    annotations[0].color.map((channel) =>
+      Math.round(
+        255 * (1 - annotations[0].opacity) + channel * annotations[0].opacity
+      )
+    ),
+    [230, 247, 200]
+  );
   assert.equal(annotations[0].annotationType, 9);
   assert.equal(annotations[0].paths, undefined);
   assert.deepEqual(annotations[0].quadPoints, [10, 32, 90, 32, 10, 20, 90, 20]);

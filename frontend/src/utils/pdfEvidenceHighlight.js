@@ -1,11 +1,12 @@
 export const PDF_POSITION_UNAVAILABLE =
   "정확한 위치를 찾지 못해 원문을 표시합니다.";
 export const EVIDENCE_HIGHLIGHT = Object.freeze({
-  color: [96, 165, 250],
-  opacity: 0.22,
+  // With multiply blending on white, this reads as pale green #e6f7c8.
+  color: [155, 223, 35],
+  opacity: 0.25,
 });
 export const EVIDENCE_HIGHLIGHT_LABEL =
-  "\uD30C\uB780\uC0C9 \uD45C\uC2DC = \uB2F5\uBCC0\uC5D0 \uC0AC\uC6A9\uB41C \uADFC\uAC70";
+  "\uC5F0\uB450\uC0C9 \uD45C\uC2DC = \uB2F5\uBCC0\uC5D0 \uC0AC\uC6A9\uB41C \uADFC\uAC70";
 const compact = (text) => String(text).replace(/\s/gu, "");
 const missing = () => ({ matched: false, rects: [] });
 

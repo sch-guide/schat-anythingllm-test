@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import {
   findEvidenceHighlights,
   answerHighlightTexts,
@@ -43,7 +43,7 @@ function syntheticPdf(rotation = 0) {
 }
 
 for (const rotation of [0, 90, 180, 270]) {
-  test(`real PDF roundtrip preserves source, text, rotation ${rotation} and pale blue line highlights`, async () => {
+  test(`real PDF roundtrip preserves source, text, rotation ${rotation} and readable pale green line highlights`, async () => {
     const original = syntheticPdf(rotation);
     const hash = createHash("sha256").update(original).digest("hex");
     const task = getDocument({
@@ -86,10 +86,25 @@ for (const rotation of [0, 90, 180, 270]) {
         annotations.every(
           (annotation) =>
             annotation.subtype === "Highlight" &&
-            Math.abs(annotation.color[0] - 96) <= 2 &&
-            Math.abs(annotation.color[1] - 165) <= 2 &&
-            Math.abs(annotation.color[2] - 250) <= 2
+            annotation.color.every((channel, index) =>
+              Math.abs(
+                Math.round(
+                  255 * (1 - annotation.opacity) + channel * annotation.opacity
+                ) - [230, 247, 200][index]
+              ) <= 1
+            )
         )
+      );
+      // The saved desktop PDF must darken the original ink rather than wash it out.
+      const operators = await page.getOperatorList();
+      const graphicsStates = operators.fnArray.flatMap((operation, index) =>
+        operation === OPS.setGState ? operators.argsArray[index][0] : []
+      );
+      assert.ok(
+        graphicsStates.some(([key, value]) => key === "BM" && value === "multiply")
+      );
+      assert.ok(
+        graphicsStates.some(([key, value]) => key === "ca" && value === 0.25)
       );
       assert.match(
         (await page.getTextContent()).items.map((item) => item.str).join(" "),
@@ -113,7 +128,15 @@ for (const rotation of [0, 90, 180, 270]) {
         };
         drawEvidenceHighlights(context, viewport, [annotations[0].rect]);
         assert.equal(context.globalCompositeOperation, "multiply");
-        assert.equal(context.globalAlpha, 0.22);
+        const mobileColor = context.fillStyle.match(/\d+/g).map(Number);
+        assert.deepEqual(
+          mobileColor.map((channel) =>
+            Math.round(
+              255 * (1 - context.globalAlpha) + channel * context.globalAlpha
+            )
+          ),
+          [230, 247, 200]
+        );
         const [x, y, width, height] = calls[0];
         const a = viewport.convertToPdfPoint(x, y),
           b = viewport.convertToPdfPoint(x + width, y + height);
