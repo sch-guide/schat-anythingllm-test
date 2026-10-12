@@ -5,6 +5,7 @@ import showToast from "@/utils/toast";
 import { SourceEvidenceRow } from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Citation";
 import { Badge, Button, Field, Loading, Notice, inputClass } from "../ui";
 import { DIFFICULTIES, STATUS_TONE } from "./quizLabels";
+import QuizDeleteDialog from "./QuizDelete";
 
 const LETTERS = ["A", "B", "C", "D"];
 
@@ -22,13 +23,13 @@ function toForm(q) {
 }
 
 // 문제 검토: edit, 원문 확인 (existing PDF viewer), 공개/사용중지, 다시 생성
-// (the only AI call here) and 완전삭제.
+// (the only AI call here) and 기록을 보존하는 삭제.
 export default function QuizReviewDialog({ id, onClose, onChanged }) {
   const [q, setQ] = useState(null);
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [showSource, setShowSource] = useState(false);
 
   useEffect(() => {
@@ -103,18 +104,9 @@ export default function QuizReviewDialog({ id, onClose, onChanged }) {
     }
   }
 
-  async function remove() {
-    const r = await run(
-      "delete",
-      () => SchatQuiz.deleteQuestions([id], confirmDelete),
-      "문제를 삭제했습니다."
-    );
-    if (r) onClose();
-  }
-
   const dirty = q && form && JSON.stringify(toForm(q)) !== JSON.stringify(form);
   return (
-    <Modal isOpen onClose={onClose} size="xl">
+    <Modal isOpen onClose={onClose} size="xl" closeOnEsc={!deleting}>
       <ModalHeader
         title={q ? `문제 검토 #${q.id}` : "문제 검토"}
         onClose={onClose}
@@ -132,7 +124,7 @@ export default function QuizReviewDialog({ id, onClose, onChanged }) {
               <Badge tone={STATUS_TONE[q.status]}>{q.statusLabel}</Badge>
               <Badge tone="neutral">{q.questionTypeLabel}</Badge>
               {q.outdated && (
-                <Badge tone="warning">이전 문서 기반 · 직원 출제 제외</Badge>
+                <Badge tone="neutral">이전 문서 · 직원 풀이 불가</Badge>
               )}
               <span className="text-xs text-theme-text-secondary">
                 {q.documentName}
@@ -360,29 +352,30 @@ export default function QuizReviewDialog({ id, onClose, onChanged }) {
             >
               <p className="text-sm font-semibold text-red-500">위험 영역</p>
               <p className="text-xs text-theme-text-secondary">
-                완전삭제하면 이 문제와 직원의 풀이·오답 기록도 함께 지워집니다.
-                보통은 사용중지를 권장합니다. 확인을 위해 '삭제'를 입력하세요.
+                삭제한 문제는 새 퀴즈에 나오지 않습니다. 직원의 점수·풀이 기록과
+                오답노트는 남아 있습니다.
               </p>
               <div className="flex flex-wrap gap-2">
-                <input
-                  aria-label="삭제 확인 입력"
-                  className={`${inputClass} !w-40`}
-                  value={confirmDelete}
-                  onChange={(e) => setConfirmDelete(e.target.value)}
-                  placeholder="삭제"
-                />
                 <Button
                   variant="danger"
-                  onClick={remove}
-                  disabled={confirmDelete.trim() !== "삭제" || !!busy}
+                  onClick={() => setDeleting(true)}
+                  disabled={!!busy}
                 >
-                  완전삭제
+                  삭제
                 </Button>
               </div>
             </section>
           </div>
         )}
       </ModalBody>
+      {deleting && (
+        <QuizDeleteDialog
+          target={{ ids: [id] }}
+          onClose={() => setDeleting(false)}
+          onChanged={onChanged}
+          onDeleted={onClose}
+        />
+      )}
     </Modal>
   );
 }

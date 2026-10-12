@@ -90,7 +90,7 @@ test("admin quiz: AI only in 문제 생성 / 다시 생성, review before 공개
   assert.match(review, /SourceEvidenceRow/);
   // 공개 is disabled while edits are unsaved and for old-document questions
   assert.match(review, /disabled=\{dirty \|\| !!busy \|\| q\.outdated\}/);
-  assert.match(review, /완전삭제/);
+  assert.match(review, /QuizDeleteDialog/);
 });
 
 test("every admin section has a menu icon", async () => {
@@ -143,5 +143,5 @@ test("admin statistics are aggregates without individual results", () => {
   // no per-person fields are rendered
   assert.doesNotMatch(stats, /userId|username|employeeNumber|displayName/i);
   const list = src("../SchatAdmin/sections/Quiz.jsx");
-  assert.match(list, /이전 문서 기반/);
+  assert.match(list, /이전 문서 · 직원 풀이 불가/);
 });

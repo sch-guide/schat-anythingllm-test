@@ -192,7 +192,7 @@ function schatQuizEndpoints(app) {
     "/schat-admin/quiz/questions/delete",
     adminOnly,
     handle(async (request, response) => {
-      const { ids = [], confirm } = reqBody(request);
+      const { ids = [], confirm, filters = null } = reqBody(request);
       if (confirm !== "삭제")
         return response.status(400).json({
           success: false,
@@ -200,7 +200,13 @@ function schatQuizEndpoints(app) {
         });
       response
         .status(200)
-        .json({ success: true, ...(await bank.deleteQuestions(ids)) });
+        .json({
+          success: true,
+          ...(await bank.deleteQuestions(ids, {
+            filters,
+            adminId: me(response),
+          })),
+        });
     })
   );
 

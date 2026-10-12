@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import SchatQuiz from "@/models/schatQuiz";
 import showToast from "@/utils/toast";
 import { Badge, Button, Card, Field, Loading, Notice, inputClass } from "../ui";
 import QuizReviewDialog from "./QuizReview";
 import QuizStats from "./QuizStats";
+import QuizDeleteDialog from "./QuizDelete";
 import { DIFFICULTIES, STATUSES, STATUS_TONE, TYPES } from "./quizLabels";
 
 const when = (iso) =>
@@ -233,7 +234,7 @@ function Generate({ onDone, onFailed }) {
 
 // ---- 문제 목록 ---------------------------------------------------------------------
 
-function QuestionList({ initialFilter = {} }) {
+export function QuestionList({ initialFilter = {} }) {
   const [filters, setFilters] = useState({
     q: "",
     docKey: "",
@@ -242,15 +243,22 @@ function QuestionList({ initialFilter = {} }) {
     questionType: "",
     status: "",
     quizSetId: "",
+    documentState: "all",
     ...initialFilter,
   });
   const [documents, setDocuments] = useState([]);
   const [rows, setRows] = useState(null);
   const [selected, setSelected] = useState([]);
   const [reviewing, setReviewing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const requestNumber = useRef(0);
 
   const load = useCallback(async () => {
+    const number = ++requestNumber.current;
     const r = await SchatQuiz.questions(filters);
+    if (number !== requestNumber.current) return;
+    setLoadError(r?.success ? null : r?.error || "목록을 불러오지 못했습니다.");
     setRows(r?.questions || []);
     setSelected([]);
   }, [filters]);
@@ -262,8 +270,12 @@ function QuestionList({ initialFilter = {} }) {
     SchatQuiz.documents().then((r) => setDocuments(r?.documents || []));
   }, []);
 
-  const set = (key) => (e) =>
+  const set = (key) => (e) => {
+    requestNumber.current++;
+    setRows(null);
+    setSelected([]);
     setFilters((prev) => ({ ...prev, [key]: e.target.value }));
+  };
 
   async function bulk(status) {
     const r = await SchatQuiz.setStatus(selected, status);
@@ -281,6 +293,26 @@ function QuestionList({ initialFilter = {} }) {
       title="문제 목록"
       description="AI가 만든 문제는 작성중으로 들어옵니다. 문제·선택지·정답·해설·출처를 검토한 뒤 공개하세요. 잘못된 문제는 먼저 사용중지하면 새 퀴즈에 나오지 않습니다."
     >
+      <div
+        role="group"
+        aria-label="문서 사용 필터"
+        className="flex flex-wrap gap-2"
+      >
+        {[
+          ["all", "전체"],
+          ["current", "사용 중"],
+          ["outdated", "이전 문서"],
+        ].map(([value, label]) => (
+          <Button
+            key={value}
+            variant={filters.documentState === value ? "primary" : "secondary"}
+            aria-pressed={filters.documentState === value}
+            onClick={() => set("documentState")({ target: { value } })}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
       <div className="grid gap-3 md:grid-cols-4">
         <input
           aria-label="문제 검색"
@@ -374,6 +406,18 @@ function QuestionList({ initialFilter = {} }) {
         >
           선택 사용중지
         </Button>
+        {filters.documentState === "outdated" && (
+          <Button
+            variant="danger"
+            data-testid="quiz-delete-previous"
+            disabled={!rows?.length}
+            onClick={() =>
+              setDeleting({ ids: allIds, filters: { ...filters } })
+            }
+          >
+            이전 문서 퀴즈 모두 삭제({rows?.length || 0}개)
+          </Button>
+        )}
         <span
           className="text-xs text-theme-text-secondary"
           data-testid="quiz-list-count"
@@ -382,6 +426,11 @@ function QuestionList({ initialFilter = {} }) {
           {selected.length ? ` · ${selected.length}개 선택` : ""}
         </span>
       </div>
+      {loadError && (
+        <Notice tone="warning">
+          <span role="alert">{loadError}</span>
+        </Notice>
+      )}
       {!rows ? (
         <Loading />
       ) : (
@@ -463,7 +512,9 @@ function QuestionList({ initialFilter = {} }) {
                     <span className="block truncate" title={q.documentName}>
                       {q.documentName}
                     </span>
-                    {q.outdated && <Badge tone="warning">이전 문서 기반</Badge>}
+                    {q.outdated && (
+                      <Badge tone="neutral">이전 문서 · 직원 풀이 불가</Badge>
+                    )}
                   </td>
                   <td className="py-2.5 pr-3 text-theme-text-secondary">
                     {q.topic}
@@ -491,6 +542,14 @@ function QuestionList({ initialFilter = {} }) {
                     >
                       검토
                     </Button>
+                    <Button
+                      variant="danger"
+                      className="!px-2.5 !py-1 !text-xs ml-1"
+                      aria-label={`${q.id}번 문제 삭제`}
+                      onClick={() => setDeleting({ ids: [q.id] })}
+                    >
+                      삭제
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -502,6 +561,13 @@ function QuestionList({ initialFilter = {} }) {
         <QuizReviewDialog
           id={reviewing}
           onClose={() => setReviewing(null)}
+          onChanged={load}
+        />
+      )}
+      {deleting && (
+        <QuizDeleteDialog
+          target={deleting}
+          onClose={() => setDeleting(null)}
           onChanged={load}
         />
       )}

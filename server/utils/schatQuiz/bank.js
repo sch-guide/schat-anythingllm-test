@@ -21,14 +21,19 @@ const LIVE_TTL_MS = 30 * 1000;
  * the page numbers that exist. A question whose document is not here was made
  * from an earlier upload ("이전 문서 기반") and is not given to staff.
  */
-async function liveDocuments({ fresh = false } = {}) {
-  if (!fresh && liveCache && Date.now() - liveCache.at < LIVE_TTL_MS)
+async function liveDocuments({ fresh = false, db = prisma } = {}) {
+  if (
+    db === prisma &&
+    !fresh &&
+    liveCache &&
+    Date.now() - liveCache.at < LIVE_TTL_MS
+  )
     return liveCache.map;
-  const workspaces = await prisma.workspaces.findMany({
+  const workspaces = await db.workspaces.findMany({
     select: { id: true, slug: true },
   });
   const slugById = new Map(workspaces.map((w) => [w.id, w.slug]));
-  const rows = await prisma.workspace_documents.findMany({
+  const rows = await db.workspace_documents.findMany({
     select: { workspaceId: true, metadata: true },
   });
   const map = new Map();
@@ -37,6 +42,7 @@ async function liveDocuments({ fresh = false } = {}) {
     try {
       m = JSON.parse(row.metadata || "{}");
     } catch {}
+    if (m.schat_document_update_archived === true) continue;
     const id = String(m.document_id || "").trim();
     if (!id) continue;
     const doc = map.get(id) || {
@@ -54,7 +60,7 @@ async function liveDocuments({ fresh = false } = {}) {
     if (Number.isInteger(page) && page > 0) doc.pages.add(page);
     map.set(id, doc);
   }
-  liveCache = { at: Date.now(), map };
+  if (db === prisma) liveCache = { at: Date.now(), map };
   return map;
 }
 
@@ -565,9 +571,16 @@ async function startWrongReview(userId, input = {}) {
 // ---- admin: bank management (no AI) -----------------------------------------------
 
 async function adminList(filters = {}) {
-  const live = await liveDocuments();
+  const live = await liveDocuments({ fresh: true });
+  return (await adminRows(filters, live)).map((q) =>
+    presentAdminQuestion(q, live)
+  );
+}
+
+// Listing and bulk deletion share the same uncapped selection.
+async function adminRows(filters, live, db = prisma) {
   const where = {
-    ...(core.STATUS[filters.status] ? { status: filters.status } : {}),
+    status: core.STATUS[filters.status] ? filters.status : { not: "deleted" },
     ...(core.DIFFICULTY[filters.difficulty]
       ? { difficulty: filters.difficulty }
       : {}),
@@ -578,18 +591,25 @@ async function adminList(filters = {}) {
     ...(filters.quizSetId ? { quiz_set_id: Number(filters.quizSetId) } : {}),
     ...(filters.q ? { question: { contains: String(filters.q) } } : {}),
   };
-  const rows = await prisma.schat_quiz_questions.findMany({
+  const rows = await db.schat_quiz_questions.findMany({
     where,
     include: { quiz_set: { select: { title: true } } },
     orderBy: { id: "desc" },
-    take: 500,
   });
   return rows
     .filter(
       (q) => !filters.docKey || core.docKeyOf(q.document_id) === filters.docKey
     )
-    .filter((q) => (filters.outdated === "1" ? !live.has(q.document_id) : true))
-    .map((q) => presentAdminQuestion(q, live));
+    .filter((q) => {
+      const state =
+        filters.documentState ||
+        (filters.outdated === "1" ? "outdated" : "all");
+      return state === "outdated"
+        ? !live.has(q.document_id)
+        : state === "current"
+          ? live.has(q.document_id)
+          : true;
+    });
 }
 
 async function adminDocuments() {
@@ -608,7 +628,7 @@ async function adminQuestion(id) {
     where: { id: Number(id) },
     include: { quiz_set: { select: { title: true } } },
   });
-  if (!q) throw userError("문제를 찾을 수 없습니다.");
+  if (!q || q.status === "deleted") throw userError("문제를 찾을 수 없습니다.");
   return presentAdminQuestion(q, await liveDocuments());
 }
 
@@ -617,7 +637,8 @@ async function adminUpdate(adminId, id, input = {}) {
   const q = await prisma.schat_quiz_questions.findUnique({
     where: { id: Number(id) },
   });
-  if (!q) throw userError("문제를 찾을 수 없습니다.");
+  if (!q || q.status === "deleted")
+    throw userError("삭제된 문제이거나 문제를 찾을 수 없습니다.");
   const check = core.validateQuestionInput({
     ...input,
     questionType: q.question_type,
@@ -636,8 +657,8 @@ async function adminUpdate(adminId, id, input = {}) {
       );
   }
   const { question_type: _t, ...data } = check.value;
-  const saved = await prisma.schat_quiz_questions.update({
-    where: { id: q.id },
+  const { count } = await prisma.schat_quiz_questions.updateMany({
+    where: { id: q.id, status: { not: "deleted" } },
     data: {
       ...data,
       // An edited question's old excerpt no longer fits a new page.
@@ -648,56 +669,103 @@ async function adminUpdate(adminId, id, input = {}) {
       updated_by: adminId,
       updatedAt: new Date(),
     },
-    include: { quiz_set: { select: { title: true } } },
   });
-  return presentAdminQuestion(saved, live);
+  if (!count)
+    throw userError(
+      "삭제된 문제이거나 문제 상태가 바뀌었습니다. 다시 확인해 주세요."
+    );
+  return adminQuestion(q.id);
 }
 
 async function setStatus(adminId, ids = [], status) {
   if (!core.STATUS[status]) throw userError("상태를 확인해 주세요.");
-  const list = ids.map(Number).filter(Number.isInteger);
-  if (!list.length) throw userError("문제를 선택해 주세요.");
-  if (status === "approved") {
-    const live = await liveDocuments({ fresh: true });
-    const rows = await prisma.schat_quiz_questions.findMany({
-      where: { id: { in: list } },
-      select: { id: true, document_id: true },
+  const list = questionIds(ids);
+  return prisma.$transaction(async (tx) => {
+    const selected = await tx.schat_quiz_questions.findMany({
+      where: { id: { in: list }, status: { not: "deleted" } },
     });
-    if (rows.some((r) => !live.has(r.document_id)))
-      throw userError("이전 문서 기반 문제는 공개할 수 없습니다.");
-  }
-  const { count } = await prisma.schat_quiz_questions.updateMany({
-    where: { id: { in: list } },
-    data: { status, updated_by: adminId, updatedAt: new Date() },
-  });
-  // Publishing a question also publishes its set if the set was still a
-  // draft. A set the admin stopped (사용중지) stays stopped.
-  if (status === "approved") {
-    const sets = await prisma.schat_quiz_questions.findMany({
-      where: { id: { in: list }, quiz_set_id: { not: null } },
-      select: { quiz_set_id: true },
-      distinct: ["quiz_set_id"],
+    if (selected.length !== list.length)
+      throw userError(
+        "삭제된 문제이거나 문제 상태가 바뀌었습니다. 다시 확인해 주세요."
+      );
+    if (status === "approved") {
+      const live = await liveDocuments({ fresh: true, db: tx });
+      if (selected.some((r) => !live.has(r.document_id)))
+        throw userError("이전 문서 기반 문제는 공개할 수 없습니다.");
+    }
+    const { count } = await tx.schat_quiz_questions.updateMany({
+      where: { id: { in: list }, status: { not: "deleted" } },
+      data: { status, updated_by: adminId, updatedAt: new Date() },
     });
-    if (sets.length)
-      await prisma.schat_quiz_sets.updateMany({
+    if (count !== list.length)
+      throw userError(
+        "삭제된 문제이거나 문제 상태가 바뀌었습니다. 다시 확인해 주세요."
+      );
+    // Publishing a question also publishes its set if the set was still a
+    // draft. A set the admin stopped (사용중지) stays stopped.
+    if (status === "approved") {
+      const sets = await tx.schat_quiz_questions.findMany({
         where: {
-          id: { in: sets.map((s) => s.quiz_set_id) },
-          status: "draft",
+          id: { in: list },
+          status: "approved",
+          quiz_set_id: { not: null },
         },
-        data: { status: "approved", updatedAt: new Date() },
+        select: { quiz_set_id: true },
+        distinct: ["quiz_set_id"],
       });
-  }
-  return { count };
+      if (sets.length)
+        await tx.schat_quiz_sets.updateMany({
+          where: {
+            id: { in: sets.map((s) => s.quiz_set_id) },
+            status: "draft",
+          },
+          data: { status: "approved", updatedAt: new Date() },
+        });
+    }
+    return { count };
+  });
 }
 
-// 완전삭제 (admin only). Answers and wrong notes for the question go with it.
-async function deleteQuestions(ids = []) {
-  const list = ids.map(Number).filter(Number.isInteger);
-  if (!list.length) throw userError("문제를 선택해 주세요.");
-  const { count } = await prisma.schat_quiz_questions.deleteMany({
-    where: { id: { in: list } },
+function questionIds(ids) {
+  if (
+    !Array.isArray(ids) ||
+    !ids.length ||
+    ids.some((id) => !Number.isSafeInteger(Number(id)) || Number(id) <= 0)
+  )
+    throw userError("문제를 선택해 주세요.");
+  return [...new Set(ids.map(Number))];
+}
+
+// 일반 삭제: 질문과 풀이·점수·오답노트 연결을 보존한다.
+async function deleteQuestions(
+  ids = [],
+  { filters = null, adminId = null } = {}
+) {
+  const list = questionIds(ids);
+  return prisma.$transaction(async (tx) => {
+    if (filters) {
+      if (filters.documentState !== "outdated")
+        throw userError("이전 문서 삭제 대상을 다시 확인해 주세요.");
+      const live = await liveDocuments({ fresh: true, db: tx });
+      const targets = await adminRows(filters, live, tx);
+      if (
+        targets.length !== list.length ||
+        targets.some((q) => !list.includes(q.id))
+      )
+        throw userError(
+          "삭제 대상이 바뀌었습니다. 목록을 새로 불러온 뒤 다시 확인해 주세요."
+        );
+    }
+    const { count } = await tx.schat_quiz_questions.updateMany({
+      where: { id: { in: list }, status: { not: "deleted" } },
+      data: { status: "deleted", updated_by: adminId, updatedAt: new Date() },
+    });
+    if (count !== list.length)
+      throw userError(
+        "삭제 대상이 바뀌었습니다. 목록을 새로 불러온 뒤 다시 확인해 주세요."
+      );
+    return { count };
   });
-  return { count };
 }
 
 async function adminSets() {
@@ -719,7 +787,7 @@ async function adminSets() {
     questionTypeLabel: core.QUESTION_TYPE[s.question_type] || s.question_type,
     status: s.status,
     statusLabel: core.STATUS[s.status] || s.status,
-    questions: s.questions.length,
+    questions: s.questions.filter((q) => q.status !== "deleted").length,
     approved: s.questions.filter((q) => q.status === "approved").length,
     draft: s.questions.filter((q) => q.status === "draft").length,
     createdAt: s.createdAt,

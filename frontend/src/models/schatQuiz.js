@@ -60,10 +60,10 @@ const SchatQuiz = {
       method: "POST",
       body: { ids, status },
     }),
-  deleteQuestions: (ids, confirm) =>
+  deleteQuestions: (ids, confirm, filters) =>
     call("/schat-admin/quiz/questions/delete", {
       method: "POST",
-      body: { ids, confirm },
+      body: { ids, confirm, ...(filters ? { filters } : {}) },
     }),
   sets: () => call("/schat-admin/quiz/sets"),
   updateSet: (id, changes) =>

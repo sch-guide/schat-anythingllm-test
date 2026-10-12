@@ -368,7 +368,8 @@ async function regenerate(
   const q = await prisma.schat_quiz_questions.findUnique({
     where: { id: Number(questionId) },
   });
-  if (!q) throw bank.userError("문제를 찾을 수 없습니다.");
+  if (!q || q.status === "deleted")
+    throw bank.userError("삭제된 문제이거나 문제를 찾을 수 없습니다.");
   if (q.status === "approved")
     throw bank.userError("공개 중인 문제는 사용중지한 뒤 다시 생성해 주세요.");
   const live = await bank.liveDocuments({ fresh: true });
@@ -432,8 +433,8 @@ async function regenerate(
   if (!row)
     throw bank.userError("근거가 충분하지 않아 새 문제를 만들지 않았습니다.");
   const sectionByPage = new Map(evidence.map((e) => [e.page, e.section]));
-  await prisma.schat_quiz_questions.update({
-    where: { id: q.id },
+  const { count } = await prisma.schat_quiz_questions.updateMany({
+    where: { id: q.id, status: { in: ["draft", "inactive"] } },
     data: {
       ...row,
       source_section: sectionByPage.get(row.source_page) || null,
@@ -443,6 +444,10 @@ async function regenerate(
       updatedAt: new Date(),
     },
   });
+  if (!count)
+    throw bank.userError(
+      "삭제된 문제이거나 문제 상태가 바뀌었습니다. 다시 확인해 주세요."
+    );
   return bank.adminQuestion(q.id);
 }
 
