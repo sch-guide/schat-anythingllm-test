@@ -84,18 +84,21 @@ for (const role of ["default", "manager"])
       "dislike-button",
     ]);
   });
-test("관리자와 단독 소유자의 답변 수정과 추가 작업 유지", () => {
+test("관리자와 단독 소유자도 답변 수정(연필)과 ⋮ 포크·삭제 메뉴가 없다", () => {
   for (const user of [{ role: "admin" }, null]) {
     assert.deepEqual(buttons(fixture.render(user)), [
       "message-to-speech",
       "copy-assistant-text",
-      "edit-input-text",
       "regenerate-assistant-text",
       "feedback-button",
       "dislike-button",
-      "action-menu",
     ]);
   }
+});
+test("관리자 질문 편집 버튼 유지", () => {
+  assert.ok(
+    buttons(fixture.render({ role: "admin" }, "user")).includes("edit-input-text")
+  );
 });
 test("직원 질문 편집 버튼 유지", () => {
   assert.ok(

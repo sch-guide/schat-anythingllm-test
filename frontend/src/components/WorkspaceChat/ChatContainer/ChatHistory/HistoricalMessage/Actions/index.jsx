@@ -9,10 +9,9 @@ import {
 } from "@phosphor-icons/react";
 import Workspace from "@/models/workspace";
 import { EditMessageAction } from "./EditMessage";
-import ActionMenu from "./ActionMenu";
 import { useTranslation } from "react-i18next";
 import useUser from "@/hooks/useUser";
-import { canEditMessage, canManageAnswers } from "@/utils/answerActions.mjs";
+import { canEditMessage } from "@/utils/answerActions.mjs";
 import { createFeedbackController } from "@/utils/answerFeedback.mjs";
 import DislikeForm from "./DislikeForm";
 
@@ -76,7 +75,8 @@ const Actions = ({
             className={`flex justify-start items-center gap-x-[8px] ${role === "user" ? "flex-row-reverse" : ""}`}
           >
             <CopyMessage message={message} />
-            {canEditMessage(user, role) && (
+            {/* SCHAT: 답변 수정(연필)은 누구에게도 보이지 않는다. 질문 수정만 유지. */}
+            {role === "user" && canEditMessage(user, role) && (
               <EditMessageAction
                 chatId={chatId}
                 role={role}
@@ -118,14 +118,7 @@ const Actions = ({
               IconComponent={ThumbsDown}
             />
           )}
-          {canManageAnswers(user) && (
-            <ActionMenu
-              chatId={chatId}
-              forkThread={forkThread}
-              isEditing={isEditing}
-              role={role}
-            />
-          )}
+          {/* SCHAT: ⋮ 더 많은 작업(포크·삭제) 메뉴는 두지 않는다. */}
         </div>
       </div>
       {formOpen && (
