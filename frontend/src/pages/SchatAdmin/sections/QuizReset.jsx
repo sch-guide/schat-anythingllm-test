@@ -13,13 +13,13 @@ export default function QuizReset({ onReset }) {
     });
   }, []);
   return (
-    <div className="flex flex-wrap items-center gap-3 border-t border-theme-sidebar-border pt-4">
-      <button type="button" data-testid="quiz-reset-open"
-        className="rounded-lg border border-red-500 px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10"
-        onClick={() => setOpen(true)}>직원 퀴즈 기록 초기화</button>
+    <div className="flex flex-col items-start gap-2 border-t border-theme-sidebar-border pt-4">
       <span className="text-xs text-theme-text-secondary" data-testid="quiz-reset-last-date">
         마지막 초기화: {lastDate === undefined ? "확인 중" : lastDate ? new Date(lastDate).toLocaleString("ko-KR") : "아직 없음"}
       </span>
+      <button type="button" data-testid="quiz-reset-open"
+        className="rounded-lg border border-red-500 px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10"
+        onClick={() => setOpen(true)}>퀴즈 기록 초기화</button>
       {open && <QuizResetDialog onClose={() => setOpen(false)} onReset={(result) => {
         setLastDate(result.lastResetAt); onReset?.();
       }} />}
@@ -61,7 +61,7 @@ export function QuizResetDialog({ onClose, onReset }) {
         <div data-testid="quiz-reset-dialog" className="flex flex-col gap-3">
           <p className="text-sm text-theme-text-primary">직원 점수·풀이 기록·오답노트를 모두 지워요. 퀴즈 문제는 그대로 남아요. 되돌릴 수 없어요.</p>
           <p className="text-xs text-theme-text-secondary">단, 이미 삭제한 문제와 이전 문서의 문제도 완전히 지워집니다. 현재 문서의 작성중·공개·사용중지 문제는 남습니다.</p>
-          <p className="text-sm text-theme-text-primary">{preview ? `삭제 직원 ${preview.staffCount}명 · 풀이 기록 ${preview.attemptCount}건 · 삭제/이전 문서 문제 ${preview.questionCount}개` : "초기화 대상을 확인하고 있습니다."}</p>
+          <p className="text-sm text-theme-text-primary">{preview ? `대상 직원 ${preview.staffCount}명 · 풀이 기록 ${preview.attemptCount}건 · 삭제/이전 문서 문제 ${preview.questionCount}개` : "초기화 대상을 확인하고 있습니다."}</p>
           <label className="text-sm text-theme-text-primary" htmlFor="quiz-reset-confirm">확인을 위해 '초기화'를 정확히 입력해 주세요.</label>
           <input id="quiz-reset-confirm" aria-label="초기화 확인 입력" className={inputClass}
             value={confirm} onChange={(e) => setConfirm(e.target.value)} disabled={busy || !preview} autoComplete="off" />
