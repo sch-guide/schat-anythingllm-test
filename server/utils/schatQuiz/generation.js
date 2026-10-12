@@ -317,20 +317,23 @@ async function generate(
     source_document_name: doc.title,
     document_version: doc.version,
   };
-  const set = await prisma.schat_quiz_sets.create({
-    data: {
-      ...common,
-      title: `${request.topic} ${core.DIFFICULTY[request.difficulty]} 퀴즈`,
-      topic: request.topic,
-      difficulty: request.difficulty,
-      question_type: request.type,
-      status: "draft",
-      created_by: adminId,
-    },
-  });
-  await prisma.$transaction(
-    rows.map((row) =>
-      prisma.schat_quiz_questions.create({
+  const set = await bank.withQuizWrite(async (tx) => {
+    const currentLive = await bank.liveDocuments({ fresh: true, db: tx });
+    if (!currentLive.has(doc.documentId))
+      throw bank.userError("문서 상태가 바뀌었습니다. 현재 문서를 다시 확인해 주세요.");
+    const set = await tx.schat_quiz_sets.create({
+      data: {
+        ...common,
+        title: `${request.topic} ${core.DIFFICULTY[request.difficulty]} 퀴즈`,
+        topic: request.topic,
+        difficulty: request.difficulty,
+        question_type: request.type,
+        status: "draft",
+        created_by: adminId,
+      },
+    });
+    for (const row of rows)
+      await tx.schat_quiz_questions.create({
         data: {
           ...common,
           ...row,
@@ -342,9 +345,9 @@ async function generate(
           created_by: adminId,
           generation_id: logRow?.id ?? null,
         },
-      })
-    )
-  );
+      });
+    return set;
+  });
   return {
     quizSetId: set.id,
     created: rows.length,
@@ -433,22 +436,27 @@ async function regenerate(
   if (!row)
     throw bank.userError("근거가 충분하지 않아 새 문제를 만들지 않았습니다.");
   const sectionByPage = new Map(evidence.map((e) => [e.page, e.section]));
-  const { count } = await prisma.schat_quiz_questions.updateMany({
-    where: { id: q.id, status: { in: ["draft", "inactive"] } },
-    data: {
-      ...row,
-      source_section: sectionByPage.get(row.source_page) || null,
-      status: "draft",
-      updated_by: adminId,
-      generation_id: log?.id ?? null,
-      updatedAt: new Date(),
-    },
+  return bank.withQuizWrite(async (tx) => {
+    const currentLive = await bank.liveDocuments({ fresh: true, db: tx });
+    if (!currentLive.has(q.document_id))
+      throw bank.userError("문서 상태가 바뀌었습니다. 현재 문서를 다시 확인해 주세요.");
+    const { count } = await tx.schat_quiz_questions.updateMany({
+      where: { id: q.id, status: { in: ["draft", "inactive"] } },
+      data: {
+        ...row,
+        source_section: sectionByPage.get(row.source_page) || null,
+        status: "draft",
+        updated_by: adminId,
+        generation_id: log?.id ?? null,
+        updatedAt: new Date(),
+      },
+    });
+    if (!count)
+      throw bank.userError(
+        "삭제된 문제이거나 문제 상태가 바뀌었습니다. 다시 확인해 주세요."
+      );
+    return bank.adminQuestion(q.id);
   });
-  if (!count)
-    throw bank.userError(
-      "삭제된 문제이거나 문제 상태가 바뀌었습니다. 다시 확인해 주세요."
-    );
-  return bank.adminQuestion(q.id);
 }
 
 module.exports = {

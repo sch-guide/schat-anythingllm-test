@@ -43,6 +43,21 @@ function schatQuizEndpoints(app) {
 
   // ---- staff (own data only) --------------------------------------------------
   app.get(
+    "/schat/quiz/reset-notice",
+    signedIn,
+    handle(async (_request, response) => {
+      response.status(200).json({ success: true, notice: await bank.resetNotice(me(response)) });
+    })
+  );
+  app.post(
+    "/schat/quiz/reset-notice",
+    signedIn,
+    handle(async (request, response) => {
+      await bank.acknowledgeReset(me(response), reqBody(request).generation);
+      response.status(200).json({ success: true });
+    })
+  );
+  app.get(
     "/schat/quiz/options",
     signedIn,
     handle(async (_request, response) => {
@@ -129,6 +144,20 @@ function schatQuizEndpoints(app) {
   );
 
   // ---- admin: bank management (no AI) -------------------------------------------
+  app.get(
+    "/schat-admin/quiz/reset/preview",
+    adminOnly,
+    handle(async (_request, response) => {
+      response.status(200).json({ success: true, ...(await bank.resetPreview(me(response))) });
+    })
+  );
+  app.post(
+    "/schat-admin/quiz/reset",
+    adminOnly,
+    handle(async (request, response) => {
+      response.status(200).json({ success: true, ...(await bank.resetRecords(me(response), reqBody(request))) });
+    })
+  );
   app.get(
     "/schat-admin/quiz/documents",
     adminOnly,

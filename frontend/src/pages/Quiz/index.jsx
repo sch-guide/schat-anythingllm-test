@@ -3,6 +3,7 @@ import { isMobile } from "react-device-detect";
 import Sidebar, { SidebarMobileHeader } from "@/components/Sidebar";
 import QuizIcon from "@/components/SchatQuiz/QuizIcon";
 import SchatQuiz from "@/models/schatQuiz";
+import ResetNotice from "./ResetNotice";
 import { SourceEvidenceRow } from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Citation";
 
 // 지침서 퀴즈 (staff). Everything here reads questions the admin already
@@ -73,6 +74,7 @@ function Quiz() {
           </p>
         </div>
       </header>
+      <ResetNotice />
 
       {!run && (
         <div

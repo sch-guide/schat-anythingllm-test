@@ -5,6 +5,7 @@ import { Badge, Button, Card, Field, Loading, Notice, inputClass } from "../ui";
 import QuizReviewDialog from "./QuizReview";
 import QuizStats from "./QuizStats";
 import QuizDeleteDialog from "./QuizDelete";
+import QuizReset from "./QuizReset";
 import { DIFFICULTIES, STATUSES, STATUS_TONE, TYPES } from "./quizLabels";
 
 const when = (iso) =>
@@ -20,6 +21,7 @@ const when = (iso) =>
 // action here only edits stored questions.
 export default function QuizSection() {
   const [tab, setTab] = useState("questions");
+  const [revision, setRevision] = useState(0);
   const [listFilter, setListFilter] = useState({});
   const [usage, setUsage] = useState(null);
   const loadUsage = useCallback(
@@ -61,11 +63,12 @@ export default function QuizSection() {
       {tab === "questions" && (
         <QuestionList
           initialFilter={listFilter}
-          key={JSON.stringify(listFilter)}
+          key={`${revision}:${JSON.stringify(listFilter)}`}
         />
       )}
       {tab === "sets" && (
         <SetList
+          key={revision}
           onOpen={(set) => {
             setListFilter({ quizSetId: String(set.id) });
             setTab("questions");
@@ -82,7 +85,8 @@ export default function QuizSection() {
           onFailed={loadUsage}
         />
       )}
-      {tab === "stats" && <QuizStats />}
+      {tab === "stats" && <QuizStats key={revision} />}
+      <QuizReset onReset={() => setRevision((value) => value + 1)} />
     </div>
   );
 }

@@ -122,6 +122,7 @@ function fixture(extra = 0) {
     },
   });
   const db = {
+    system_settings: { upsert: async () => ({}) },
     workspaces: table([{ id: 1, slug: "synthetic" }]),
     workspace_documents: table([
       {

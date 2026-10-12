@@ -2,7 +2,40 @@
 // DATABASE ONLY: this module must never import an AI provider or the
 // generation service. Staff quiz endpoints use nothing but this file, so no
 // staff action can reach Gemini (see __tests__/utils/schatQuiz).
-const prisma = require("../prisma");
+const rootPrisma = require("../prisma");
+const { AsyncLocalStorage } = require("node:async_hooks");
+const { createHash } = require("node:crypto");
+const writeContext = new AsyncLocalStorage();
+let writeQueue = Promise.resolve();
+const RESET_LABEL = "schat_quiz_reset_state";
+const LOCK_LABEL = "schat_quiz_write_boundary";
+// 기존 함수의 모든 읽기와 쓰기를 현재 저장 트랜잭션 안으로 연결한다.
+const prisma = new Proxy(rootPrisma, {
+  get(target, key) {
+    const tx = writeContext.getStore();
+    if (tx && key === "$transaction")
+      return (work) => typeof work === "function" ? work(tx) : Promise.all(work);
+    const db = tx || target;
+    return typeof db[key] === "function" ? db[key].bind(db) : db[key];
+  },
+});
+
+function withQuizWrite(fn) {
+  const current = writeContext.getStore();
+  if (current) return Promise.resolve().then(() => fn(current));
+  const job = writeQueue.then(() => rootPrisma.$transaction(async (tx) => {
+    // SQLite의 쓰기 잠금을 어떤 퀴즈 자료를 읽기 전에 확보한다.
+    // 여러 서버 프로세스에서도 초기화와 새 풀이가 교차하지 않는다.
+    await tx.system_settings.upsert({
+      where: { label: LOCK_LABEL },
+      create: { label: LOCK_LABEL, value: "1" },
+      update: { value: "1" },
+    });
+    return writeContext.run(tx, () => fn(tx));
+  }));
+  writeQueue = job.catch(() => {});
+  return job;
+}
 const core = require("./core");
 
 function userError(message) {
@@ -25,6 +58,7 @@ async function liveDocuments({ fresh = false, db = prisma } = {}) {
   if (
     db === prisma &&
     !fresh &&
+    !writeContext.getStore() &&
     liveCache &&
     Date.now() - liveCache.at < LIVE_TTL_MS
   )
@@ -60,7 +94,7 @@ async function liveDocuments({ fresh = false, db = prisma } = {}) {
     if (Number.isInteger(page) && page > 0) doc.pages.add(page);
     map.set(id, doc);
   }
-  if (db === prisma) liveCache = { at: Date.now(), map };
+  if (db === prisma && !writeContext.getStore()) liveCache = { at: Date.now(), map };
   return map;
 }
 
@@ -910,26 +944,131 @@ async function adminStats() {
   };
 }
 
+async function requireResetAdmin(db, userId) {
+  const user = await db.users.findUnique({ where: { id: userId } });
+  if (!user || user.role !== "admin" || user.suspended)
+    throw userError("초기화 권한이 없습니다.");
+}
+
+async function resetState(db) {
+  const row = await db.system_settings.findUnique({ where: { label: RESET_LABEL } });
+  if (!row?.value) return { generation: 0, lastResetAt: null };
+  const value = JSON.parse(row.value);
+  if (!Number.isSafeInteger(value.generation) || value.generation < 0)
+    throw new Error("Invalid quiz reset state");
+  return { generation: value.generation, lastResetAt: value.lastResetAt || null };
+}
+
+function stable(value) {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(stable);
+  if (value && typeof value === "object")
+    return Object.fromEntries(Object.keys(value).sort().map((k) => [k, stable(value[k])]));
+  return value;
+}
+
+async function resetSnapshot(db) {
+  const live = await liveDocuments({ fresh: true, db });
+  const attempts = await db.schat_quiz_attempts.findMany({ orderBy: { id: "asc" } });
+  const answers = await db.schat_quiz_answers.findMany({ orderBy: { id: "asc" } });
+  const notes = await db.schat_quiz_wrong_notes.findMany({ orderBy: { id: "asc" } });
+  const questions = await db.schat_quiz_questions.findMany({ orderBy: { id: "asc" } });
+  const state = await resetState(db);
+  const removed = questions.filter((q) => q.status === "deleted" || !live.has(q.document_id));
+  const sortRows = (rows) => [...rows].sort((a, b) => a.id - b.id);
+  const token = createHash("sha256").update(JSON.stringify(stable({
+    attempts: sortRows(attempts), answers: sortRows(answers), notes: sortRows(notes),
+    questions: sortRows(questions),
+    live: [...live.values()].map((d) => ({ ...d, pages: [...d.pages].sort((a, b) => a - b) }))
+      .sort((a, b) => a.documentId.localeCompare(b.documentId)),
+    state,
+  }))).digest("hex");
+  return {
+    token, staffCount: new Set([...attempts, ...answers, ...notes].map((r) => r.user_id)).size,
+    attemptCount: attempts.length, answerCount: answers.length, wrongNoteCount: notes.length,
+    questionCount: removed.length, ...state,
+    removedIds: removed.map((q) => q.id),
+  };
+}
+
+async function resetPreview(adminId) {
+  return rootPrisma.$transaction(async (tx) => {
+    await requireResetAdmin(tx, adminId);
+    const { removedIds, ...preview } = await resetSnapshot(tx);
+    return preview;
+  });
+}
+
+async function resetRecords(adminId, input = {}) {
+  if (input.confirm !== "초기화") throw userError("확인을 위해 '초기화'를 정확히 입력해 주세요.");
+  return withQuizWrite(async (tx) => {
+    await requireResetAdmin(tx, adminId);
+    const snapshot = await resetSnapshot(tx);
+    if (typeof input.token !== "string" || input.token !== snapshot.token)
+      throw userError("초기화 대상이 바뀌었습니다. 미리보기를 새로 불러온 뒤 다시 확인해 주세요.");
+    await tx.schat_quiz_answers.deleteMany({});
+    await tx.schat_quiz_wrong_notes.deleteMany({});
+    await tx.schat_quiz_attempts.deleteMany({});
+    await tx.schat_quiz_questions.deleteMany({ where: { id: { in: snapshot.removedIds } } });
+    const state = { generation: snapshot.generation + 1, lastResetAt: new Date().toISOString() };
+    await tx.system_settings.upsert({
+      where: { label: RESET_LABEL },
+      create: { label: RESET_LABEL, value: JSON.stringify(state) },
+      update: { value: JSON.stringify(state), lastUpdatedAt: new Date() },
+    });
+    const { removedIds, token, ...summary } = snapshot;
+    return { ...summary, ...state };
+  });
+}
+
+const readLabel = (userId) => `schat_quiz_reset_read_${userId}`;
+async function resetNotice(userId) {
+  return rootPrisma.$transaction(async (tx) => {
+    const state = await resetState(tx);
+    if (!state.generation) return null;
+    const row = await tx.system_settings.findUnique({ where: { label: readLabel(userId) } });
+    return Number(row?.value) >= state.generation ? null : state;
+  });
+}
+
+async function acknowledgeReset(userId, generation) {
+  return withQuizWrite(async (tx) => {
+    const state = await resetState(tx);
+    if (!state.generation || generation !== state.generation)
+      throw userError("초기화 안내가 바뀌었습니다. 다시 확인해 주세요.");
+    await tx.system_settings.upsert({
+      where: { label: readLabel(userId) },
+      create: { label: readLabel(userId), value: String(generation) },
+      update: { value: String(generation), lastUpdatedAt: new Date() },
+    });
+  });
+}
+
 module.exports = {
+  withQuizWrite,
+  resetPreview,
+  resetRecords,
+  resetNotice,
+  acknowledgeReset,
   userError,
   liveDocuments,
   documentByKey,
   staffOptions,
-  startAttempt,
+  startAttempt: (...args) => withQuizWrite(() => startAttempt(...args)),
   attemptView,
-  answerQuestion,
+  answerQuestion: (...args) => withQuizWrite(() => answerQuestion(...args)),
   history,
   wrongNotes,
-  removeWrongNote,
-  startWrongReview,
+  removeWrongNote: (...args) => withQuizWrite(() => removeWrongNote(...args)),
+  startWrongReview: (...args) => withQuizWrite(() => startWrongReview(...args)),
   adminList,
   adminDocuments,
   adminQuestion,
-  adminUpdate,
-  setStatus,
-  deleteQuestions,
+  adminUpdate: (...args) => withQuizWrite(() => adminUpdate(...args)),
+  setStatus: (...args) => withQuizWrite(() => setStatus(...args)),
+  deleteQuestions: (...args) => withQuizWrite(() => deleteQuestions(...args)),
   adminSets,
-  updateSet,
+  updateSet: (...args) => withQuizWrite(() => updateSet(...args)),
   usageToday,
   adminStats,
   presentAdminQuestion,

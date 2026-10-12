@@ -98,6 +98,7 @@ test("현재/이전 문서 필터와 각 행 삭제 및 이전 문서 전체 삭
       "./QuizReview": () => null,
       "./QuizStats": () => null,
       "./QuizDelete": Dialog,
+      "./QuizReset": () => null,
       "@/models/schatQuiz": {
         questions: async (filters) => {
           requests.push({ ...filters });
