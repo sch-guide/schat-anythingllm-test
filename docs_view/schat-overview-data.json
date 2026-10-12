@@ -293,10 +293,10 @@
     "document": "docs/00_현재상태/SCHAT_버전_체계.md"
   },
   "tests": {
-    "totalFiles": 269,
+    "totalFiles": 271,
     "byArea": {
-      "frontend": 69,
-      "server": 169,
+      "frontend": 70,
+      "server": 170,
       "collector": 9,
       "Python 안전검사": 13,
       "저장소 검사": 9
@@ -379,6 +379,13 @@
       "summary": "전날 작업의 연속임. 갈래는 `release-admin-8`이며 main·push·운영 서버는 변경하지 않음.",
       "feature": "관리자8 9 추가화면 최종확인",
       "document": "docs/01_작업일지/2026-10-12_관리자8_9_추가화면_최종확인.md"
+    },
+    {
+      "date": "2026-10-12",
+      "title": "개인정보 수집·이용 동의",
+      "summary": "새 DB 표 2개 추가 승인(동의서 버전 표, 직원 동의 기록 표). 기존 표 변경 없음.",
+      "feature": "개인정보 동의",
+      "document": "docs/01_작업일지/2026-10-12_개인정보_동의.md"
     },
     {
       "date": "2026-10-12",

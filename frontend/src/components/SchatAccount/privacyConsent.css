@@ -1,0 +1,279 @@
+/* 개인정보 수집·이용 동의 화면. 로그인 화면(왼쪽 남색, 오른쪽 흰색) 안에서 쓴다.
+   동의 화면이 있을 때만 오른쪽 영역을 넓힌다. */
+.schat-login__shell:has(.schat-consent) {
+  grid-template-columns: minmax(300px, 0.85fr) minmax(460px, 1.15fr);
+  width: min(1180px, 100%);
+}
+
+.schat-login__form:has(.schat-consent) {
+  justify-content: flex-start;
+  padding: 36px 40px 28px;
+}
+
+.schat-login__form:has(.schat-consent) .schat-login__product {
+  margin-bottom: 14px;
+}
+
+.schat-consent,
+.schat-consent-steps-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  max-width: 520px;
+  color: var(--schat-navy);
+}
+
+.schat-consent__steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.schat-consent__steps li {
+  padding: 5px 12px;
+  border-radius: 999px;
+  color: #6b7c8a;
+  background: #eef2f5;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.schat-consent__steps li.is-current {
+  color: #ffffff;
+  background: var(--schat-accent);
+  font-weight: 700;
+}
+
+.schat-consent__title {
+  margin: 0;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 750;
+}
+
+.schat-consent__lead {
+  margin: 6px 0 18px;
+  text-align: center;
+  color: #5b6b78;
+  font-size: 13px;
+}
+
+.schat-consent__box {
+  margin-bottom: 12px;
+  padding: 14px 18px;
+  border: 1px solid var(--schat-border);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.schat-consent__box-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.schat-consent__box-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.schat-consent__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  background: none;
+  color: var(--schat-accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.schat-consent__rows {
+  margin: 0;
+}
+
+.schat-consent__rows > div {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px dashed #e2e8ee;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.schat-consent__rows > div:first-child {
+  border-top: none;
+}
+
+.schat-consent__rows dt {
+  color: #5b6b78;
+  font-weight: 600;
+}
+
+.schat-consent__rows dd {
+  margin: 0;
+  color: #2b3d4f;
+  word-break: keep-all;
+}
+
+.schat-consent__full {
+  max-height: 260px;
+  margin-top: 10px;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--schat-border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #2b3d4f;
+  font-size: 12.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: keep-all;
+}
+
+.schat-consent__warning {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 4px 0 14px;
+  padding: 12px 16px;
+  border: 1px solid #f6c48b;
+  border-radius: 10px;
+  background: #fff6ea;
+  color: #b4540a;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.schat-consent__warning strong {
+  font-weight: 700;
+}
+
+.schat-consent__warning strong svg {
+  display: inline-block;
+  margin: -2px 5px 0 0;
+  vertical-align: middle;
+}
+
+.schat-consent__checks {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 14px;
+}
+
+.schat-consent__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 13px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.schat-consent__check input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  accent-color: var(--schat-accent);
+  cursor: pointer;
+}
+
+.schat-consent__check em {
+  margin-left: 4px;
+  color: #dc2626;
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+.schat-consent__error {
+  margin: 0 0 10px;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.schat-login .schat-consent__submit {
+  height: 44px;
+  border: none;
+  border-radius: 10px;
+  color: #ffffff !important;
+  background: var(--schat-accent) !important;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.schat-login .schat-consent__submit:disabled {
+  background: #a3cbcf !important;
+  cursor: not-allowed;
+}
+
+.schat-consent__hint {
+  margin: 10px 0 2px;
+  text-align: center;
+  color: #6b7c8a;
+  font-size: 11.5px;
+}
+
+.schat-consent__decline {
+  align-self: center;
+  margin-top: 4px;
+  border: none;
+  background: none;
+  color: #6b7c8a;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.schat-consent__version {
+  margin: 6px 0 0;
+  text-align: center;
+  color: #94a3b0;
+  font-size: 11px;
+}
+
+.schat-consent-notice {
+  width: 100%;
+  max-width: 300px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #f6c48b;
+  border-radius: 8px;
+  background: #fff6ea;
+  color: #b4540a;
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .schat-login__shell:has(.schat-consent) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schat-login__shell:has(.schat-consent) .schat-login__brand {
+    display: none;
+  }
+
+  .schat-login__form:has(.schat-consent) {
+    padding: 22px 16px;
+  }
+
+  .schat-consent__box {
+    padding: 12px 13px;
+  }
+
+  .schat-consent__rows > div {
+    grid-template-columns: 64px 1fr;
+    gap: 8px;
+  }
+}

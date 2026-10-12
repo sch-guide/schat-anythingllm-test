@@ -116,6 +116,8 @@ model users {
   desktop_mobile_devices       desktop_mobile_devices[]
   workspace_parsed_files       workspace_parsed_files[]
   memories                     memories[]
+  // SCHAT 개인정보 수집·이용 동의 기록(버전별 한 줄)
+  privacy_consents             schat_privacy_consents[]
 }
 
 model recovery_codes {
@@ -778,4 +780,27 @@ model schat_synonym_suggestion_runs {
   documents  String    @default("[]") // JSON per document (이름·후보 수·상태, 본문 없음)
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
+}
+
+// SCHAT 개인정보 수집·이용 동의서. 고칠 때마다 새 버전 줄을 추가하고 지난 문구는 남긴다.
+model schat_privacy_consent_documents {
+  id           Int      @id @default(autoincrement())
+  version      Int      @unique
+  label        String // 예: v1 · 2026.10
+  content      String // JSON: 요약 표, 외부 서비스, 전문
+  published_by Int?
+  published_at DateTime @default(now())
+}
+
+// 직원별 동의 기록. 한 직원은 한 버전에 한 번만 동의한다.
+model schat_privacy_consents {
+  id        Int      @id @default(autoincrement())
+  user_id   Int
+  version   Int
+  items     String // JSON: 체크한 필수 항목
+  agreed_at DateTime @default(now())
+  user      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([user_id, version])
+  @@index([version])
 }

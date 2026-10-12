@@ -7,6 +7,7 @@ import { Badge, Button, Card, Field, Loading, inputClass } from "../ui";
 import BulkImport from "./UsersBulk";
 import Departments from "./UsersDepartments";
 import DeleteAccountsDialog from "./UsersDelete";
+import ConsentDocument, { ConsentBadge } from "./UsersConsent";
 
 // SCHAT uses two roles only. The server's "manager" role still exists, so an
 // account that already has it is shown as-is and can be moved to one of these.
@@ -26,7 +27,7 @@ export function roleOptions(currentRole) {
 const when = (iso) => (iso ? new Date(iso).toLocaleDateString("ko-KR") : "-");
 
 export default function UsersSection() {
-  const [panel, setPanel] = useState(null); // "add" | "bulk" | "departments"
+  const [panel, setPanel] = useState(null); // "add" | "bulk" | "departments" | "consent"
   const [departments, setDepartments] = useState([]);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -65,6 +66,12 @@ export default function UsersSection() {
         >
           부서 관리
         </Button>
+        <Button
+          variant={panel === "consent" ? "primary" : "secondary"}
+          onClick={() => toggle("consent")}
+        >
+          개인정보 동의서
+        </Button>
       </div>
       {panel === "add" && (
         <AddEmployee departments={departments} onAdded={refresh} />
@@ -73,6 +80,7 @@ export default function UsersSection() {
       {panel === "departments" && (
         <Departments departments={departments} onChanged={refresh} />
       )}
+      {panel === "consent" && <ConsentDocument />}
       <AccountList key={reloadKey} departments={departments} />
     </div>
   );
@@ -205,15 +213,26 @@ function AccountList({ departments }) {
     departmentId: "",
     role: "",
     status: "",
+    consent: "",
   });
   const [users, setUsers] = useState(null);
+  const [consentLabel, setConsentLabel] = useState(null);
   const [editing, setEditing] = useState(null);
   const [selected, setSelected] = useState([]);
   const [deleting, setDeleting] = useState(null); // ids to delete
 
   const load = useCallback(async () => {
-    const result = await SchatAccount.accounts(filters);
-    const list = result?.users || [];
+    const { consent: consentFilter, ...serverFilters } = filters;
+    const result = await SchatAccount.accounts(serverFilters);
+    setConsentLabel(result?.consentLabel || null);
+    // 동의 상태 필터는 받은 목록 안에서 거른다.
+    const list = (result?.users || []).filter((u) =>
+      consentFilter === "agreed"
+        ? u.consent?.current
+        : consentFilter === "missing"
+          ? !u.consent?.current
+          : true
+    );
     setUsers(list);
     // keep only selections that are still visible after filtering
     setSelected((prev) => prev.filter((id) => list.some((u) => u.id === id)));
@@ -253,7 +272,7 @@ function AccountList({ departments }) {
       title="직원 목록"
       description="직원 상태를 확인하고 수정에서 관리합니다. 사용중지·다시 사용·비밀번호 초기화·계정 삭제는 수정 화면에 있습니다. 퇴사·휴직은 사용중지를 권장합니다."
     >
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-5">
         <input
           aria-label="이름 또는 사번 검색"
           placeholder="이름 또는 사번 검색"
@@ -296,6 +315,16 @@ function AccountList({ departments }) {
           <option value="">전체 상태</option>
           <option value="active">사용중</option>
           <option value="inactive">사용중지</option>
+        </select>
+        <select
+          aria-label="개인정보 동의 필터"
+          className={inputClass}
+          value={filters.consent}
+          onChange={set("consent")}
+        >
+          <option value="">전체 동의 상태</option>
+          <option value="agreed">현재 버전 동의</option>
+          <option value="missing">미동의·이전 버전</option>
         </select>
       </div>
       {selected.length > 0 && (
@@ -352,6 +381,7 @@ function AccountList({ departments }) {
                 <th className="py-2 pr-3 font-medium">권한</th>
                 <th className="py-2 pr-3 font-medium">상태</th>
                 <th className="py-2 pr-3 font-medium">최근 로그인</th>
+                <th className="py-2 pr-3 font-medium">개인정보 동의</th>
                 <th className="schat-sticky-action py-2 pl-3 font-medium text-right">
                   작업
                 </th>
@@ -360,7 +390,7 @@ function AccountList({ departments }) {
             <tbody>
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-4 text-theme-text-secondary">
+                  <td colSpan={9} className="py-4 text-theme-text-secondary">
                     조건에 맞는 직원이 없습니다.
                   </td>
                 </tr>
@@ -416,6 +446,12 @@ function AccountList({ departments }) {
                   </td>
                   <td className="py-2.5 pr-3 text-theme-text-secondary tabular-nums">
                     {when(u.lastLoginAt)}
+                  </td>
+                  <td className="py-2.5 pr-3 whitespace-nowrap">
+                    <ConsentBadge
+                      consent={u.consent}
+                      currentLabel={consentLabel}
+                    />
                   </td>
                   <td className="schat-sticky-action py-2.5 pl-3 text-right">
                     <Button

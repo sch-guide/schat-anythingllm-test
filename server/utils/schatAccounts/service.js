@@ -169,7 +169,18 @@ async function employeeLogin(input) {
 
 async function firstLoginCheck(input) {
   const user = await findEmployee(input?.employeeNumber);
-  return core.checkFirstLoginIdentity(input, user);
+  const result = core.checkFirstLoginIdentity(input, user);
+  if (!result?.ok) return result;
+  // 이미 현재 동의서에 동의한 직원(초기화 후 다시 만들기)은 묻지 않는다.
+  const consent = require("../privacyConsent");
+  const consentRequired = !(await consent.hasCurrentConsent(user.id));
+  return {
+    ...result,
+    consentRequired,
+    ...(consentRequired
+      ? { consentDocument: await consent.currentDocument() }
+      : {}),
+  };
 }
 
 // 처음 로그인: the employee sets their own password. Only possible while the
@@ -178,20 +189,39 @@ async function firstLogin(input) {
   const user = await findEmployee(input?.employeeNumber);
   const check = core.checkFirstLogin(input, user);
   if (!check.ok) return { user: null, message: check.message };
+  // 개인정보 동의가 아직 없으면 비밀번호와 함께 한 번에 저장한다.
+  const consent = require("../privacyConsent");
+  const needsConsent = !(await consent.hasCurrentConsent(user.id));
+  if (needsConsent) {
+    try {
+      consent.validateAgreement(
+        input.consent,
+        await consent.currentDocument({ fresh: true })
+      );
+    } catch (error) {
+      return { user: null, message: error.message, consentInvalid: true };
+    }
+  }
   const now = new Date();
   // Conditional update: a second request racing this one finds no row with
   // must_change_password=true and fails instead of overwriting.
-  const { count } = await prisma.users.updateMany({
-    where: { id: user.id, must_change_password: true, suspended: 0 },
-    data: {
-      password: hashPassword(input.newPassword),
-      must_change_password: false,
-      password_changed_at: now,
-      last_login_at: now,
-      lastUpdatedAt: now,
-    },
+  const saved = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.users.updateMany({
+      where: { id: user.id, must_change_password: true, suspended: 0 },
+      data: {
+        password: hashPassword(input.newPassword),
+        must_change_password: false,
+        password_changed_at: now,
+        last_login_at: now,
+        lastUpdatedAt: now,
+      },
+    });
+    if (count !== 1) return false;
+    if (needsConsent)
+      await consent.recordConsent(user.id, input.consent, { db: tx });
+    return true;
   });
-  if (count !== 1) return { user: null, message: core.LOGIN_FAILED_MESSAGE };
+  if (!saved) return { user: null, message: core.LOGIN_FAILED_MESSAGE };
   return { user: await getAccount(user.id), message: null };
 }
 

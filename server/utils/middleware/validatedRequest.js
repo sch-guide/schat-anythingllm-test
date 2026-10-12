@@ -115,6 +115,30 @@ async function validateMultiUserRequest(request, response, next) {
     return;
   }
 
+  // SCHAT: 개인정보 수집·이용 동의 전에는 동의 화면과 로그인 확인 외의
+  // 기능을 쓰지 못한다(직원·관리자 모두). 버튼이 아니라 서버에서 막는다.
+  const consent = require("../privacyConsent");
+  if (!consent.exemptPath(request.path)) {
+    let agreed = false;
+    try {
+      agreed = await consent.hasCurrentConsent(user.id);
+    } catch {
+      response.status(503).json({
+        error: "privacy_consent_unavailable",
+        message: "동의 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      });
+      return;
+    }
+    if (!agreed) {
+      response.status(403).json({
+        error: "privacy_consent_required",
+        consentRequired: true,
+        message: "개인정보 수집·이용에 동의한 뒤 SCHAT을 이용할 수 있습니다.",
+      });
+      return;
+    }
+  }
+
   response.locals.user = user;
   UserMetaCache.setFromRequest(request, user.id);
   next();

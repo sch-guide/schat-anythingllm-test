@@ -32,6 +32,8 @@ function setup(role) {
   const auth = load("utils/middleware/validatedRequest.js", {
     "../../models/systemSettings": system,
     "../../models/user": { User: { get: async () => user } },
+    // 이 검사는 다른 기능 대상: 개인정보 동의는 이미 한 것으로 둔다.
+    "../privacyConsent": { exemptPath: () => false, hasCurrentConsent: async () => true },
     "../EncryptionManager": { EncryptionManager: class {} },
     "../http": http,
     "../userLocale": { UserMetaCache: { setFromRequest() {} } },

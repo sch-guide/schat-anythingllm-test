@@ -3,6 +3,11 @@ import PasswordInput from "@/components/lib/PasswordInput";
 import SchatAccount from "@/models/schatAccount";
 import paths from "@/utils/paths";
 import { AUTH_TOKEN, AUTH_USER } from "@/utils/constants";
+import PrivacyConsentStep, {
+  ConsentSteps,
+  CONSENT_DECLINED_KEY,
+  CONSENT_DECLINED_MESSAGE,
+} from "@/components/SchatAccount/PrivacyConsentStep";
 
 const inputClass =
   "border-none bg-zinc-800 light:bg-slate-200 text-zinc-200 light:text-zinc-600 text-sm rounded-lg p-2.5 w-full h-[38px] focus:outline-none focus:ring-1 focus:ring-sky-300";
@@ -24,8 +29,18 @@ export default function EmployeeLoginForm({ appName = "SCHAT", onLegacy }) {
   const [legacyAvailable, setLegacyAvailable] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [firstLogin, setFirstLogin] = useState(null); // {department, employeeNumber, name}
+  const [firstLogin, setFirstLogin] = useState(null); // {identity, consent}
   const [creating, setCreating] = useState(false); // 비밀번호 만들기 step 1
+  const [consentStep, setConsentStep] = useState(null); // {identity, document}
+  const [notice, setNotice] = useState(() => {
+    try {
+      const declined = window.sessionStorage.getItem(CONSENT_DECLINED_KEY);
+      window.sessionStorage.removeItem(CONSENT_DECLINED_KEY);
+      return declined ? CONSENT_DECLINED_MESSAGE : null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     SchatAccount.loginOptions().then((result) => {
@@ -51,25 +66,60 @@ export default function EmployeeLoginForm({ appName = "SCHAT", onLegacy }) {
     setLoading(false);
     if (result?.valid && result.token && result.user)
       return startSession(result);
-    if (result?.firstLoginRequired) return setFirstLogin(identity);
+    if (result?.firstLoginRequired) {
+      // 초기화된 계정: 같은 직원 확인 결과로 동의가 필요한지 확인한다.
+      const check = await SchatAccount.firstLoginCheck(identity);
+      if (check?.ok) return verified(identity, check);
+      return setError(check?.message || "로그인 정보를 다시 확인해주세요.");
+    }
     setError(result?.message || "로그인 정보를 다시 확인해주세요.");
   }
 
+  // ① 직원 확인이 끝난 뒤: 동의가 필요하면 ② 동의, 아니면 바로 ③ 비밀번호.
+  function verified(identity, check) {
+    setCreating(false);
+    if (check?.consentRequired && check.consentDocument)
+      return setConsentStep({ identity, document: check.consentDocument });
+    setFirstLogin({ identity, consent: null });
+  }
+
+  function backToLogin(message = null) {
+    setFirstLogin(null);
+    setConsentStep(null);
+    setCreating(false);
+    setNotice(message);
+  }
+
+  if (consentStep)
+    return (
+      <PrivacyConsentStep
+        document={consentStep.document}
+        onAgree={(consent) => {
+          setFirstLogin({ identity: consentStep.identity, consent });
+          setConsentStep(null);
+        }}
+        onDecline={() => backToLogin(CONSENT_DECLINED_MESSAGE)}
+      />
+    );
   if (firstLogin)
     return (
       <FirstLoginForm
-        identity={firstLogin}
-        onBack={() => {
+        identity={firstLogin.identity}
+        consent={firstLogin.consent}
+        onConsentChanged={async () => {
+          const check = await SchatAccount.firstLoginCheck(firstLogin.identity);
           setFirstLogin(null);
-          setCreating(false);
+          if (check?.ok) verified(firstLogin.identity, check);
+          else backToLogin(check?.message || null);
         }}
+        onBack={() => backToLogin()}
       />
     );
   if (creating)
     return (
       <CreatePasswordStart
         departments={departments}
-        onVerified={setFirstLogin}
+        onVerified={verified}
         onBack={() => setCreating(false)}
       />
     );
@@ -83,6 +133,11 @@ export default function EmployeeLoginForm({ appName = "SCHAT", onLegacy }) {
       <p className="text-zinc-400 light:text-zinc-600 text-sm text-center pt-2 pb-6">
         {appName}에 로그인하세요.
       </p>
+      {notice && (
+        <p role="status" className="schat-consent-notice">
+          {notice}
+        </p>
+      )}
       <div className="w-full max-w-[300px] flex flex-col gap-y-3">
         <IdentityFields departments={departments} />
         <div className={labelClass}>
@@ -195,7 +250,7 @@ function CreatePasswordStart({ departments, onVerified, onBack }) {
     };
     const result = await SchatAccount.firstLoginCheck(identity);
     setChecking(false);
-    if (result?.ok) return onVerified(identity);
+    if (result?.ok) return onVerified(identity, result);
     setError(result?.message || "로그인 정보를 다시 확인해주세요.");
   }
 
@@ -205,6 +260,9 @@ function CreatePasswordStart({ departments, onVerified, onBack }) {
       className="flex flex-col justify-center items-center w-full"
       aria-label="비밀번호 만들기"
     >
+      <div className="schat-consent-steps-wrap">
+        <ConsentSteps current={1} />
+      </div>
       <p className="text-zinc-300 light:text-slate-800 text-base font-semibold pt-2">
         비밀번호 만들기
       </p>
@@ -237,7 +295,7 @@ function CreatePasswordStart({ departments, onVerified, onBack }) {
   );
 }
 
-function FirstLoginForm({ identity, onBack }) {
+function FirstLoginForm({ identity, consent, onConsentChanged, onBack }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -252,10 +310,13 @@ function FirstLoginForm({ identity, onBack }) {
       ...identity,
       newPassword: form.get("newPassword"),
       confirmPassword: form.get("confirmPassword"),
+      ...(consent ? { consent } : {}),
     });
     setSaving(false);
     if (result?.valid && result.token && result.user)
       return startSession(result);
+    // 그사이 동의서가 바뀌었으면 새 동의서로 다시 동의받는다.
+    if (result?.consentRequired) return onConsentChanged?.();
     setError(result?.message || "로그인 정보를 다시 확인해주세요.");
   }
 
@@ -265,6 +326,9 @@ function FirstLoginForm({ identity, onBack }) {
       className="flex flex-col justify-center items-center w-full"
       aria-label="처음 로그인"
     >
+      <div className="schat-consent-steps-wrap">
+        <ConsentSteps current={3} />
+      </div>
       <p className="text-zinc-300 light:text-slate-800 text-base font-semibold pt-2">
         비밀번호 만들기
       </p>

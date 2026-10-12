@@ -229,10 +229,10 @@ test("staff log in with department, employee number, name and password", () => {
 
 test("first-time employees set their own password; no temporary passwords", async () => {
   const form = src("../../components/Modals/Password/EmployeeLoginForm.jsx");
-  assert.match(
-    form,
-    /if \(result\?\.firstLoginRequired\) return setFirstLogin\(identity\)/
-  );
+  // 초기화된 계정도 직원 확인 → (필요하면 개인정보 동의) → 비밀번호 만들기로 간다.
+  assert.match(form, /if \(result\?\.firstLoginRequired\) \{/);
+  assert.match(form, /SchatAccount\.firstLoginCheck\(identity\)/);
+  assert.match(form, /setFirstLogin\(\{ identity, consent: null \}\)/);
   assert.match(form, /SchatAccount\.firstLogin\(/);
   assert.match(form, /name="newPassword"/);
   assert.match(form, /name="confirmPassword"/);

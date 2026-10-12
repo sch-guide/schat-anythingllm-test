@@ -11,6 +11,15 @@ import SchLogo from "@/components/SchLogo";
 import useSchatBrand from "@/hooks/useSchatBrand";
 
 export default function PasswordModal({ mode = "single" }) {
+  return (
+    <LoginShell>
+      {mode === "single" ? <SingleUserAuth /> : <MultiUserAuth />}
+    </LoginShell>
+  );
+}
+
+// 로그인 화면 틀(왼쪽 남색 소개, 오른쪽 흰색 입력). 개인정보 동의 화면도 같은 틀을 쓴다.
+export function LoginShell({ children }) {
   const { brand } = useSchatBrand();
   return (
     <div className="schat-login fixed inset-0 flex items-center justify-center overflow-auto">
@@ -38,7 +47,7 @@ export default function PasswordModal({ mode = "single" }) {
             <SchLogo className="schat-login__product-mark" />
             <span>{brand.subtitle}</span>
           </div>
-          {mode === "single" ? <SingleUserAuth /> : <MultiUserAuth />}
+          {children}
         </section>
       </main>
     </div>

@@ -8,6 +8,7 @@ const {
 const { SystemSettings } = require("../models/systemSettings");
 const { EventLogs } = require("../models/eventLogs");
 const service = require("../utils/schatAccounts/service");
+const privacyConsent = require("../utils/privacyConsent");
 const {
   LOGIN_FAILED_MESSAGE,
   createAttemptLimiter,
@@ -160,20 +161,31 @@ function schatAccountEndpoints(app) {
         return response
           .status(400)
           .json({ valid: false, message: LOGIN_FAILED_MESSAGE });
-      const { department, employeeNumber, name, newPassword, confirmPassword } =
-        reqBody(request);
-      const keys = attemptKeys(request, employeeNumber);
-      if (attempts.blocked(keys))
-        return response
-          .status(429)
-          .json({ valid: false, token: null, message: TOO_MANY_MESSAGE });
-      const { user, message } = await service.firstLogin({
+      const {
         department,
         employeeNumber,
         name,
         newPassword,
         confirmPassword,
+        consent,
+      } = reqBody(request);
+      const keys = attemptKeys(request, employeeNumber);
+      if (attempts.blocked(keys))
+        return response
+          .status(429)
+          .json({ valid: false, token: null, message: TOO_MANY_MESSAGE });
+      const { user, message, consentInvalid } = await service.firstLogin({
+        department,
+        employeeNumber,
+        name,
+        newPassword,
+        confirmPassword,
+        consent,
       });
+      if (consentInvalid)
+        return response
+          .status(200)
+          .json({ valid: false, token: null, message, consentRequired: true });
       if (!user) {
         attempts.fail(keys);
         await EventLogs.logEvent("failed_first_login", {
@@ -198,6 +210,60 @@ function schatAccountEndpoints(app) {
         user: service.presentUser(user),
         message: null,
       });
+    })
+  );
+
+  // ---- 개인정보 수집·이용 동의 -------------------------------------------------
+  // 비밀번호 만들기 전(로그인 전)에도 보여 줄 수 있는 현재 동의서. 개인 정보 없음.
+  app.get(
+    "/schat/privacy-consent/document",
+    handle(async (_request, response) => {
+      response.status(200).json({
+        success: true,
+        document: await privacyConsent.currentDocument(),
+      });
+    })
+  );
+
+  // 로그인한 사람의 동의 필요 여부. 동의 전에도 열려 있다(validatedRequest 예외).
+  app.get(
+    "/schat/privacy-consent",
+    signedIn,
+    handle(async (_request, response) => {
+      const user = response.locals.user;
+      const required = user
+        ? !(await privacyConsent.hasCurrentConsent(user.id))
+        : false;
+      response.status(200).json({
+        success: true,
+        required,
+        ...(required
+          ? { document: await privacyConsent.currentDocument() }
+          : {}),
+      });
+    })
+  );
+
+  app.post(
+    "/schat/privacy-consent",
+    signedIn,
+    handle(async (request, response) => {
+      const user = response.locals.user;
+      if (!user)
+        return response
+          .status(400)
+          .json({ success: false, error: "로그인이 필요합니다." });
+      const { version, items } = reqBody(request);
+      const result = await privacyConsent.recordConsent(user.id, {
+        version,
+        items,
+      });
+      await EventLogs.logEvent(
+        "schat_privacy_consent_agreed",
+        { version: result.version },
+        user.id
+      ).catch(() => null);
+      response.status(200).json({ success: true, ...result });
     })
   );
 
@@ -319,12 +385,65 @@ function schatAccountEndpoints(app) {
 
   // ---- admin: users & departments ---------------------------------------
   app.get(
+    "/schat-admin/privacy-consent",
+    adminOnly,
+    handle(async (_request, response) => {
+      response
+        .status(200)
+        .json({ success: true, ...(await privacyConsent.adminOverview()) });
+    })
+  );
+
+  app.get(
+    "/schat-admin/privacy-consent/:version",
+    adminOnly,
+    handle(async (request, response) => {
+      response.status(200).json({
+        success: true,
+        document: await privacyConsent.historyDocument(request.params.version),
+      });
+    })
+  );
+
+  // 동의서 고치기: 새 버전으로 게시하며 모든 직원이 다시 동의한다.
+  app.post(
+    "/schat-admin/privacy-consent",
+    adminOnly,
+    handle(async (request, response) => {
+      const document = await privacyConsent.publishDocument(
+        response.locals.user?.id,
+        reqBody(request)
+      );
+      await EventLogs.logEvent(
+        "schat_privacy_consent_published",
+        { version: document.version },
+        response.locals.user?.id
+      ).catch(() => null);
+      response.status(200).json({ success: true, document });
+    })
+  );
+
+  app.get(
     "/schat-admin/accounts",
     adminOnly,
     handle(async (request, response) => {
-      response
-        .status(200)
-        .json({ users: await service.listAccounts(request.query || {}) });
+      const users = await service.listAccounts(request.query || {});
+      const consent = await privacyConsent.consentByUser(
+        users.map((u) => u.id)
+      );
+      response.status(200).json({
+        users: users.map((u) => {
+          const c = consent.map.get(u.id);
+          return {
+            ...u,
+            consent: c
+              ? { version: c.version, agreedAt: c.agreedAt, current: c.current }
+              : null,
+          };
+        }),
+        consentVersion: consent.currentVersion,
+        consentLabel: consent.currentLabel,
+      });
     })
   );
 

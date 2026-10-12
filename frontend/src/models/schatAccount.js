@@ -53,6 +53,16 @@ const SchatAccount = {
   guideFeedback: (id, type) =>
     call(`/schat/guide/${id}/feedback`, { method: "POST", body: { type } }),
   me: () => call("/schat/me"),
+  // 개인정보 수집·이용 동의
+  consentDocument: () =>
+    call("/schat/privacy-consent/document", { headers: {} }),
+  consentStatus: () => call("/schat/privacy-consent"),
+  agreeConsent: (agreement) =>
+    call("/schat/privacy-consent", { method: "POST", body: agreement }),
+  consentOverview: () => call("/schat-admin/privacy-consent"),
+  consentVersion: (version) => call(`/schat-admin/privacy-consent/${version}`),
+  publishConsent: (input) =>
+    call("/schat-admin/privacy-consent", { method: "POST", body: input }),
   changePassword: (form) =>
     call("/schat/me/password", { method: "POST", body: form }),
 
