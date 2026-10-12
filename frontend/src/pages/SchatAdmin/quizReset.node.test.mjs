@@ -63,6 +63,8 @@ test("직원 첫 화면 안내를 표시한 뒤 자동 읽음 저장하고 실�
       acknowledgeReset: async (generation) => { assert.equal(generation, 2); calls++; return { success: calls > 1 }; } } });
   h.draw(Notice); await h.flush(); let tree = h.draw(Notice); await h.flush(); tree = h.draw(Notice);
   assert.ok(nodes(tree).find((n) => n.props["data-testid"] === "quiz-reset-notice"));
+  const notice = nodes(tree).find((n) => n.props["data-testid"] === "quiz-reset-notice");
+  assert.equal(React.Children.toArray(notice.props.children).filter((v) => typeof v === "string").join(""), "퀴즈 기록이 새로 시작됐어요");
   assert.equal(calls, 1);
   const retry = nodes(tree).find((n) => n.props["data-testid"] === "quiz-reset-notice-ack");
   await retry.props.onClick(); tree = h.draw(Notice);
