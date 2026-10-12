@@ -278,6 +278,75 @@ function departmentStats(attempts = [], answersByAttempt = new Map()) {
     .sort((a, b) => a.department.localeCompare(b.department, "ko"));
 }
 
+// ---- 문서 새 버전과 근거 문장 비교 (AI 없이 글자 비교) ---------------------------
+
+// 띄어쓰기·줄바꿈·글머리 기호만 같은 것으로 본다. 숫자·단위·낱말은 그대로 남겨
+// 하나라도 다르면 찾지 못하게 한다. 목록 번호(1. 2))도 숫자라서 남긴다.
+const BULLETS = /[•●○◦▪▫■□◆◇▶▷►‣⁃∙ㆍ※✓✔❍❑➢➤①-⑳]/gu;
+const LETTER_MARKER = /(^|\s)[가-하][.)](?=\s)/gu;
+const DASH_MARKER = /(^|\s)[-–—*](?=\s)/gu;
+function normalizeEvidence(text = "") {
+  return String(text)
+    .normalize("NFKC")
+    .replace(/[​-‍﻿­]/g, "")
+    .replace(LETTER_MARKER, "$1")
+    .replace(DASH_MARKER, "$1")
+    .replace(BULLETS, "")
+    .replace(/[‐-―−]/g, "-")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+const numberSkeleton = (text) => text.replace(/\d+(?:[.,]\d+)*/g, "#");
+
+/**
+ * 근거 문장이 새 버전 문서에 그대로 있는지 확인한다.
+ * pages: [{ page, text }]. 결과 status:
+ *   same    - 그대로 있음(page = 찾은 쪽)
+ *   changed - 같은 문장인데 숫자가 다름
+ *   missing - 찾지 못함(낱말·단위가 바뀌었거나 문장이 없어짐)
+ */
+function compareEvidence(excerpt, pages = []) {
+  const target = normalizeEvidence(excerpt);
+  if (target.length < 4) return { status: "missing", page: null };
+  const normalized = pages
+    .map((p) => ({ page: Number(p.page), text: normalizeEvidence(p.text) }))
+    .filter((p) => Number.isInteger(p.page) && p.text)
+    .sort((a, b) => a.page - b.page);
+  // 숫자로 시작/끝나는 문장은 앞뒤 숫자까지 확인한다("5 mg" ≠ "25 mg").
+  const find = (hay, needle) => {
+    const digitEdge = (ch) => !!ch && /[\d.,#]/.test(ch);
+    for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, at + 1)) {
+      const before = hay[at - 1];
+      const after = hay[at + needle.length];
+      if (/[\d#]/.test(needle[0]) && digitEdge(before)) continue;
+      if (/[\d#]/.test(needle[needle.length - 1]) && digitEdge(after)) continue;
+      return at;
+    }
+    return -1;
+  };
+  const locate = (needle, convert = (t) => t) => {
+    for (const p of normalized) if (find(convert(p.text), needle) >= 0) return p.page;
+    // 쪽 경계에 걸친 문장도 찾는다.
+    let joined = "";
+    const starts = [];
+    for (const p of normalized) {
+      starts.push([joined.length, p.page]);
+      joined += p.text;
+    }
+    const at = find(convert(joined), needle);
+    if (at < 0) return null;
+    let page = normalized[0]?.page ?? null;
+    if (convert === numberSkeleton) return page;
+    for (const [start, pageNo] of starts) if (start <= at) page = pageNo;
+    return page;
+  };
+  const page = locate(target);
+  if (page !== null) return { status: "same", page };
+  if (/\d/.test(target) && locate(numberSkeleton(target), numberSkeleton) !== null)
+    return { status: "changed", page: null };
+  return { status: "missing", page: null };
+}
+
 module.exports = {
   DIFFICULTY,
   QUESTION_TYPE,
@@ -299,4 +368,6 @@ module.exports = {
   checkGeneratedItem,
   questionStats,
   departmentStats,
+  normalizeEvidence,
+  compareEvidence,
 };

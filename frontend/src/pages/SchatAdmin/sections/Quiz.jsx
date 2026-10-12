@@ -5,7 +5,6 @@ import { Badge, Button, Card, Field, Loading, Notice, inputClass } from "../ui";
 import QuizReviewDialog from "./QuizReview";
 import QuizStats from "./QuizStats";
 import QuizDeleteDialog from "./QuizDelete";
-import QuizReset from "./QuizReset";
 import { DIFFICULTIES, STATUSES, STATUS_TONE, TYPES } from "./quizLabels";
 
 const when = (iso) =>
@@ -21,7 +20,6 @@ const when = (iso) =>
 // action here only edits stored questions.
 export default function QuizSection() {
   const [tab, setTab] = useState("questions");
-  const [revision, setRevision] = useState(0);
   const [listFilter, setListFilter] = useState({});
   const [usage, setUsage] = useState(null);
   const loadUsage = useCallback(
@@ -63,12 +61,11 @@ export default function QuizSection() {
       {tab === "questions" && (
         <QuestionList
           initialFilter={listFilter}
-          key={`${revision}:${JSON.stringify(listFilter)}`}
+          key={JSON.stringify(listFilter)}
         />
       )}
       {tab === "sets" && (
         <SetList
-          key={revision}
           onOpen={(set) => {
             setListFilter({ quizSetId: String(set.id) });
             setTab("questions");
@@ -85,8 +82,7 @@ export default function QuizSection() {
           onFailed={loadUsage}
         />
       )}
-      {tab === "stats" && <QuizStats key={revision} />}
-      <QuizReset onReset={() => setRevision((value) => value + 1)} />
+      {tab === "stats" && <QuizStats />}
     </div>
   );
 }
@@ -291,20 +287,6 @@ export function QuestionList({ initialFilter = {} }) {
     load();
   }
 
-  async function restore(q) {
-    const r = await SchatQuiz.restoreQuestions([q.id]);
-    if (!r?.success)
-      return showToast(r?.error || "되살리지 못했습니다.", "error");
-    showToast(
-      q.outdated
-        ? "되살렸습니다. 이전 문서 문제라 직원은 풀 수 없습니다."
-        : "사용중지 상태로 되살렸습니다. 검토 후 공개하세요.",
-      "success"
-    );
-    load();
-  }
-
-  const deletedView = filters.documentState === "deleted";
   const allIds = (rows || []).map((r) => r.id);
   return (
     <Card
@@ -320,7 +302,6 @@ export function QuestionList({ initialFilter = {} }) {
           ["all", "전체"],
           ["current", "사용 중"],
           ["outdated", "이전 문서"],
-          ["deleted", "삭제한 퀴즈"],
         ].map(([value, label]) => (
           <Button
             key={value}
@@ -414,34 +395,17 @@ export function QuestionList({ initialFilter = {} }) {
           </div>
         )}
       </div>
-      {deletedView && (
-        <p
-          className="m-0 text-xs text-theme-text-secondary"
-          data-testid="quiz-deleted-help"
-        >
-          삭제한 퀴즈는 새 퀴즈에 나오지 않고, 직원의 풀이 기록은 남아 있습니다.
-          되살리면 사용중지 상태가 되며, 이전 문서 문제는 되살려도 직원이 풀 수
-          없습니다.
-        </p>
-      )}
       <div className="flex flex-wrap items-center gap-2">
-        {!deletedView && (
-          <>
-            <Button
-              disabled={!selected.length}
-              onClick={() => bulk("approved")}
-            >
-              선택 공개
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={!selected.length}
-              onClick={() => bulk("inactive")}
-            >
-              선택 사용중지
-            </Button>
-          </>
-        )}
+        <Button disabled={!selected.length} onClick={() => bulk("approved")}>
+          선택 공개
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={!selected.length}
+          onClick={() => bulk("inactive")}
+        >
+          선택 사용중지
+        </Button>
         {filters.documentState === "outdated" && (
           <Button
             variant="danger"
@@ -475,19 +439,15 @@ export function QuestionList({ initialFilter = {} }) {
             <thead className="text-xs text-theme-text-secondary border-b border-theme-sidebar-border">
               <tr>
                 <th className="py-2 pr-2 font-medium">
-                  {!deletedView && (
-                    <input
-                      type="checkbox"
-                      aria-label="전체 선택"
-                      className="h-4 w-4 accent-sky-600"
-                      checked={
-                        rows.length > 0 && selected.length === rows.length
-                      }
-                      onChange={(e) =>
-                        setSelected(e.target.checked ? allIds : [])
-                      }
-                    />
-                  )}
+                  <input
+                    type="checkbox"
+                    aria-label="전체 선택"
+                    className="h-4 w-4 accent-sky-600"
+                    checked={rows.length > 0 && selected.length === rows.length}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? allIds : [])
+                    }
+                  />
                 </th>
                 <th className="py-2 pr-3 font-medium">문제</th>
                 <th className="py-2 pr-3 font-medium whitespace-nowrap">
@@ -516,9 +476,7 @@ export function QuestionList({ initialFilter = {} }) {
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={10} className="py-4 text-theme-text-secondary">
-                    {deletedView
-                      ? "삭제한 퀴즈가 없습니다."
-                      : "문제가 없습니다. 문제 생성 탭에서 만들 수 있습니다."}
+                    문제가 없습니다. 문제 생성 탭에서 만들 수 있습니다.
                   </td>
                 </tr>
               )}
@@ -528,21 +486,19 @@ export function QuestionList({ initialFilter = {} }) {
                   className="border-b border-theme-sidebar-border last:border-b-0 align-top"
                 >
                   <td className="py-2.5 pr-2">
-                    {!deletedView && (
-                      <input
-                        type="checkbox"
-                        aria-label={`${q.id}번 문제 선택`}
-                        className="h-4 w-4 accent-sky-600"
-                        checked={selected.includes(q.id)}
-                        onChange={(e) =>
-                          setSelected((prev) =>
-                            e.target.checked
-                              ? [...prev, q.id]
-                              : prev.filter((id) => id !== q.id)
-                          )
-                        }
-                      />
-                    )}
+                    <input
+                      type="checkbox"
+                      aria-label={`${q.id}번 문제 선택`}
+                      className="h-4 w-4 accent-sky-600"
+                      checked={selected.includes(q.id)}
+                      onChange={(e) =>
+                        setSelected((prev) =>
+                          e.target.checked
+                            ? [...prev, q.id]
+                            : prev.filter((id) => id !== q.id)
+                        )
+                      }
+                    />
                   </td>
                   <td className="py-2.5 pr-3 text-theme-text-primary max-w-[340px]">
                     <p className="line-clamp-2">{q.question}</p>
@@ -573,46 +529,27 @@ export function QuestionList({ initialFilter = {} }) {
                     p.{q.sourcePage}
                   </td>
                   <td className="py-2.5 pr-3">
-                    {q.status === "deleted" ? (
-                      <Badge tone="neutral">삭제됨</Badge>
-                    ) : (
-                      <Badge tone={STATUS_TONE[q.status]}>
-                        {q.statusLabel}
-                      </Badge>
-                    )}
+                    <Badge tone={STATUS_TONE[q.status]}>{q.statusLabel}</Badge>
                   </td>
                   <td className="py-2.5 pr-3 text-theme-text-secondary whitespace-nowrap">
                     {when(q.createdAt)}
                   </td>
                   <td className="py-2.5 text-right">
-                    {deletedView ? (
-                      <Button
-                        variant="secondary"
-                        className="!px-2.5 !py-1 !text-xs"
-                        aria-label={`${q.id}번 문제 되살리기`}
-                        onClick={() => restore(q)}
-                      >
-                        되살리기
-                      </Button>
-                    ) : (
-                      <>
-                        <Button
-                          variant="secondary"
-                          className="!px-2.5 !py-1 !text-xs"
-                          onClick={() => setReviewing(q.id)}
-                        >
-                          검토
-                        </Button>
-                        <Button
-                          variant="danger"
-                          className="!px-2.5 !py-1 !text-xs ml-1"
-                          aria-label={`${q.id}번 문제 삭제`}
-                          onClick={() => setDeleting({ ids: [q.id] })}
-                        >
-                          삭제
-                        </Button>
-                      </>
-                    )}
+                    <Button
+                      variant="secondary"
+                      className="!px-2.5 !py-1 !text-xs"
+                      onClick={() => setReviewing(q.id)}
+                    >
+                      검토
+                    </Button>
+                    <Button
+                      variant="danger"
+                      className="!px-2.5 !py-1 !text-xs ml-1"
+                      aria-label={`${q.id}번 문제 삭제`}
+                      onClick={() => setDeleting({ ids: [q.id] })}
+                    >
+                      삭제
+                    </Button>
                   </td>
                 </tr>
               ))}

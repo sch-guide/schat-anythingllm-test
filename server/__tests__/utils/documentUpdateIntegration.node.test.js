@@ -156,3 +156,26 @@ test('일시 복원 실패는 같은 서버의 자동 복구로 잠금과 답변
   assert.equal(await f.deps.guard.read(async()=>true,[documentKey('규정.pdf')]),true);
   assert.equal(f.answerCache.put({workspaceId:1,question:'fresh',generation:f.answerCache.generation(1),value:{answer:'safe'}}),true);
 });
+test('교체가 끝나면 새 버전 쪽 글로 퀴즈 근거를 비교하고 그 결과를 관리자에게 돌려준다',async t=>{
+  const f=await fixture(t);
+  const calls=[];
+  f.deps.quizRelink=async(updates,{db})=>{calls.push({updates,db});return{total:3,kept:2,outdated:1,changed:1,missing:0};};
+  const result=await executeDocumentUpdate(f.request,f.deps);
+  assert.equal(result.success,true);
+  assert.deepEqual(result.quizRelink,{total:3,kept:2,outdated:1,changed:1,missing:0});
+  assert.equal(calls.length,1);
+  const [update]=calls[0].updates;
+  assert.deepEqual(update.oldDocumentIds,['old-pdf']);
+  assert.equal(update.documentId,result.results[0].documents[0].documentId);
+  assert.deepEqual(update.pages.map(p=>[p.page,p.text]).sort(),[[1,'새 규정 1'],[2,'새 규정 2']]);
+  assert.equal(calls[0].db,f.prisma);
+});
+test('퀴즈 근거 비교가 실패해도 끝난 문서 교체는 되돌리지 않고 확인 안내만 남긴다',async t=>{
+  const f=await fixture(t);
+  f.deps.quizRelink=async()=>{throw new Error('synthetic relink failure');};
+  const result=await executeDocumentUpdate(f.request,f.deps);
+  assert.equal(result.success,true);
+  assert.equal(result.quizRelink,null);
+  assert.match(result.warnings[0],/퀴즈 근거 비교/);
+  assert.deepEqual((await f.live.get({include:[]})).ids.sort(),['vector-new-page-1','vector-new-page-2']);
+});

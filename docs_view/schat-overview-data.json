@@ -293,10 +293,10 @@
     "document": "docs/00_현재상태/SCHAT_버전_체계.md"
   },
   "tests": {
-    "totalFiles": 271,
+    "totalFiles": 269,
     "byArea": {
-      "frontend": 70,
-      "server": 170,
+      "frontend": 69,
+      "server": 169,
       "collector": 9,
       "Python 안전검사": 13,
       "저장소 검사": 9

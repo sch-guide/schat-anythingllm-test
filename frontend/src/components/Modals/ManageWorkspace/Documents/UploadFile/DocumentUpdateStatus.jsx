@@ -23,8 +23,9 @@ export default function DocumentUpdateStatus({ state, onConfirm, onCancel }) {
         </h3>
         <p className="mt-3 text-sm">
           이전 자료는 검색에서 제외하고 새 자료로 바꿉니다. 이전 원본과 기존
-          체크리스트·퀴즈·과거 답변의 출처는 보존하며, 새 자료로 자동 연결하지
-          않습니다.
+          체크리스트·과거 답변의 출처는 보존하며, 새 자료로 자동 연결하지
+          않습니다. 퀴즈는 근거 문장이 새 자료에 그대로 있는 것만 계속 쓰고,
+          숫자가 바뀌었거나 찾지 못한 퀴즈는 이전 문서로 돌립니다.
         </p>
         <p className="mt-3 text-sm">같은 이름의 자료</p>
         <ul className="my-2 max-h-48 overflow-auto list-disc pl-5 text-sm">
@@ -75,9 +76,16 @@ export default function DocumentUpdateStatus({ state, onConfirm, onCancel }) {
           <p role="status" className="font-semibold">
             문서 업데이트를 완료했습니다.
           </p>
+          {state.result.quizRelink && (
+            <p className="mt-2 font-semibold" data-testid="quiz-relink-summary">
+              퀴즈 {state.result.quizRelink.total}개 중 계속 사용{" "}
+              {state.result.quizRelink.kept} · 이전 문서{" "}
+              {state.result.quizRelink.outdated}
+            </p>
+          )}
           <p className="mt-2">
-            이전 원본과 아래 연결은 보존했습니다. 새 자료로 자동 이전하지
-            않았으므로 내용을 검토해 주세요.
+            이전 원본과 아래 연결은 보존했습니다. 체크리스트와 과거 답변 출처는
+            새 자료로 자동 이전하지 않았으므로 내용을 검토해 주세요.
           </p>
           {[
             ["checklists", "체크리스트"],

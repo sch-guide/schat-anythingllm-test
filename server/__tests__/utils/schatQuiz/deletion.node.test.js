@@ -29,6 +29,9 @@ function load(relative, dependencies) {
 }
 function matches(row, where = {}) {
   return Object.entries(where).every(([key, value]) => {
+    if (value && typeof value === "object" && !(key in row) &&
+        !["in", "not", "contains"].some((k) => k in value))
+      return matches(row, value); // 두 칸 묶음 키(attempt_id_question_id 등)
     if (value && typeof value === "object") {
       if ("in" in value && !value.in.includes(row[key])) return false;
       if ("not" in value && row[key] === value.not) return false;
@@ -115,6 +118,19 @@ function fixture(extra = 0) {
       Object.assign(found, data);
       return found;
     },
+    create: async ({ data }) => {
+      const row = { id: Math.max(0, ...rows.map((r) => r.id)) + 1, ...data };
+      rows.push(row);
+      return row;
+    },
+    upsert: async ({ where, create, update }) => {
+      const found = rows.find((r) => matches(r, where));
+      if (found) return Object.assign(found, update);
+      const row = { id: Math.max(0, ...rows.map((r) => r.id)) + 1, ...create };
+      rows.push(row);
+      return row;
+    },
+    count: async ({ where } = {}) => rows.filter((r) => matches(r, where)).length,
     deleteMany: async ({ where }) => {
       const found = rows.filter((r) => matches(r, where));
       for (const r of found) rows.splice(rows.indexOf(r), 1);
@@ -178,36 +194,91 @@ function fixture(extra = 0) {
   };
 }
 
-test("일반 삭제 후 과거 기록·점수·오답노트·통계를 보존하고 신규 출제에서 제외한다", async () => {
+
+// 퀴즈가 아닌 자료: 삭제·연결 뒤에도 한 글자도 바뀌면 안 된다.
+function addOtherData(f) {
+  const other = {
+    users: [{ id: 7, username: "가짜직원" }, { id: 9, username: "가짜관리자" }],
+    workspace_chats: [{ id: 1, prompt: "가짜 질문", response: "{}" }],
+    schat_synonym_groups: [{ id: 1, terms: "가짜,동의어" }],
+    schat_answer_feedback: [{ id: 1, chat_id: 1, rating: "down" }],
+  };
+  for (const [name, rows] of Object.entries(other)) {
+    const t = {
+      findMany: async () => rows,
+      deleteMany: async () => {
+        throw new Error(`퀴즈 외 자료 삭제 시도: ${name}`);
+      },
+      updateMany: async () => {
+        throw new Error(`퀴즈 외 자료 변경 시도: ${name}`);
+      },
+    };
+    f.db[name] = t;
+  }
+  const docs = JSON.stringify(f.db.workspace_documents);
+  return () =>
+    JSON.stringify({ other, docs: docs.length });
+}
+
+// 두 번째 풀이: 문제 1(현재 문서, 정답)과 문제 2(이전 문서, 오답).
+function addMixedAttempt(f) {
+  f.attempts.push({
+    id: 12,
+    user_id: 7,
+    status: "completed",
+    total: 2,
+    answered_count: 2,
+    correct_count: 1,
+    score: 50,
+    question_ids: "[1,2]",
+    choice_orders: "{}",
+    filters: "{}",
+    completedAt: new Date("2026-10-12T01:00:00Z"),
+  });
+  f.answers.push(
+    { id: 2, user_id: 7, attempt_id: 12, question_id: 1, selected_ox: "O", is_correct: true },
+    { id: 3, user_id: 7, attempt_id: 12, question_id: 2, selected_ox: "X", is_correct: false }
+  );
+}
+
+test("삭제 전 확인 수와 진짜 삭제: 문제·풀이·오답노트만 지우고 다른 자료는 그대로", async () => {
   const f = fixture();
-  const stats = JSON.stringify(await f.bank.adminStats());
-  const history = JSON.stringify(await f.bank.history(7));
-  await f.bank.deleteQuestions([2]);
-  assert.equal(f.questions.find((q) => q.id === 2)?.status, "deleted");
-  assert.equal(f.answers.length, 1);
-  assert.equal(f.notes.length, 1);
-  assert.equal(JSON.stringify(await f.bank.history(7)), history);
-  // 통계는 삭제한 문제의 풀이를 빼고 계산하며 뺀 개수를 알려 준다.
-  const before = JSON.parse(stats);
-  assert.equal(before.totals.answers, 1);
-  const after = await f.bank.adminStats();
-  assert.equal(after.totals.answers, 0);
-  assert.equal(after.excludedDeletedAnswers, 1);
-  assert.equal(after.perQuestion.length, 0);
-  assert.equal(after.totals.completedAttempts, 0);
-  assert.equal(
-    (await f.bank.attemptView(7, 11)).questions[0].answer.correctOx,
-    "O"
-  );
-  assert.equal((await f.bank.wrongNotes(7))[0].available, false);
+  addMixedAttempt(f);
+  const snapshot = addOtherData(f);
+  const before = snapshot();
+  const preview = await f.bank.deletePreview([2]);
   assert.deepEqual(
-    Array.from((await f.bank.adminList()).map((q) => q.id)).sort(),
-    [1, 3]
+    { ...preview },
+    { questions: 1, answers: 2, wrongNotes: 1 }
   );
-  assert.equal((await f.bank.staffOptions()).total, 1);
+  // 확인 창에서 본 수와 다르면 지우지 않는다.
+  await assert.rejects(
+    f.bank.deleteQuestions([2], { expected: { answers: 1, wrongNotes: 1 } }),
+    /기록 수가 바뀌었습니다/
+  );
+  await assert.rejects(f.bank.deleteQuestions([2]), /기록 수가 바뀌었습니다/);
+  assert.equal(f.answers.length, 3);
+
+  const result = await f.bank.deleteQuestions([2], {
+    expected: { answers: 2, wrongNotes: 1 },
+  });
+  assert.equal(result.questions, 1);
+  assert.equal(f.questions.some((q) => q.id === 2), false);
+  assert.equal(f.answers.some((a) => a.question_id === 2), false);
+  assert.equal(f.notes.length, 0);
+  // 문제 2만 있던 풀이 회차는 지우고, 섞인 회차는 남은 문제로 다시 계산한다.
+  assert.equal(f.attempts.some((a) => a.id === 11), false);
+  const mixed = f.attempts.find((a) => a.id === 12);
+  assert.equal(mixed.question_ids, "[1]");
+  assert.equal(mixed.total, 1);
+  assert.equal(mixed.correct_count, 1);
+  assert.equal(mixed.score, 100);
+  // 문제 1(현재 문서)의 풀이는 그대로.
+  assert.equal(f.answers.filter((a) => a.question_id === 1).length, 1);
+  assert.equal(snapshot(), before);
 });
 
-test("보관된 문서는 이전 문서이며 500개를 넘어도 이전 문서 목록과 삭제 대상이 모두 보인다", async () => {
+test("이전 문서 전체 삭제도 개수 확인 뒤 한 번에 지운다(500개 넘어도)", async () => {
   const f = fixture(505);
   assert.deepEqual(
     Array.from(
@@ -217,19 +288,155 @@ test("보관된 문서는 이전 문서이며 500개를 넘어도 이전 문서 
   );
   const previous = await f.bank.adminList({ documentState: "outdated" });
   assert.equal(previous.length, 507);
-  assert.equal(
-    previous.every((q) => q.outdated),
-    true
-  );
-  await f.bank.deleteQuestions(Array.from(previous.map((q) => q.id)), {
-    filters: { documentState: "outdated" },
-    adminId: 9,
+  const ids = Array.from(previous.map((q) => q.id));
+  const filters = { documentState: "outdated" };
+  const counts = await f.bank.deletePreview(ids, { filters });
+  assert.equal(counts.questions, 507);
+  assert.equal(counts.answers, 1);
+  await f.bank.deleteQuestions(ids, { filters, expected: counts });
+  assert.equal((await f.bank.adminList({ documentState: "outdated" })).length, 0);
+  assert.equal(f.questions.find((q) => q.id === 1).status, "approved");
+  assert.equal(f.answers.length, 0);
+});
+
+test("이전 문서가 된 문제는 삭제 전이라도 직원 오답노트·풀이 기록·점수에서 빠진다", async () => {
+  const f = fixture();
+  addMixedAttempt(f);
+  // 문제 2(이전 문서)의 오답노트는 보이지 않는다.
+  assert.equal((await f.bank.wrongNotes(7)).length, 0);
+  // 문제 2만 있던 회차는 숨기고, 섞인 회차는 문제 1만으로 100점.
+  const history = await f.bank.history(7);
+  assert.equal(history.length, 1);
+  assert.equal(history[0].id, 12);
+  assert.equal(history[0].total, 1);
+  assert.equal(history[0].score, 100);
+  const view = await f.bank.attemptView(7, 12);
+  assert.equal(view.total, 1);
+  assert.equal(view.questions.length, 1);
+  assert.equal(view.score, 100);
+  await assert.rejects(f.bank.startWrongReview(7), /다시 풀 틀린 문제가 없습니다/);
+  // 관리자 통계도 이전 문서 문제를 뺀다.
+  const stats = await f.bank.adminStats();
+  assert.equal(stats.totals.answers, 1);
+  assert.equal(stats.totals.rate, 100);
+  assert.equal(stats.excludedOutdatedAnswers, 2);
+  assert.equal(stats.totals.completedAttempts, 1);
+  assert.deepEqual(Array.from(stats.perQuestion.map((q) => q.questionId)), [1]);
+  // 기록 자체는 지우지 않는다(관리자가 [삭제]할 때만 지움).
+  assert.equal(f.answers.length, 3);
+  assert.equal(f.notes.length, 1);
+});
+
+test("풀이 도중 이전 문서가 된 문제는 풀 수 없고, 남은 문제만 풀면 끝난다", async () => {
+  const f = fixture();
+  f.attempts.push({
+    id: 13, user_id: 7, status: "in_progress", total: 2, answered_count: 0,
+    correct_count: 0, score: null, question_ids: "[1,2]", choice_orders: "{}", filters: "{}",
   });
-  assert.equal(
-    (await f.bank.adminList({ documentState: "outdated" })).length,
-    0
+  await assert.rejects(
+    f.bank.answerQuestion(7, 13, 2, { ox: "O" }),
+    /지금 출제되지 않습니다/
   );
-  assert.equal(f.questions[0].status, "approved");
+  const result = await f.bank.answerQuestion(7, 13, 1, { ox: "O" });
+  assert.equal(result.progress.total, 1);
+  assert.equal(result.progress.completed, true);
+  assert.equal(result.progress.finalScore, 100);
+  assert.equal(f.attempts.find((a) => a.id === 13).status, "completed");
+});
+
+// ---- 문서 새 버전 연결 ---------------------------------------------------------
+
+function relinkFixture() {
+  const f = fixture();
+  // 문제 1·5·6·7: 모두 "current" 문서에서 만든 문제. 근거 문장만 다르다.
+  const base = f.questions[0];
+  f.questions.push(
+    { ...base, id: 5, status: "approved", quiz_set_id: 3, source_excerpt: "헤파린은 1시간마다 aPTT를 확인한다." },
+    { ...base, id: 6, status: "approved", quiz_set_id: 3, source_excerpt: "수액은 1시간에 100 mL 이하로 주입한다." },
+    { ...base, id: 7, status: "draft", quiz_set_id: 3, source_excerpt: "체온 38℃ 이상이면 담당의에게 보고한다." },
+    { ...base, id: 8, status: "approved", quiz_set_id: 3, source_excerpt: "소변량은 시간당 0.5 mL/kg 미만이면 보고한다." }
+  );
+  f.questions[0].source_excerpt = "합성 근거입니다.";
+  f.questions[0].quiz_set_id = 3;
+  f.db.schat_quiz_sets = {
+    rows: [{ id: 3, document_id: "current", document_version: "v1" }],
+    updateMany: async ({ where, data }) => {
+      const found = f.db.schat_quiz_sets.rows.filter(
+        (r) => where.id.in.includes(r.id) && where.document_id.in.includes(r.document_id)
+      );
+      found.forEach((r) => Object.assign(r, data));
+      return { count: found.length };
+    },
+  };
+  f.answers.push({ id: 9, user_id: 7, attempt_id: 11, question_id: 5, selected_ox: "O", is_correct: true });
+  return f;
+}
+
+test("새 버전에 근거 문장이 그대로면 계속 쓰고, 숫자·단위가 바뀌면 이전 문서로 돌린다", async () => {
+  const f = relinkFixture();
+  const snapshot = addOtherData(f);
+  const before = snapshot();
+  const newPages = [
+    // 띄어쓰기·줄바꿈·글머리 기호·쪽 번호가 달라도 같은 문장으로 본다.
+    { page: 4, text: "• 합성   근거\n입니다.\n- 헤파린은 1시간마다\n  aPTT를 확인한다." },
+    // 숫자만 바뀜(100 → 120): 바뀜.
+    { page: 5, text: "수액은 1시간에 120 mL 이하로 주입한다." },
+    // 온도 숫자 바뀜(38 → 37.5): 바뀜.
+    { page: 6, text: "체온 37.5℃ 이상이면 담당의에게 보고한다." },
+    // 단위 바뀜(mL/kg → mL): 못 찾음.
+    { page: 7, text: "소변량은 시간당 0.5 mL 미만이면 보고한다." },
+  ];
+  const summary = await f.bank.relinkAfterDocumentUpdate(
+    [{
+      oldDocumentIds: ["current"], documentId: "current-v2", title: "합성.pdf",
+      version: "v2", workspaceSlug: "synthetic", pages: newPages,
+    }],
+    { db: f.db }
+  );
+  assert.deepEqual({ ...summary }, { total: 5, kept: 2, outdated: 3, changed: 2, missing: 1 });
+  const byId = (id) => f.questions.find((q) => q.id === id);
+  assert.equal(byId(1).document_id, "current-v2");
+  assert.equal(byId(1).source_page, 4);
+  assert.equal(byId(5).document_id, "current-v2");
+  assert.equal(byId(5).source_page, 4);
+  assert.equal(byId(5).document_version, "v2");
+  for (const id of [6, 7, 8]) assert.equal(byId(id).document_id, "current");
+  // 이어 쓴 문제의 직원 풀이 기록은 그대로다.
+  assert.equal(f.answers.filter((a) => a.question_id === 5).length, 1);
+  assert.equal(f.db.schat_quiz_sets.rows[0].document_id, "current-v2");
+  assert.equal(snapshot(), before);
+});
+
+test("근거 문장이 없거나 다른 문서의 문제는 건드리지 않는다", async () => {
+  const f = fixture();
+  f.questions[0].source_excerpt = null;
+  const summary = await f.bank.relinkAfterDocumentUpdate(
+    [{ oldDocumentIds: ["current"], documentId: "new", pages: [{ page: 1, text: "합성 근거입니다." }] }],
+    { db: f.db }
+  );
+  assert.equal(summary.total, 1);
+  assert.equal(summary.outdated, 1);
+  assert.equal(f.questions[0].document_id, "current");
+  assert.equal(f.questions[1].document_id, "archived");
+});
+
+test("근거 비교 규칙: 숫자 경계·쪽 경계·목록 번호", () => {
+  const pages = [
+    { page: 1, text: "헤파린 25 mg 투여 후 30분 관찰" },
+    { page: 2, text: "경계 문장의 앞부분이고" },
+    { page: 3, text: "뒷부분이다" },
+    { page: 4, text: "3. 혈압을 측정한다" },
+  ];
+  const status = (e) => core.compareEvidence(e, pages).status;
+  assert.equal(status("25 mg 투여 후 30분 관찰"), "same");
+  assert.equal(status("5 mg 투여 후 30분 관찰"), "changed");
+  assert.equal(status("헤파린 25 mg 투여 후 3분"), "changed");
+  assert.equal(status("헤파린 25 mcg 투여 후 30분 관찰"), "missing");
+  assert.equal(core.compareEvidence("앞부분이고 뒷부분이다", pages).page, 2);
+  assert.equal(status("혈압을 측정한다"), "same");
+  // 목록 번호가 바뀐 경우는 안전하게 '바뀜'으로 본다.
+  assert.equal(status("4. 혈압을 측정한다"), "changed");
+  assert.equal(status(""), "missing");
 });
 
 test("이전 문서 전체 삭제는 누락되거나 현재 문서를 섞은 대상을 거부한다", async () => {
@@ -341,7 +548,7 @@ test("다시 생성 응답을 기다리는 중 삭제되면 문제를 되살리�
   assert.equal(q.question, "합성 질문인가요?");
 });
 
-test("삭제 경로는 직원 권한과 잘못된 확인을 거부하고 관리자의 정확한 대상을 전달한다", async () => {
+test("삭제 경로는 직원 권한과 잘못된 확인·바뀐 대상을 거부하고 관리자 요청만 지운다", async () => {
   const f = fixture();
   const role = load("utils/middleware/multiUserProtected.js", {
     "../../models/systemSettings": {
@@ -401,13 +608,14 @@ test("삭제 경로는 직원 권한과 잘못된 확인을 거부하고 관리�
   );
   assert.equal(f.questions[1].status, "approved");
   assert.equal(
-    (await request("admin", { ids: [2], confirm: " 삭제" })).statusCode,
+    (await request("admin", { ids: [2], confirm: " 삭제", expected: { answers: 1, wrongNotes: 1 } })).statusCode,
     400
   );
   const stale = await request("admin", {
     ids: [2],
     confirm: "삭제",
     filters: { documentState: "outdated" },
+    expected: { answers: 1, wrongNotes: 1 },
   });
   assert.equal(stale.statusCode, 400);
   assert.equal(f.questions[1].status, "approved");
@@ -415,10 +623,11 @@ test("삭제 경로는 직원 권한과 잘못된 확인을 거부하고 관리�
     ids: [2, 3],
     confirm: "삭제",
     filters: { documentState: "outdated" },
+    expected: { answers: 1, wrongNotes: 1 },
   });
   assert.equal(valid.statusCode, 200);
-  assert.equal(valid.body.count, 2);
-  assert.equal(f.questions[1].updated_by, 9);
+  assert.equal(valid.body.questions, 2);
+  assert.deepEqual(Array.from(f.questions.map((q) => q.id)), [1, 4]);
 });
 
 test("퀴즈 세트의 문제 수에도 삭제한 문제가 포함되지 않는다", async () => {
@@ -433,36 +642,3 @@ test("퀴즈 세트의 문제 수에도 삭제한 문제가 포함되지 않는�
   assert.equal((await f.bank.adminSets())[0].questions, 1);
 });
 
-test("삭제한 퀴즈 목록과 되살리기: 기록은 그대로, 되살린 문제는 사용중지이고 이전 문서는 계속 풀이 불가", async () => {
-  const f = fixture();
-  await f.bank.deleteQuestions([1, 2]);
-  const deleted = await f.bank.adminList({ documentState: "deleted" });
-  assert.deepEqual(Array.from(deleted.map((q) => q.id)).sort(), [1, 2, 4]);
-  assert.equal(deleted.every((q) => q.status === "deleted"), true);
-  const notes = await f.bank.wrongNotes(7);
-  assert.equal(notes[0].previousGuideline, true);
-  assert.equal(notes[0].available, false);
-  await assert.rejects(() => f.bank.startWrongReview(7), /다시 풀 틀린 문제가 없습니다/);
-
-  const restored = await f.bank.restoreQuestions([1, 2]);
-  assert.equal(restored.count, 2);
-  assert.equal(f.questions.find((q) => q.id === 1).status, "inactive");
-  assert.equal(f.questions.find((q) => q.id === 2).status, "inactive");
-  assert.equal(f.answers.length, 1);
-  assert.equal(f.notes.length, 1);
-  await assert.rejects(
-    () => f.bank.setStatus(1, [2], "approved"),
-    /이전 문서 기반 문제는 공개할 수 없습니다/
-  );
-  await f.bank.setStatus(1, [1], "approved");
-  assert.equal((await f.bank.staffOptions()).total, 1);
-  await assert.rejects(() => f.bank.restoreQuestions([1]), /상태가 바뀌었습니다/);
-});
-
-test("현재 문서의 공개 문제 오답노트는 이전 지침 표시가 없다", async () => {
-  const f = fixture();
-  f.notes[0].question_id = 1;
-  const [note] = await f.bank.wrongNotes(7);
-  assert.equal(note.previousGuideline, false);
-  assert.equal(note.available, true);
-});

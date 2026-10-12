@@ -270,7 +270,24 @@ async function executeDocumentUpdate({workspace, files, manifest:input}, injecte
       await verifySearch(deps,live,snapshot,true);
       ownerLease.assertActive();
       await durableJson(path.join(jobRoot,'committed.json'),{job,at:new Date().toISOString()});
-      return {success:true,results:files.map(file=>({name:file.originalname,documents:prepared.filter(d=>d.name===file.originalname).map(d=>({docpath:d.docpath,documentId:d.documentId}))})),relatedItems:related,warnings:[]};
+      // 퀴즈 근거 문장이 새 버전에 그대로 있으면 새 문서에 이어 붙인다(AI 없음).
+      // 문서 교체는 이미 끝났으므로 이 단계가 실패해도 교체를 되돌리지 않는다.
+      const warnings=[];
+      let quizRelink=null;
+      const relink=deps.quizRelink ?? (injected ? null : require('../schatQuiz/bank').relinkAfterDocumentUpdate);
+      if (relink) {
+        try {
+          quizRelink=await relink(fresh.conflicts.map(item=>{
+            const docs=prepared.filter(d=>d.name===item.name);
+            return {oldDocumentIds:item.documents.map(d=>d.documentId).filter(Boolean),documentId:docs[0]?.documentId,
+              title:item.name,version:docs[0]?.data?.document_version ?? null,workspaceSlug:workspace.slug,
+              pages:docs.map(d=>({page:d.data.page,text:d.data.pageContent}))};
+          }).filter(update=>update.documentId),{db:deps.prisma});
+        } catch {
+          warnings.push('퀴즈 근거 비교를 끝내지 못했습니다. 관리자 퀴즈 화면의 이전 문서 목록을 확인해 주세요.');
+        }
+      }
+      return {success:true,results:files.map(file=>({name:file.originalname,documents:prepared.filter(d=>d.name===file.originalname).map(d=>({docpath:d.docpath,documentId:d.documentId}))})),relatedItems:related,quizRelink,warnings};
     }, [...keys,...workspaceKeys,...searchKeys]);
   } catch (error) {
     if (changed && snapshot && !recovery) {

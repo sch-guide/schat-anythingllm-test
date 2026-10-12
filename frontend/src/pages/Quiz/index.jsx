@@ -3,7 +3,6 @@ import { isMobile } from "react-device-detect";
 import Sidebar, { SidebarMobileHeader } from "@/components/Sidebar";
 import QuizIcon from "@/components/SchatQuiz/QuizIcon";
 import SchatQuiz from "@/models/schatQuiz";
-import ResetNotice from "./ResetNotice";
 import { SourceEvidenceRow } from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Citation";
 
 // 지침서 퀴즈 (staff). Everything here reads questions the admin already
@@ -74,7 +73,6 @@ function Quiz() {
           </p>
         </div>
       </header>
-      <ResetNotice />
 
       {!run && (
         <div
@@ -724,18 +722,8 @@ function WrongNotes({ onReview }) {
           <article key={n.id} className={`${card} p-5 flex flex-col gap-y-2`}>
             <p className={`text-xs ${muted}`}>
               {n.topic} · {n.difficultyLabel} · 틀린 횟수 {n.wrongCount}
-              {!n.available &&
-                !n.previousGuideline &&
-                " · 현재 출제되지 않는 문제"}
+              {!n.available && " · 현재 출제되지 않는 문제"}
             </p>
-            {n.previousGuideline && (
-              <span
-                className="w-fit rounded-full border border-zinc-600 bg-zinc-800 px-2.5 py-0.5 text-xs text-zinc-300 light:border-slate-300 light:bg-slate-100 light:text-slate-600"
-                data-testid="quiz-previous-guideline"
-              >
-                이전 지침 기준 · 현재 지침과 다를 수 있어요
-              </span>
-            )}
             <p className={`text-sm font-semibold ${strong}`}>{n.question}</p>
             <p className="text-sm text-red-300 light:text-red-700">
               내가 선택한 답: {n.selectedText || "-"}

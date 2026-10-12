@@ -4,10 +4,8 @@
 // staff action can reach Gemini (see __tests__/utils/schatQuiz).
 const rootPrisma = require("../prisma");
 const { AsyncLocalStorage } = require("node:async_hooks");
-const { createHash } = require("node:crypto");
 const writeContext = new AsyncLocalStorage();
 let writeQueue = Promise.resolve();
-const RESET_LABEL = "schat_quiz_reset_state";
 const LOCK_LABEL = "schat_quiz_write_boundary";
 // 기존 함수의 모든 읽기와 쓰기를 현재 저장 트랜잭션 안으로 연결한다.
 const prisma = new Proxy(rootPrisma, {
@@ -25,7 +23,7 @@ function withQuizWrite(fn) {
   if (current) return Promise.resolve().then(() => fn(current));
   const job = writeQueue.then(() => rootPrisma.$transaction(async (tx) => {
     // SQLite의 쓰기 잠금을 어떤 퀴즈 자료를 읽기 전에 확보한다.
-    // 여러 서버 프로세스에서도 초기화와 새 풀이가 교차하지 않는다.
+    // 여러 서버 프로세스에서도 삭제·문서 교체와 새 풀이가 교차하지 않는다.
     await tx.system_settings.upsert({
       where: { label: LOCK_LABEL },
       create: { label: LOCK_LABEL, value: "1" },
@@ -360,31 +358,59 @@ async function ownAttempt(userId, attemptId) {
   return attempt;
 }
 
+// 직원에게 보이는 문제: 지금 있는 문서의 문제만. 이전 문서가 된 문제는
+// 문제·오답노트·풀이 기록 어디에도 보이지 않고 점수 계산에서도 빠진다.
+async function visibleQuestions(ids, live) {
+  const rows = await prisma.schat_quiz_questions.findMany({
+    where: { id: { in: ids }, status: { not: "deleted" } },
+  });
+  return new Map(
+    rows.filter((q) => live.has(q.document_id)).map((q) => [q.id, q])
+  );
+}
+
+function visibleProgress(ids, byId, answers) {
+  const shown = ids.filter((id) => byId.has(id));
+  const answered = answers.filter((a) => byId.has(a.question_id));
+  const correct = answered.filter((a) => a.is_correct).length;
+  return {
+    ids: shown,
+    total: shown.length,
+    answered: answered.length,
+    correct,
+    completed: shown.length > 0 && answered.length >= shown.length,
+    score: core.scoreOf(correct, shown.length),
+  };
+}
+
 async function attemptView(userId, attemptId) {
   const attempt = await ownAttempt(userId, attemptId);
   const ids = JSON.parse(attempt.question_ids || "[]");
   const orders = JSON.parse(attempt.choice_orders || "{}");
-  const rows = await prisma.schat_quiz_questions.findMany({
-    where: { id: { in: ids } },
-  });
+  const live = await liveDocuments();
+  const byId = await visibleQuestions(ids, live);
   const answers = await prisma.schat_quiz_answers.findMany({
     where: { attempt_id: attempt.id },
   });
-  const live = await liveDocuments();
-  const byId = new Map(rows.map((q) => [q.id, q]));
   const answerById = new Map(answers.map((a) => [a.question_id, a]));
+  const progress = visibleProgress(ids, byId, answers);
   return {
     id: attempt.id,
     mode: attempt.mode,
-    status: attempt.status,
-    total: attempt.total,
-    answered: attempt.answered_count,
-    correct: attempt.correct_count,
-    score: attempt.score,
+    status:
+      attempt.status === "completed" || progress.completed
+        ? "completed"
+        : attempt.status,
+    total: progress.total,
+    answered: progress.answered,
+    correct: progress.correct,
+    score:
+      attempt.status === "completed" || progress.completed
+        ? progress.score
+        : attempt.score,
     topic: JSON.parse(attempt.filters || "{}").topic || null,
-    questions: ids
+    questions: progress.ids
       .map((id) => byId.get(id))
-      .filter(Boolean)
       .map((q) => {
         const a = answerById.get(q.id);
         return {
@@ -411,10 +437,10 @@ async function answerQuestion(userId, attemptId, questionId, input = {}) {
   const ids = JSON.parse(attempt.question_ids || "[]");
   const qid = Number(questionId);
   if (!ids.includes(qid)) throw userError("이 퀴즈의 문제가 아닙니다.");
-  const question = await prisma.schat_quiz_questions.findUnique({
-    where: { id: qid },
-  });
-  if (!question) throw userError("문제를 찾을 수 없습니다.");
+  const liveNow = await liveDocuments({ fresh: true });
+  const visible = await visibleQuestions(ids, liveNow);
+  const question = visible.get(qid);
+  if (!question) throw userError("이 문제는 지금 출제되지 않습니다.");
   const choiceId =
     question.question_type === "multiple_choice" ? input.choiceId : null;
   const ox = question.question_type === "ox" ? input.ox : null;
@@ -434,6 +460,13 @@ async function answerQuestion(userId, attemptId, questionId, input = {}) {
   let isCorrect = existing?.is_correct;
   if (!existing) {
     isCorrect = core.judge(question, { choiceId, ox });
+    const earlier = await prisma.schat_quiz_answers.findMany({
+      where: { attempt_id: attempt.id },
+    });
+    const progress = visibleProgress(ids, visible, [
+      ...earlier,
+      { question_id: qid, is_correct: isCorrect },
+    ]);
     await prisma.$transaction(async (tx) => {
       await tx.schat_quiz_answers.create({
         data: {
@@ -447,7 +480,7 @@ async function answerQuestion(userId, attemptId, questionId, input = {}) {
       });
       const answered = attempt.answered_count + 1;
       const correct = attempt.correct_count + (isCorrect ? 1 : 0);
-      const done = answered >= attempt.total;
+      const done = answered >= attempt.total || progress.completed;
       await tx.schat_quiz_attempts.update({
         where: { id: attempt.id },
         data: {
@@ -457,7 +490,7 @@ async function answerQuestion(userId, attemptId, questionId, input = {}) {
             ? {
                 status: "completed",
                 completedAt: new Date(),
-                score: core.scoreOf(correct, attempt.total),
+                score: progress.score,
               }
             : {}),
         },
@@ -486,47 +519,69 @@ async function answerQuestion(userId, attemptId, questionId, input = {}) {
         });
     });
   }
-  const live = await liveDocuments();
   const after = await prisma.schat_quiz_attempts.findUnique({
     where: { id: attempt.id },
   });
+  const now = visibleProgress(
+    ids,
+    visible,
+    await prisma.schat_quiz_answers.findMany({ where: { attempt_id: attempt.id } })
+  );
+  const completed = after.status === "completed" || now.completed;
   return {
     correct: isCorrect,
     selectedChoiceId: existing ? existing.selected_choice_id : choiceId,
     selectedOx: existing ? existing.selected_ox : ox,
-    ...presentReveal(question, live),
+    ...presentReveal(question, liveNow),
     progress: {
-      answered: after.answered_count,
-      correct: after.correct_count,
-      total: after.total,
-      score: core.scoreOf(after.correct_count, after.answered_count),
-      completed: after.status === "completed",
-      finalScore: after.score,
+      answered: now.answered,
+      correct: now.correct,
+      total: now.total,
+      score: core.scoreOf(now.correct, now.answered),
+      completed,
+      finalScore: completed ? now.score : null,
     },
   };
 }
 
-// 최근 퀴즈 기록: the signed-in user's own completed attempts only.
+// 최근 퀴즈 기록: the signed-in user's own completed attempts only. 점수는
+// 지금 보이는 문제만으로 다시 계산하고, 보이는 문제가 없는 회차는 숨긴다.
 async function history(userId, take = 20) {
   const rows = await prisma.schat_quiz_attempts.findMany({
     where: { user_id: userId, status: "completed" },
     orderBy: { completedAt: "desc" },
-    take,
   });
-  return rows.map((a) => {
+  const live = await liveDocuments();
+  const answers = await prisma.schat_quiz_answers.findMany({
+    where: { attempt_id: { in: rows.map((a) => a.id) } },
+  });
+  const allIds = [
+    ...new Set(rows.flatMap((a) => JSON.parse(a.question_ids || "[]"))),
+  ];
+  const byId = await visibleQuestions(allIds, live);
+  const items = [];
+  for (const a of rows) {
+    const progress = visibleProgress(
+      JSON.parse(a.question_ids || "[]"),
+      byId,
+      answers.filter((x) => x.attempt_id === a.id)
+    );
+    if (!progress.total) continue;
     const f = JSON.parse(a.filters || "{}");
-    return {
+    items.push({
       id: a.id,
       completedAt: a.completedAt,
       mode: a.mode,
       topic:
         a.mode === "wrong_review" ? "틀린 문제 다시 보기" : f.topic || "전체",
-      score: a.score,
-      correct: a.correct_count,
-      total: a.total,
-      rate: core.scoreOf(a.correct_count, a.total),
-    };
-  });
+      score: progress.score,
+      correct: progress.correct,
+      total: progress.total,
+      rate: progress.score,
+    });
+    if (items.length >= take) break;
+  }
+  return items;
 }
 
 async function wrongNotes(userId) {
@@ -536,29 +591,29 @@ async function wrongNotes(userId) {
     orderBy: { lastWrongAt: "desc" },
   });
   const live = await liveDocuments();
-  return rows.map((n) => {
-    const q = n.question;
-    const choices = core.parseChoices(q.choices);
-    return {
-      id: n.id,
-      questionId: q.id,
-      question: q.question,
-      ...labels(q),
-      choices: choices.map((c, i) => ({ ...c, letter: core.LETTERS[i] })),
-      selectedChoiceId: n.selected_choice_id,
-      selectedOx: n.selected_ox,
-      selectedText:
-        q.question_type === "ox"
-          ? n.selected_ox
-          : choices.find((c) => c.id === n.selected_choice_id)?.text || "",
-      wrongCount: n.wrong_count,
-      lastWrongAt: n.lastWrongAt,
-      available: q.status === "approved" && live.has(q.document_id),
-      // 삭제했거나 문서가 바뀐 문제: 지난 지침 기준이라 현재와 다를 수 있다.
-      previousGuideline: q.status === "deleted" || !live.has(q.document_id),
-      ...presentReveal(q, live),
-    };
-  });
+  return rows
+    .filter((n) => n.question.status !== "deleted" && live.has(n.question.document_id))
+    .map((n) => {
+      const q = n.question;
+      const choices = core.parseChoices(q.choices);
+      return {
+        id: n.id,
+        questionId: q.id,
+        question: q.question,
+        ...labels(q),
+        choices: choices.map((c, i) => ({ ...c, letter: core.LETTERS[i] })),
+        selectedChoiceId: n.selected_choice_id,
+        selectedOx: n.selected_ox,
+        selectedText:
+          q.question_type === "ox"
+            ? n.selected_ox
+            : choices.find((c) => c.id === n.selected_choice_id)?.text || "",
+        wrongCount: n.wrong_count,
+        lastWrongAt: n.lastWrongAt,
+        available: q.status === "approved",
+        ...presentReveal(q, live),
+      };
+    });
 }
 
 async function removeWrongNote(userId, noteId) {
@@ -615,13 +670,8 @@ async function adminList(filters = {}) {
 
 // Listing and bulk deletion share the same uncapped selection.
 async function adminRows(filters, live, db = prisma) {
-  const deletedView = filters.documentState === "deleted";
   const where = {
-    status: deletedView
-      ? "deleted"
-      : core.STATUS[filters.status]
-        ? filters.status
-        : { not: "deleted" },
+    status: core.STATUS[filters.status] ? filters.status : { not: "deleted" },
     ...(core.DIFFICULTY[filters.difficulty]
       ? { difficulty: filters.difficulty }
       : {}),
@@ -642,7 +692,6 @@ async function adminRows(filters, live, db = prisma) {
       (q) => !filters.docKey || core.docKeyOf(q.document_id) === filters.docKey
     )
     .filter((q) => {
-      if (deletedView) return true;
       const state =
         filters.documentState ||
         (filters.outdated === "1" ? "outdated" : "all");
@@ -778,52 +827,102 @@ function questionIds(ids) {
   return [...new Set(ids.map(Number))];
 }
 
-// 일반 삭제: 질문과 풀이·점수·오답노트 연결을 보존한다.
-async function deleteQuestions(
-  ids = [],
-  { filters = null, adminId = null } = {}
-) {
-  const list = questionIds(ids);
-  return prisma.$transaction(async (tx) => {
-    if (filters) {
-      if (filters.documentState !== "outdated")
-        throw userError("이전 문서 삭제 대상을 다시 확인해 주세요.");
-      const live = await liveDocuments({ fresh: true, db: tx });
-      const targets = await adminRows(filters, live, tx);
-      if (
-        targets.length !== list.length ||
-        targets.some((q) => !list.includes(q.id))
-      )
-        throw userError(
-          "삭제 대상이 바뀌었습니다. 목록을 새로 불러온 뒤 다시 확인해 주세요."
-        );
-    }
-    const { count } = await tx.schat_quiz_questions.updateMany({
-      where: { id: { in: list }, status: { not: "deleted" } },
-      data: { status: "deleted", updated_by: adminId, updatedAt: new Date() },
-    });
-    if (count !== list.length)
+// 삭제 대상 확인: 이전 문서 전체 삭제는 지금 목록과 같은 대상인지 확인한다.
+async function deleteTargets(list, filters, tx) {
+  if (filters) {
+    if (filters.documentState !== "outdated")
+      throw userError("이전 문서 삭제 대상을 다시 확인해 주세요.");
+    const live = await liveDocuments({ fresh: true, db: tx });
+    const targets = await adminRows(filters, live, tx);
+    if (
+      targets.length !== list.length ||
+      targets.some((q) => !list.includes(q.id))
+    )
       throw userError(
         "삭제 대상이 바뀌었습니다. 목록을 새로 불러온 뒤 다시 확인해 주세요."
       );
-    return { count };
+  }
+  const found = await tx.schat_quiz_questions.findMany({
+    where: { id: { in: list } },
+    select: { id: true },
   });
+  if (found.length !== list.length)
+    throw userError(
+      "삭제 대상이 바뀌었습니다. 목록을 새로 불러온 뒤 다시 확인해 주세요."
+    );
+  const answers = await tx.schat_quiz_answers.count({
+    where: { question_id: { in: list } },
+  });
+  const wrongNotes = await tx.schat_quiz_wrong_notes.count({
+    where: { question_id: { in: list } },
+  });
+  return { questions: list.length, answers, wrongNotes };
 }
 
-// 되살리기: 삭제한 문제를 사용중지 상태로 되돌린다. 공개는 관리자가 다시
-// 검토한 뒤 직접 한다. 이전 문서 문제는 공개할 수 없으므로 계속 풀이 불가다.
-async function restoreQuestions(ids = [], { adminId = null } = {}) {
+async function deletePreview(ids = [], { filters = null } = {}) {
+  const list = questionIds(ids);
+  return prisma.$transaction((tx) => deleteTargets(list, filters, tx));
+}
+
+// 삭제: 문제와 그 문제의 직원 풀이 기록·오답노트를 바로 완전히 지운다.
+// 되살리기나 별도 보관은 없다. 퀴즈가 아닌 자료는 건드리지 않는다.
+async function deleteQuestions(
+  ids = [],
+  { filters = null, expected = null } = {}
+) {
   const list = questionIds(ids);
   return prisma.$transaction(async (tx) => {
-    const { count } = await tx.schat_quiz_questions.updateMany({
-      where: { id: { in: list }, status: "deleted" },
-      data: { status: "inactive", updated_by: adminId, updatedAt: new Date() },
-    });
-    if (count !== list.length)
+    const counts = await deleteTargets(list, filters, tx);
+    if (
+      !expected ||
+      Number(expected.answers) !== counts.answers ||
+      Number(expected.wrongNotes) !== counts.wrongNotes
+    )
       throw userError(
-        "되살릴 문제의 상태가 바뀌었습니다. 목록을 새로 불러온 뒤 다시 확인해 주세요."
+        "지울 기록 수가 바뀌었습니다. 확인 창을 닫고 다시 시도해 주세요."
       );
-    return { count };
+    const removed = new Set(list);
+    const attempts = (
+      await tx.schat_quiz_attempts.findMany({
+        select: { id: true, question_ids: true, status: true, completedAt: true },
+      })
+    ).filter((a) =>
+      JSON.parse(a.question_ids || "[]").some((id) => removed.has(id))
+    );
+    await tx.schat_quiz_answers.deleteMany({ where: { question_id: { in: list } } });
+    await tx.schat_quiz_wrong_notes.deleteMany({ where: { question_id: { in: list } } });
+    await tx.schat_quiz_questions.deleteMany({ where: { id: { in: list } } });
+    // 삭제한 문제가 들어 있던 풀이 회차는 남은 문제로 점수를 다시 맞춘다.
+    for (const a of attempts) {
+      const rest = JSON.parse(a.question_ids || "[]").filter((id) => !removed.has(id));
+      if (!rest.length) {
+        await tx.schat_quiz_attempts.deleteMany({ where: { id: a.id } });
+        continue;
+      }
+      const left = await tx.schat_quiz_answers.findMany({
+        where: { attempt_id: a.id },
+        select: { is_correct: true },
+      });
+      const correct = left.filter((x) => x.is_correct).length;
+      const done = left.length >= rest.length;
+      await tx.schat_quiz_attempts.update({
+        where: { id: a.id },
+        data: {
+          question_ids: JSON.stringify(rest),
+          total: rest.length,
+          answered_count: left.length,
+          correct_count: correct,
+          ...(done
+            ? {
+                status: "completed",
+                completedAt: a.completedAt || new Date(),
+                score: core.scoreOf(correct, rest.length),
+              }
+            : {}),
+        },
+      });
+    }
+    return counts;
   });
 }
 
@@ -892,17 +991,21 @@ async function adminStats() {
   let answers = await prisma.schat_quiz_answers.findMany({
     select: { question_id: true, is_correct: true, attempt_id: true },
   });
-  // 삭제한 문제의 풀이는 기록으로 보존하지만 통계에서는 뺀다.
-  const questions = await prisma.schat_quiz_questions.findMany({
-    where: { status: { not: "deleted" } },
-    select: {
-      id: true,
-      question: true,
-      topic: true,
-      source_document_name: true,
-      source_page: true,
-    },
-  });
+  // 이전 문서가 된 문제의 풀이는 통계에서 뺀다(지운 문제는 기록도 없음).
+  const live = await liveDocuments({ fresh: true });
+  const questions = (
+    await prisma.schat_quiz_questions.findMany({
+      where: { status: { not: "deleted" } },
+      select: {
+        id: true,
+        question: true,
+        topic: true,
+        document_id: true,
+        source_document_name: true,
+        source_page: true,
+      },
+    })
+  ).filter((q) => live.has(q.document_id));
   const byId = new Map(questions.map((q) => [q.id, q]));
   const allAnswers = answers;
   answers = allAnswers.filter((a) => byId.has(a.question_id));
@@ -939,7 +1042,7 @@ async function adminStats() {
       total: true,
     },
   });
-  // 삭제한 문제가 들어 있던 회차는 그 문제를 뺀 점수로 다시 계산한다.
+  // 이전 문서 문제가 들어 있던 회차는 그 문제를 뺀 점수로 다시 계산한다.
   const removedByAttempt = new Map();
   for (const a of allAnswers) {
     if (byId.has(a.question_id)) continue;
@@ -966,7 +1069,7 @@ async function adminStats() {
   return {
     ok: true,
     minRespondents: core.MIN_DEPARTMENT_RESPONDENTS,
-    excludedDeletedAnswers: allAnswers.length - answers.length,
+    excludedOutdatedAnswers: allAnswers.length - answers.length,
     totals: {
       completedAttempts: attempts.length,
       answers: answers.length,
@@ -992,112 +1095,68 @@ async function adminStats() {
   };
 }
 
-async function requireResetAdmin(db, userId) {
-  const user = await db.users.findUnique({ where: { id: userId } });
-  if (!user || user.role !== "admin" || user.suspended)
-    throw userError("초기화 권한이 없습니다.");
-}
+// ---- 문서 새 버전: 근거 문장이 그대로인 퀴즈는 새 버전에 이어 붙인다 ----------
 
-async function resetState(db) {
-  const row = await db.system_settings.findUnique({ where: { label: RESET_LABEL } });
-  if (!row?.value) return { generation: 0, lastResetAt: null };
-  const value = JSON.parse(row.value);
-  if (!Number.isSafeInteger(value.generation) || value.generation < 0)
-    throw new Error("Invalid quiz reset state");
-  return { generation: value.generation, lastResetAt: value.lastResetAt || null };
-}
-
-function stable(value) {
-  if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) return value.map(stable);
-  if (value && typeof value === "object")
-    return Object.fromEntries(Object.keys(value).sort().map((k) => [k, stable(value[k])]));
-  return value;
-}
-
-async function resetSnapshot(db) {
-  const live = await liveDocuments({ fresh: true, db });
-  const attempts = await db.schat_quiz_attempts.findMany({ orderBy: { id: "asc" } });
-  const answers = await db.schat_quiz_answers.findMany({ orderBy: { id: "asc" } });
-  const notes = await db.schat_quiz_wrong_notes.findMany({ orderBy: { id: "asc" } });
-  const questions = await db.schat_quiz_questions.findMany({ orderBy: { id: "asc" } });
-  const state = await resetState(db);
-  const removed = questions.filter((q) => q.status === "deleted" || !live.has(q.document_id));
-  const sortRows = (rows) => [...rows].sort((a, b) => a.id - b.id);
-  const token = createHash("sha256").update(JSON.stringify(stable({
-    attempts: sortRows(attempts), answers: sortRows(answers), notes: sortRows(notes),
-    questions: sortRows(questions),
-    live: [...live.values()].map((d) => ({ ...d, pages: [...d.pages].sort((a, b) => a - b) }))
-      .sort((a, b) => a.documentId.localeCompare(b.documentId)),
-    state,
-  }))).digest("hex");
-  return {
-    token, staffCount: new Set([...attempts, ...answers, ...notes].map((r) => r.user_id)).size,
-    attemptCount: attempts.length, answerCount: answers.length, wrongNoteCount: notes.length,
-    questionCount: removed.length, ...state,
-    removedIds: removed.map((q) => q.id),
-  };
-}
-
-async function resetPreview(adminId) {
-  return rootPrisma.$transaction(async (tx) => {
-    await requireResetAdmin(tx, adminId);
-    const { removedIds, ...preview } = await resetSnapshot(tx);
-    return preview;
+/**
+ * 같은 이름의 문서가 새 버전으로 바뀐 직후 호출한다(AI 없음, 글자 비교).
+ * 근거 문장이 새 버전에 그대로 있으면 문제를 새 문서에 연결하고(직원 기록
+ * 유지), 숫자가 바뀌었거나 찾지 못하면 이전 문서로 남긴다.
+ * updates: [{ oldDocumentIds, documentId, title, version, workspaceSlug,
+ *             pages: [{ page, text }] }]
+ */
+async function relinkAfterDocumentUpdate(updates = [], { db = rootPrisma } = {}) {
+  const summary = { total: 0, kept: 0, outdated: 0, changed: 0, missing: 0 };
+  // 실제 DB에서는 퀴즈 쓰기 잠금 안에서 바꿔 풀이 제출과 겹치지 않게 한다.
+  const run = (work) =>
+    db === rootPrisma ? withQuizWrite(work) : db.$transaction(work);
+  await run(async (tx) => {
+    for (const update of updates) {
+      const oldIds = [...new Set(update.oldDocumentIds || [])].filter(Boolean);
+      if (!oldIds.length || !update.documentId) continue;
+      const questions = await tx.schat_quiz_questions.findMany({
+        where: { document_id: { in: oldIds }, status: { not: "deleted" } },
+        select: { id: true, quiz_set_id: true, source_excerpt: true },
+      });
+      const keptSets = new Set();
+      for (const q of questions) {
+        summary.total += 1;
+        const result = core.compareEvidence(q.source_excerpt || "", update.pages);
+        if (result.status !== "same") {
+          summary.outdated += 1;
+          summary[result.status] += 1;
+          continue;
+        }
+        summary.kept += 1;
+        if (q.quiz_set_id) keptSets.add(q.quiz_set_id);
+        await tx.schat_quiz_questions.update({
+          where: { id: q.id },
+          data: {
+            document_id: update.documentId,
+            document_version: update.version ?? null,
+            workspace_slug: update.workspaceSlug ?? undefined,
+            source_page: result.page,
+            updatedAt: new Date(),
+          },
+        });
+      }
+      if (keptSets.size)
+        await tx.schat_quiz_sets.updateMany({
+          where: { id: { in: [...keptSets] }, document_id: { in: oldIds } },
+          data: {
+            document_id: update.documentId,
+            document_version: update.version ?? null,
+            updatedAt: new Date(),
+          },
+        });
+    }
   });
-}
-
-async function resetRecords(adminId, input = {}) {
-  if (input.confirm !== "초기화") throw userError("확인을 위해 '초기화'를 정확히 입력해 주세요.");
-  return withQuizWrite(async (tx) => {
-    await requireResetAdmin(tx, adminId);
-    const snapshot = await resetSnapshot(tx);
-    if (typeof input.token !== "string" || input.token !== snapshot.token)
-      throw userError("초기화 대상이 바뀌었습니다. 미리보기를 새로 불러온 뒤 다시 확인해 주세요.");
-    await tx.schat_quiz_answers.deleteMany({});
-    await tx.schat_quiz_wrong_notes.deleteMany({});
-    await tx.schat_quiz_attempts.deleteMany({});
-    await tx.schat_quiz_questions.deleteMany({ where: { id: { in: snapshot.removedIds } } });
-    const state = { generation: snapshot.generation + 1, lastResetAt: new Date().toISOString() };
-    await tx.system_settings.upsert({
-      where: { label: RESET_LABEL },
-      create: { label: RESET_LABEL, value: JSON.stringify(state) },
-      update: { value: JSON.stringify(state), lastUpdatedAt: new Date() },
-    });
-    const { removedIds, token, ...summary } = snapshot;
-    return { ...summary, ...state };
-  });
-}
-
-const readLabel = (userId) => `schat_quiz_reset_read_${userId}`;
-async function resetNotice(userId) {
-  return rootPrisma.$transaction(async (tx) => {
-    const state = await resetState(tx);
-    if (!state.generation) return null;
-    const row = await tx.system_settings.findUnique({ where: { label: readLabel(userId) } });
-    return Number(row?.value) >= state.generation ? null : state;
-  });
-}
-
-async function acknowledgeReset(userId, generation) {
-  return withQuizWrite(async (tx) => {
-    const state = await resetState(tx);
-    if (!state.generation || generation !== state.generation)
-      throw userError("초기화 안내가 바뀌었습니다. 다시 확인해 주세요.");
-    await tx.system_settings.upsert({
-      where: { label: readLabel(userId) },
-      create: { label: readLabel(userId), value: String(generation) },
-      update: { value: String(generation), lastUpdatedAt: new Date() },
-    });
-  });
+  liveCache = null;
+  return summary;
 }
 
 module.exports = {
   withQuizWrite,
-  resetPreview,
-  resetRecords,
-  resetNotice,
-  acknowledgeReset,
+  relinkAfterDocumentUpdate,
   userError,
   liveDocuments,
   documentByKey,
@@ -1115,8 +1174,7 @@ module.exports = {
   adminUpdate: (...args) => withQuizWrite(() => adminUpdate(...args)),
   setStatus: (...args) => withQuizWrite(() => setStatus(...args)),
   deleteQuestions: (...args) => withQuizWrite(() => deleteQuestions(...args)),
-  restoreQuestions: (...args) =>
-    withQuizWrite(() => restoreQuestions(...args)),
+  deletePreview,
   adminSets,
   updateSet: (...args) => withQuizWrite(() => updateSet(...args)),
   usageToday,

@@ -43,21 +43,6 @@ function schatQuizEndpoints(app) {
 
   // ---- staff (own data only) --------------------------------------------------
   app.get(
-    "/schat/quiz/reset-notice",
-    signedIn,
-    handle(async (_request, response) => {
-      response.status(200).json({ success: true, notice: await bank.resetNotice(me(response)) });
-    })
-  );
-  app.post(
-    "/schat/quiz/reset-notice",
-    signedIn,
-    handle(async (request, response) => {
-      await bank.acknowledgeReset(me(response), reqBody(request).generation);
-      response.status(200).json({ success: true });
-    })
-  );
-  app.get(
     "/schat/quiz/options",
     signedIn,
     handle(async (_request, response) => {
@@ -145,20 +130,6 @@ function schatQuizEndpoints(app) {
 
   // ---- admin: bank management (no AI) -------------------------------------------
   app.get(
-    "/schat-admin/quiz/reset/preview",
-    adminOnly,
-    handle(async (_request, response) => {
-      response.status(200).json({ success: true, ...(await bank.resetPreview(me(response))) });
-    })
-  );
-  app.post(
-    "/schat-admin/quiz/reset",
-    adminOnly,
-    handle(async (request, response) => {
-      response.status(200).json({ success: true, ...(await bank.resetRecords(me(response), reqBody(request))) });
-    })
-  );
-  app.get(
     "/schat-admin/quiz/documents",
     adminOnly,
     handle(async (_request, response) => {
@@ -218,36 +189,33 @@ function schatQuizEndpoints(app) {
   );
 
   app.post(
-    "/schat-admin/quiz/questions/restore",
+    "/schat-admin/quiz/questions/delete-preview",
     adminOnly,
     handle(async (request, response) => {
-      const { ids = [] } = reqBody(request);
+      const { ids = [], filters = null } = reqBody(request);
       response.status(200).json({
         success: true,
-        ...(await bank.restoreQuestions(ids, { adminId: me(response) })),
+        ...(await bank.deletePreview(ids, { filters })),
       });
     })
   );
 
+  // 진짜 삭제: 확인 창에서 본 기록 수(expected)와 같을 때만 지운다.
   app.post(
     "/schat-admin/quiz/questions/delete",
     adminOnly,
     handle(async (request, response) => {
-      const { ids = [], confirm, filters = null } = reqBody(request);
+      const { ids = [], confirm, filters = null, expected = null } =
+        reqBody(request);
       if (confirm !== "삭제")
         return response.status(400).json({
           success: false,
-          error: "확인을 위해 '삭제'를 입력해 주세요.",
+          error: "삭제 확인이 필요합니다.",
         });
-      response
-        .status(200)
-        .json({
-          success: true,
-          ...(await bank.deleteQuestions(ids, {
-            filters,
-            adminId: me(response),
-          })),
-        });
+      response.status(200).json({
+        success: true,
+        ...(await bank.deleteQuestions(ids, { filters, expected })),
+      });
     })
   );
 

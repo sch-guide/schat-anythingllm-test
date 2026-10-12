@@ -35,9 +35,9 @@ export default function QuizStats() {
             className="m-0 mt-2 text-xs text-theme-text-secondary"
             data-testid="quiz-stats-basis"
           >
-            기준: 삭제한 퀴즈의 풀이는 빼고 계산합니다.
-            {stats.excludedDeletedAnswers > 0 &&
-              ` (제외한 답 ${stats.excludedDeletedAnswers}개)`}
+            기준: 이전 문서 퀴즈의 풀이는 빼고 계산합니다.
+            {stats.excludedOutdatedAnswers > 0 &&
+              ` (제외한 답 ${stats.excludedOutdatedAnswers}개)`}
           </p>
         </Card>
         <Card title="주제별 정답률">

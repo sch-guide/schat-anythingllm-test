@@ -352,8 +352,8 @@ export default function QuizReviewDialog({ id, onClose, onChanged }) {
             >
               <p className="text-sm font-semibold text-red-500">위험 영역</p>
               <p className="text-xs text-theme-text-secondary">
-                삭제한 문제는 새 퀴즈에 나오지 않습니다. 직원의 점수·풀이 기록과
-                오답노트는 남아 있고, [삭제한 퀴즈]에서 되살릴 수 있습니다.
+                삭제하면 이 문제와 직원 풀이 기록·오답노트가 바로 지워지고
+                되돌릴 수 없습니다.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
