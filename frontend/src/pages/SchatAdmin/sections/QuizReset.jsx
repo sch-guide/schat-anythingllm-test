@@ -9,25 +9,25 @@ export default function QuizReset({ onReset }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     SchatQuiz.resetPreview().then((r) => {
-      if (r.success) setLastDate(r.lastResetAt || null);
+      setLastDate(r.success ? r.lastResetAt || null : false);
     });
   }, []);
   return (
     <div className="flex flex-col items-start gap-2 border-t border-theme-sidebar-border pt-4">
       <span className="text-xs text-theme-text-secondary" data-testid="quiz-reset-last-date">
-        마지막 초기화: {lastDate === undefined ? "확인 중" : lastDate ? new Date(lastDate).toLocaleString("ko-KR") : "아직 없음"}
+        마지막 초기화: {lastDate === undefined ? "확인 중" : lastDate === false ? "확인하지 못했어요" : lastDate ? new Date(lastDate).toLocaleString("ko-KR") : "아직 없음"}
       </span>
       <button type="button" data-testid="quiz-reset-open"
         className="rounded-lg border border-red-500 px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10"
         onClick={() => setOpen(true)}>퀴즈 기록 초기화</button>
-      {open && <QuizResetDialog onClose={() => setOpen(false)} onReset={(result) => {
+      {open && <QuizResetDialog onClose={() => setOpen(false)} onPreview={(result) => setLastDate(result.lastResetAt || null)} onReset={(result) => {
         setLastDate(result.lastResetAt); onReset?.();
       }} />}
     </div>
   );
 }
 
-export function QuizResetDialog({ onClose, onReset }) {
+export function QuizResetDialog({ onClose, onReset, onPreview }) {
   const [preview, setPreview] = useState(null);
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,6 +38,7 @@ export function QuizResetDialog({ onClose, onReset }) {
     const result = await SchatQuiz.resetPreview();
     if (!result.success) { setError(result.error || "초기화 대상을 불러오지 못했습니다."); return; }
     setPreview(result);
+    onPreview?.(result);
   }
   useEffect(() => { refresh(); }, []);
   async function reset() {

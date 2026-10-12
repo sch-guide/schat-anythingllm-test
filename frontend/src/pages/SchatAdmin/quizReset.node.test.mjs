@@ -94,3 +94,24 @@ test("초기화 실패 뒤에는 새 대상을 불러오고 재입력을 요구�
   assert.equal(nodes(tree).find((n) => n.props["data-testid"] === "quiz-reset-execute").props.disabled, true);
   assert.ok(nodes(tree).find((n) => n.props.role === "alert"));
 });
+
+test("날짜 조회 실패를 표시하고 확인창에서 조회에 성공하면 바깥 날짜도 갱신한다", async () => {
+  const h = harness();
+  const deps = { react: h.hooks, "../ui": ui, "@/components/lib/Modal": modal,
+    "@/utils/toast": () => {}, "@/models/schatQuiz": { resetPreview: async () => ({ success: false }) } };
+  const { default: Reset } = load("./sections/QuizReset.jsx", deps);
+  h.draw(Reset, {}); await h.flush(); let tree = h.draw(Reset, {});
+  let date = nodes(tree).find((n) => n.props["data-testid"] === "quiz-reset-last-date");
+  assert.match(React.Children.toArray(date.props.children).join(""), /확인하지 못했어요/);
+  nodes(tree).find((n) => n.props["data-testid"] === "quiz-reset-open").props.onClick();
+  tree = h.draw(Reset, {});
+  const dialogProps = nodes(tree).find((n) => n.type.name === "QuizResetDialog").props;
+  const d = harness();
+  const { QuizResetDialog } = load("./sections/QuizReset.jsx", { ...deps, react: d.hooks,
+    "@/models/schatQuiz": { resetPreview: async () => ({ success: true, token: "fresh", lastResetAt: "2026-10-12T09:00:00Z" }) } });
+  d.draw(QuizResetDialog, dialogProps); await d.flush(); tree = h.draw(Reset, {});
+  date = nodes(tree).find((n) => n.props["data-testid"] === "quiz-reset-last-date");
+  const text = React.Children.toArray(date.props.children).join("");
+  assert.doesNotMatch(text, /확인하지 못했어요|확인 중/);
+  assert.match(text, /2026/);
+});
