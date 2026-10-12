@@ -28,7 +28,7 @@ function memoryStorage(initial = {}) {
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const NOW = Date.UTC(2026, 9, 10, 9, 0);
-const memo = { patient: "612호 / 김민지", other: "보호자 연락 완료" };
+const memo = { patient: "612호 / 홍길동", other: "보호자 연락 완료" };
 
 test("notes are separated by user, login session and checklist", () => {
   const session = memoSessionId("token-a");
@@ -67,10 +67,10 @@ test("multi-line text is kept as typed", () => {
   saveChecklistMemo(
     storage,
     key,
-    { patient: "612호\n김민지\n", other: "" },
+    { patient: "612호\n홍길동\n", other: "" },
     NOW
   );
-  assert.equal(loadChecklistMemo(storage, key, NOW).patient, "612호\n김민지\n");
+  assert.equal(loadChecklistMemo(storage, key, NOW).patient, "612호\n홍길동\n");
 });
 
 test("emptying both notes removes the saved entry", () => {
@@ -131,7 +131,7 @@ test("employee screens: 환자정보 above the checklist, 기타메모 below, bl
     const tree = screen.indexOf("<ChecklistTree");
     const other = screen.indexOf('title="기타메모"');
     assert.ok(patient > 0 && patient < tree && tree < other, path);
-    assert.match(screen, /placeholder="예: 612호 \/ 김민지"/);
+    assert.match(screen, /placeholder="예: 612호 \/ 홍길동"/);
     assert.match(screen, /placeholder="추가로 기록할 내용을 입력하세요"/);
     assert.match(screen, /tone="blue"/);
     assert.match(screen, /title="환자정보"\s+compact/);

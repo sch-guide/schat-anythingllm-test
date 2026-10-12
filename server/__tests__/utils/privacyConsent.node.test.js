@@ -43,6 +43,7 @@ function fakeDb() {
       findFirst: async () => [...docs].sort((a, b) => b.version - a.version)[0] || null,
       findUnique: async ({ where }) => docs.find((d) => d.version === where.version) || null,
       findMany: async () => [...docs].sort((a, b) => b.version - a.version),
+      update: async ({ where, data }) => Object.assign(docs.find((d) => d.id === where.id), data),
       create: async ({ data }) => {
         if (docs.some((d) => d.version === data.version)) throw new Error("unique");
         const row = { id: docs.length + 1, published_at: new Date("2026-10-12T03:00:00Z"), published_by: null, ...data };
@@ -87,6 +88,41 @@ test("동의서가 없으면 v1 초안을 한 번만 넣고, 병원 이름은 '�
   assert.equal(first.items.length, 3);
   for (const key of ["items", "purpose", "retention", "refusal"]) assert.ok(first.content.summary[key]);
   assert.match(first.content.external.storage, /Google Cloud \(서울 지역\)/);
+  // 체크리스트 메모 줄과 전문
+  assert.match(first.content.summary.checklist, /홍○동/);
+  assert.match(first.content.summary.checklist, /24시간 보관 후 자동 삭제/);
+  assert.match(first.content.summary.checklist, /그 PC에만 남습니다/);
+  assert.match(first.content.summary.checklist, /AI\(Gemini\)로 보내지 않습니다/);
+  assert.match(first.content.fullText, /체크리스트 메모: 업무용 환자 정보/);
+  assert.match(first.content.fullText, /체크리스트 메모: AI\(Gemini\)로 보내지 않습니다/);
+  assert.match(first.content.fullText, /질문 입력창에는 환자 이름/);
+  assert.doesNotMatch(JSON.stringify(first.content), /김민지|김○지/);
+  assert.equal(first.items[2].label, "질문 입력창에 환자 개인정보를 입력하지 않겠습니다.");
+});
+
+test("관리자가 고친 적 없는 예전 v1 초안은 버전·동의 기록을 그대로 두고 보완한 v1 문구로 바뀐다", async () => {
+  const { db } = fixture();
+  // 예전 초안: 체크리스트 줄이 없고 세 번째 문구가 달랐던 내용
+  const { createHash } = require("node:crypto");
+  const legacy = { summary: { items: "a", purpose: "b", retention: "c", refusal: "d" }, external: { storage: "e", generation: "f" }, fullText: "옛 문구" };
+  const legacyJson = JSON.stringify(legacy);
+  const hashes = [createHash("sha256").update(legacyJson).digest("hex")];
+  const patched = load("utils/privacyConsent/index.js", {
+    "../prisma": db,
+    "./defaultDocument": { ...require("../../utils/privacyConsent/defaultDocument"), LEGACY_V1_SEED_HASHES: hashes },
+  });
+  db.docs.push({ id: 1, version: 1, label: "v1 · 2026.10", content: legacyJson, published_by: null, published_at: new Date() });
+  db.consents.push({ id: 1, user_id: 7, version: 1, items: "{}", agreed_at: new Date() });
+  const doc = await patched.currentDocument({ fresh: true });
+  assert.equal(doc.version, 1);
+  assert.equal(doc.label, "v1 · 2026.10");
+  assert.match(doc.content.summary.checklist, /홍○동/);
+  assert.equal(db.docs.length, 1);
+  assert.equal(db.consents.length, 1);
+  assert.equal(await patched.hasCurrentConsent(7), true);
+  // 관리자가 고친 v1(게시자 있음)이나 다른 내용은 바꾸지 않는다.
+  db.docs[0] = { ...db.docs[0], content: legacyJson, published_by: 3 };
+  assert.equal((await patched.currentDocument({ fresh: true })).content.fullText, "옛 문구");
 });
 
 test("필수 3개를 모두 체크하고 지금 버전이어야 동의가 저장되며, 같은 버전은 한 번만 저장한다", async () => {

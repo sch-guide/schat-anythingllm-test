@@ -47,14 +47,14 @@ const documentV1 = {
   version: 1,
   label: "v1 · 2026.10",
   content: {
-    summary: { items: "가짜 항목", purpose: "가짜 목적", retention: "가짜 보관", refusal: "가짜 거부" },
+    summary: { items: "가짜 항목", purpose: "가짜 목적", retention: "가짜 보관", checklist: "가짜 체크리스트 메모", refusal: "가짜 거부" },
     external: { storage: "Google Cloud (서울 지역) 서버", generation: "가짜 Gemini 안내" },
     fullText: "가짜 전문",
   },
   items: [
     { key: "collection", label: "개인정보 수집·이용에 동의합니다." },
     { key: "external", label: "외부 서비스(Google Cloud, Google Gemini) 이용에 동의합니다." },
-    { key: "noPatientInfo", label: "질문에 환자 개인정보를 입력하지 않겠습니다." },
+    { key: "noPatientInfo", label: "질문 입력창에 환자 개인정보를 입력하지 않겠습니다." },
   ],
 };
 
@@ -74,7 +74,11 @@ test("필수 3개를 모두 체크해야 [동의하고 다음]이 눌리고, 동
   const stepItems = nodes(ConsentSteps({ current: 2 })).filter((n) => n.type === "li");
   assert.deepEqual(stepItems.map((li) => React.Children.toArray(li.props.children).join("")), ["① 직원 확인", "② 개인정보 동의", "③ 비밀번호 만들기"]);
   assert.equal(stepItems[1].props["aria-current"], "step");
-  assert.ok(JSON.stringify(tree).includes("환자 이름, 등록번호, 생년월일 등 개인정보를 질문에 입력하지 마세요."));
+  const json = JSON.stringify(tree);
+  assert.ok(json.includes("질문 입력창에는 환자 이름, 등록번호, 생년월일 등 개인정보를 입력하지 마세요."));
+  assert.ok(json.includes("질문은 외부 AI 서비스로 전송됩니다. 체크리스트 메모의 환자 정보는 이름을 가려 저장하며 AI로 보내지 않습니다."));
+  const rows = all().filter((n) => n.type === "dt").map((n) => n.props.children);
+  assert.deepEqual(rows.slice(0, 5), ["수집 항목", "이용 목적", "보관 기간", "체크리스트 메모", "거부 권리"]);
   assert.ok(JSON.stringify(tree).includes("v1 · 2026.10"));
   assert.ok(text.length > 0);
   assert.equal(submit().props.disabled, true);

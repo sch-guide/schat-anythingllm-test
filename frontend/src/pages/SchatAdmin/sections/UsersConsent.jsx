@@ -10,6 +10,7 @@ const FIELDS = [
   ["summary.items", "수집 항목", 2],
   ["summary.purpose", "이용 목적", 2],
   ["summary.retention", "보관 기간", 2],
+  ["summary.checklist", "체크리스트 메모", 3],
   ["summary.refusal", "거부 권리", 2],
   ["external.storage", "저장 위치", 1],
   ["external.generation", "답변 생성", 2],

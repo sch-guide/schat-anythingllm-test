@@ -3,7 +3,12 @@
 // - 직원·관리자 모두 현재 버전에 한 번 동의해야 SCHAT 기능을 쓸 수 있다.
 // - 동의 여부 확인은 요청마다 일어나므로 짧게 기억해 두고, 동의·게시 때 비운다.
 const prisma = require("../prisma");
-const { DEFAULT_CONSENT_CONTENT, CONSENT_ITEMS } = require("./defaultDocument");
+const { createHash } = require("node:crypto");
+const {
+  DEFAULT_CONSENT_CONTENT,
+  CONSENT_ITEMS,
+  LEGACY_V1_SEED_HASHES,
+} = require("./defaultDocument");
 
 const CACHE_MS = 30 * 1000;
 let currentCache = null; // { at, document }
@@ -63,6 +68,18 @@ async function currentDocument({ db = prisma, fresh = false } = {}) {
       });
     }
   }
+  // 관리자가 고친 적 없는 예전 v1 초안이면 보완한 v1 문구로 바꾼다(버전·동의 기록 유지).
+  if (
+    row?.version === 1 &&
+    row.published_by == null &&
+    LEGACY_V1_SEED_HASHES.includes(
+      createHash("sha256").update(String(row.content)).digest("hex")
+    )
+  )
+    row = await db.schat_privacy_consent_documents.update({
+      where: { id: row.id },
+      data: { content: JSON.stringify(DEFAULT_CONSENT_CONTENT) },
+    });
   const document = present(row);
   if (db === prisma) currentCache = { at: Date.now(), document };
   return document;
@@ -135,6 +152,7 @@ async function publishDocument(adminId, input = {}, { db = prisma } = {}) {
       items: cleanText(input.summary?.items, 600),
       purpose: cleanText(input.summary?.purpose, 600),
       retention: cleanText(input.summary?.retention, 600),
+      checklist: cleanText(input.summary?.checklist, 600),
       refusal: cleanText(input.summary?.refusal, 600),
     },
     external: {

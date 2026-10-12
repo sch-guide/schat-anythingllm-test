@@ -28,6 +28,7 @@ const SUMMARY_ROWS = [
   ["items", "수집 항목"],
   ["purpose", "이용 목적"],
   ["retention", "보관 기간"],
+  ["checklist", "체크리스트 메모"],
   ["refusal", "거부 권리"],
 ];
 const EXTERNAL_ROWS = [
@@ -92,12 +93,14 @@ export default function PrivacyConsentStep({
           </button>
         </div>
         <dl className="schat-consent__rows">
-          {SUMMARY_ROWS.map(([key, label]) => (
-            <div key={key}>
-              <dt>{label}</dt>
-              <dd>{content.summary?.[key]}</dd>
-            </div>
-          ))}
+          {SUMMARY_ROWS.filter(([key]) => content.summary?.[key]).map(
+            ([key, label]) => (
+              <div key={key}>
+                <dt>{label}</dt>
+                <dd>{content.summary?.[key]}</dd>
+              </div>
+            )
+          )}
         </dl>
         {expanded && (
           <div className="schat-consent__full" data-testid="consent-full-text">
@@ -126,9 +129,13 @@ export default function PrivacyConsentStep({
       <div className="schat-consent__warning" role="note">
         <strong>
           <Warning size={15} weight="bold" aria-hidden="true" />
-          환자 이름, 등록번호, 생년월일 등 개인정보를 질문에 입력하지 마세요.
+          질문 입력창에는 환자 이름, 등록번호, 생년월일 등 개인정보를 입력하지
+          마세요.
         </strong>
-        <span>입력한 질문은 외부 AI 서비스로 전송됩니다.</span>
+        <span>
+          질문은 외부 AI 서비스로 전송됩니다. 체크리스트 메모의 환자 정보는
+          이름을 가려 저장하며 AI로 보내지 않습니다.
+        </span>
       </div>
 
       <div className="schat-consent__checks">

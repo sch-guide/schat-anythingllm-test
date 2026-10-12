@@ -223,7 +223,7 @@ export default function ChecklistFloatingPanel({
             id="patient"
             title="환자정보"
             compact
-            placeholder="예: 612호 / 김민지"
+            placeholder="예: 612호 / 홍길동"
             value={patientInfo}
             onChange={(value) => setMemoField("patient", value)}
             onBlur={flush}
