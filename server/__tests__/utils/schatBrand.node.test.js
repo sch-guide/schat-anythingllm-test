@@ -352,3 +352,15 @@ test("공지 제목은 8자까지 저장하고, 예전 공지와 초기화는 �
     "공지사항"
   );
 });
+
+test("소속 표시: 기본값 간호교육파트, 12자 이하, 비우기 허용, 예전 설정에는 기본값", () => {
+  const brand = require("../../utils/schatBrand");
+  assert.equal(brand.defaults().affiliation, "간호교육파트");
+  assert.equal(brand.publicBrand("{}").affiliation, "간호교육파트");
+  assert.equal(brand.publicBrand(JSON.stringify({ subtitle: "가짜" })).affiliation, "간호교육파트");
+  assert.equal(brand.publicBrand(JSON.stringify({ affiliation: "" })).affiliation, "");
+  assert.equal(brand.validateSection("affiliation", " 간호부 "), "간호부");
+  assert.equal(brand.validateSection("affiliation", "가".repeat(12)), "가".repeat(12));
+  assert.throws(() => brand.validateSection("affiliation", "가".repeat(13)));
+  assert.throws(() => brand.validateSection("affiliation", "<b>x</b>"));
+});

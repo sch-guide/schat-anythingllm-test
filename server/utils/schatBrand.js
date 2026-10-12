@@ -2,10 +2,14 @@ const MAX_LOGO_BYTES = 1024 * 1024;
 // 직원 화면 공지 띠의 제목. 비워 두면 화면에는 "공지사항"으로 보인다.
 const DEFAULT_NOTICE_TITLE = "공지사항";
 const NOTICE_TITLE_MAX = 8;
+// 로그인 화면·메뉴의 소속 표시. 비워 두면 두 곳 모두 숨긴다.
+const DEFAULT_AFFILIATION = "간호교육파트";
+const AFFILIATION_MAX = 12;
 const { inflateSync } = require("node:zlib");
 const defaults = () => ({
   logo: null,
   subtitle: "병원 실무지침 AI",
+  affiliation: DEFAULT_AFFILIATION,
   announcement: {
     enabled: false,
     title: DEFAULT_NOTICE_TITLE,
@@ -288,6 +292,7 @@ function plainText(value, max, allowEmpty = true) {
 function validateSection(section, value) {
   if (section === "logo") return validateLogo(value);
   if (section === "subtitle") return plainText(value, 80, false);
+  if (section === "affiliation") return plainText(value, AFFILIATION_MAX);
   if (section === "welcome") {
     if (!value || !Array.isArray(value.examples) || value.examples.length > 5)
       throw Error("예시 질문은 5개 이하로 입력해 주세요.");
@@ -362,6 +367,8 @@ function announcementActive(notice, now = Date.now()) {
 module.exports = {
   DEFAULT_NOTICE_TITLE,
   NOTICE_TITLE_MAX,
+  DEFAULT_AFFILIATION,
+  AFFILIATION_MAX,
   defaults,
   validateLogo,
   validateSvg,

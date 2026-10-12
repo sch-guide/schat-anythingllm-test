@@ -28,6 +28,18 @@ export function LoginShell({ children }) {
           <div className="schat-login__hospital">
             <SchLogo className="schat-login__mark" />
             <span>순천향대학교 부속 천안병원</span>
+            {brand.affiliation?.trim() && (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="schat-login__divider"
+                  data-testid="login-affiliation-divider"
+                />
+                <span data-testid="login-affiliation">
+                  {brand.affiliation.trim()}
+                </span>
+              </>
+            )}
           </div>
           <div>
             <p className="schat-login__eyebrow">HOSPITAL KNOWLEDGE ASSISTANT</p>

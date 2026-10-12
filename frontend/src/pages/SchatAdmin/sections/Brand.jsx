@@ -9,6 +9,8 @@ import { Button, Card, Field, Loading, inputClass } from "../ui";
 import { createBrandEditor } from "../brandController";
 import Brand from "@/models/schatBrand";
 import {
+  AFFILIATION_MAX,
+  DEFAULT_AFFILIATION,
   DEFAULT_NOTICE_TITLE,
   NOTICE_TITLE_MAX,
   fromKoreaInput,
@@ -257,6 +259,29 @@ export function BrandEditorView({ controller, state }) {
             />
           </Field>
           {actions("subtitle")}
+        </form>
+      </Card>
+      <Card
+        title="소속 표시"
+        description="로그인 화면 병원 이름 옆과 메뉴 맨 위 SCHAT 옆에 표시됩니다."
+        help={[
+          `최대 ${AFFILIATION_MAX}자까지 입력해요.`,
+          "비워 두고 저장하면 두 곳 모두 구분선과 함께 숨겨요.",
+          `‘원래대로’를 누르면 ‘${DEFAULT_AFFILIATION}’로 돌아가요.`,
+        ]}
+      >
+        <form {...form("affiliation")}>
+          <Field label="소속 표시" htmlFor="brand-affiliation">
+            <input
+              id="brand-affiliation"
+              className={inputClass}
+              value={draft.affiliation ?? ""}
+              maxLength={AFFILIATION_MAX}
+              disabled={!!state.saving}
+              onChange={(e) => controller.change("affiliation", e.target.value)}
+            />
+          </Field>
+          {actions("affiliation")}
         </form>
       </Card>
       <Card

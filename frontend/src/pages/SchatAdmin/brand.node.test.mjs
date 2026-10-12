@@ -316,8 +316,9 @@ test("실제 관리자 React 화면의 파일선택·공지·저장·초기화�
     html.match(/<label[^>]*for="brand-notice-end"[^>]*>(.*?)<\/label>/s)?.[1],
     "종료 일시"
   );
-  // 4 sections + the notice title's own [원래대로]
-  assert.equal((html.match(/>원래대로<\/button>/g) || []).length, 5);
+  // 5 sections(로고·부제목·소속 표시·공지·첫 화면) + the notice title's own [원래대로]
+  assert.equal((html.match(/>원래대로<\/button>/g) || []).length, 6);
+  assert.match(html, /id="brand-affiliation"[^>]*maxLength="12"|maxLength="12"[^>]*id="brand-affiliation"/);
   find(tree(), (el) => el.props.id === "brand-subtitle").props.onChange({
     target: { value: "시험 부제목" },
   });
@@ -465,8 +466,10 @@ test("브랜드 상세 조건은 짧은 소개와 분리된 키보드 도움말�
   const html = renderToStaticMarkup(
     view.BrandEditorView({ controller: c, state: c.getSnapshot() })
   );
-  assert.equal((html.match(/aria-expanded="false"/g) || []).length, 4);
-  assert.equal((html.match(/aria-controls=/g) || []).length, 4);
+  assert.equal((html.match(/aria-expanded="false"/g) || []).length, 5);
+  assert.equal((html.match(/aria-controls=/g) || []).length, 5);
+  assert.match(html, /비워 두고 저장하면 두 곳 모두 구분선과 함께 숨겨요/);
+  assert.match(html, /‘원래대로’를 누르면 ‘간호교육파트’로 돌아가요/);
   const sections = html.split("<section").slice(1);
   for (const section of sections) {
     assert.match(section, /role="region"/);

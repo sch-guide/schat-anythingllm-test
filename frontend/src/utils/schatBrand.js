@@ -1,6 +1,9 @@
 // 직원 화면 공지 띠의 제목. 비워 두면 "공지사항"으로 보인다.
 export const DEFAULT_NOTICE_TITLE = "공지사항";
 export const NOTICE_TITLE_MAX = 8;
+// 로그인 화면·메뉴의 소속 표시. 비워 두면 두 곳 모두 숨긴다.
+export const DEFAULT_AFFILIATION = "간호교육파트";
+export const AFFILIATION_MAX = 12;
 // 흐르는 공지 글의 속도(1초에 약 50px)와 반복 사이 간격.
 export const NOTICE_SCROLL_SPEED = 50;
 export const NOTICE_SCROLL_GAP = 48;
@@ -11,6 +14,7 @@ let memoryNoticeDismissal = null;
 export const defaultBrand = () => ({
   logo: null,
   subtitle: "병원 실무지침 AI",
+  affiliation: DEFAULT_AFFILIATION,
   announcement: {
     enabled: false,
     title: DEFAULT_NOTICE_TITLE,

@@ -104,6 +104,27 @@ body {
   object-position: 33.333% 50%;
 }
 
+@media (max-width: 360px) {
+  .schat-login .schat-login__brand {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .schat-login .schat-login__hospital {
+    gap: 6px;
+    font-size: 11px;
+  }
+}
+
+/* 병원 이름 | 소속 표시 사이의 반투명 흰색 세로줄 */
+.schat-login__divider {
+  display: inline-block;
+  flex: none;
+  width: 1px;
+  height: 18px;
+  background: rgb(255 255 255 / 0.45);
+}
+
 .schat-login__mark {
   display: block;
   flex: none;
@@ -204,6 +225,13 @@ body {
   .schat-login__brand {
     min-height: 220px;
     padding: 26px;
+  }
+
+  /* 휴대폰: 병원 이름과 소속 표시를 같은 크기로 줄여 한 줄에 둔다(글자 중간 줄바꿈 없음). */
+  .schat-login__hospital {
+    gap: 7px;
+    font-size: 12px;
+    white-space: nowrap;
   }
 
   .schat-login__brand h1 {
