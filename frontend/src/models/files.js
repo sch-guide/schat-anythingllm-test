@@ -2,6 +2,13 @@ import { API_BASE } from "@/utils/constants";
 import { baseHeaders } from "@/utils/request";
 
 const StorageFiles = {
+  originalSpreadsheet: async function(workspaceSlug,ref,{sheet="",start=0}={}) {
+    const query=new URLSearchParams({start:String(start)});
+    if(sheet)query.set("sheet",sheet);
+    const response=await fetch(`${API_BASE}/workspace/${encodeURIComponent(workspaceSlug)}/original-spreadsheet/${encodeURIComponent(ref)}?${query}`,{headers:baseHeaders()});
+    if(!response.ok){const detail=await response.json().catch(()=>null);throw Error(detail?.error||"엑셀 원본을 불러오지 못했습니다. 원본 보관 기능 추가 전에 등록한 파일은 새 이름으로 다시 올려 주세요.");}
+    return response.json();
+  },
   /**
    * Download a file from the server
    * @param {string} filename - The filename to download

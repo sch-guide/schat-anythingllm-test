@@ -102,7 +102,9 @@ function buildPublicRagSource(source = {}, { question = "" } = {}) {
   // Chroma puts the exact context returned for this source on source.text.
   // Do not pair this with contextTexts by array index: source.text remains
   // attached to its own vector metadata throughout retrieval.
-  const excerpt = sanitizeSourceExcerpt(source.text || source.excerpt || "");
+  const excerpt = source.sheetDepartmentContacts
+    ? source.sheetDepartmentContacts.quotes.map(sanitizeSourceExcerpt).join("\n")
+    : sanitizeSourceExcerpt(source.text || source.excerpt || "");
   const title = [
     documentName,
     page === null ? null : `p.${page}`,
@@ -129,7 +131,13 @@ function buildPublicRagSource(source = {}, { question = "" } = {}) {
 
   return {
     ...publicFields,
+    ...(source.sheetDepartmentContacts ? {sheetDepartmentContacts:source.sheetDepartmentContacts} : {}),
+    ...(source.directoryEntries?.length
+      ? { directoryEntries: source.directoryEntries }
+      : {}),
     ...(pdfRef ? { pdfRef } : {}),
+    ...(documentId && /\.(xlsx|xls)$/iu.test(documentName)
+      ? {spreadsheetRef:pdfRefForDocumentId(documentId)} : {}),
     relatedImages: directRelatedImages(source, publicFields, {
       question,
     }).slice(0, 3),

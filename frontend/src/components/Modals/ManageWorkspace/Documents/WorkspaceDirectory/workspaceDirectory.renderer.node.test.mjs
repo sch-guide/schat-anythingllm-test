@@ -100,6 +100,13 @@ async function renderWorkspaceDirectory() {
     plugins: [{
       name: "schat-alias",
       setup(buildApi) {
+        // 닫힌 문서 목록은 PDF 렌더링을 호출하지 않아야 한다.
+        buildApi.onResolve({ filter: /^pdfjs-dist\// }, () => ({
+          path: "pdf-engine", namespace: "closed-viewer",
+        }));
+        buildApi.onLoad({ filter: /.*/, namespace: "closed-viewer" }, () => ({
+          contents: "export default 'synthetic-pdf-worker'; export const GlobalWorkerOptions = {}; export function getDocument() { throw new Error('닫힌 목록에서 PDF를 읽으면 안 됩니다'); }", loader: "js",
+        }));
         buildApi.onResolve({ filter: /^@\// }, (args) => ({
           path: resolveAlias(args.path),
         }));

@@ -8,13 +8,13 @@ import Workspace from "../../../../../models/workspace";
 import debounce from "lodash.debounce";
 import DocumentUpdateStatus from "./DocumentUpdateStatus";
 import { getFilesFromUploadEvent } from "../../../../../utils/folderUpload";
-import { PDF_ACCEPT } from "../uploadStatus";
+import { DOCUMENT_ACCEPT } from "../uploadStatus";
 import {
   mergeUploadCompletion,
   runUploadCompletionSync,
 } from "../hooks/uploadBatch";
 
-// SCHAT registers hospital PDF/document files only. The website import form is
+// SCHAT registers hospital PDF/Excel documents. The website import form is
 // hidden from the UI; the collector's link endpoint is left untouched.
 export const SHOW_LINK_UPLOAD = false;
 
@@ -139,8 +139,7 @@ export default function UploadFile({
     onDrop: enqueueDrop,
     disabled: !ready || busy,
     getFilesFromEvent: getFilesFromUploadEvent,
-    // SCHAT은 병원 PDF만 등록함(원본 PDF·쪽 근거·체크리스트가 PDF 기준).
-    accept: PDF_ACCEPT,
+    accept: DOCUMENT_ACCEPT,
   });
 
   return (
@@ -171,10 +170,10 @@ export default function UploadFile({
               {t("connectors.upload.click-upload")}
             </div>
             <div
-              className="text-white text-opacity-60 text-xs font-medium"
-              data-testid="pdf-only"
+              className="text-white text-opacity-60 text-xs font-medium text-center max-w-xl"
+              data-testid="document-formats"
             >
-              PDF 파일만 등록할 수 있어요.
+              PDF와 엑셀(.xlsx, .xls)을 등록할 수 있어요. 전화번호부는 첫 행에 성명·단축번호·내선번호를 적고, 한 사람씩 한 행에 입력해 주세요.
             </div>
           </div>
         ) : (

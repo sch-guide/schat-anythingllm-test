@@ -41,3 +41,12 @@ test("병원 질문에 근거가 없으면 이전 답변 문맥을 Gemini에 넘
     ]
   );
 });
+
+test("전화번호부 질문은 문서를 먼저 찾고, 존칭 '님'은 검색어에서 뺌", () => {
+  const h = require("../../../../utils/agents/aibitat/utils/hospitalDocumentIntent.js");
+  for (const q of ["시설팀 전화번호 알려줘", "가나다 내선 번호 알려줘", "원무팀 연락처", "비뇨의학과 전담 번호 알려줘"])
+    assert.equal(h.shouldForceHospitalRagSearch(q), true, q);
+  assert.equal(h.shouldForceHospitalRagSearch("오늘 날씨 어때"), false);
+  assert.equal(h.buildHospitalRetrievalQuery("병원장님 번호 알려줘", []), "병원장 번호 알려줘");
+  assert.equal(h.buildHospitalRetrievalQuery("수혈 절차 알려줘", []), "수혈 절차 알려줘");
+});

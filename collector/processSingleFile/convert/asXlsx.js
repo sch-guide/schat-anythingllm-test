@@ -10,27 +10,7 @@ const {
 } = require("../../utils/files");
 const { tokenizeString } = require("../../utils/tokenizer");
 const { default: slugify } = require("slugify");
-
-/**
- * Renders a sheet's rows as RFC 4180 CSV. Fields containing a comma, double quote,
- * or line break are quoted, with embedded quotes doubled.
- * @param {Array<Array<string|number|null|undefined>>} data - Rows of cell values
- * @returns {string} - The rows as CSV
- */
-function convertToCSV(data) {
-  return data
-    .map((row) =>
-      row
-        .map((cell) => {
-          if (cell === null || cell === undefined) return "";
-          const value = String(cell);
-          if (/[",\r\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-          return value;
-        })
-        .join(",")
-    )
-    .join("\n");
-}
+const { spreadsheetText } = require("./spreadsheetText");
 
 async function asXlsx({
   fullFilePath = "",
@@ -39,9 +19,12 @@ async function asXlsx({
   metadata = {},
 }) {
   const documents = [];
+  const documentId = metadata.document_id || v4();
 
   try {
-    const workSheetsFromFile = xlsx.parse(fullFilePath);
+    // Read displayed values: retain number formats such as 0000 and text zeros.
+    // Formula cached values are read; macros/formulas are not executed.
+    const workSheetsFromFile = xlsx.parse(fullFilePath, { raw: false, defval: "" });
 
     if (options.parseOnly) {
       const allSheetContents = [];
@@ -68,15 +51,12 @@ async function asXlsx({
       }
 
       const combinedContent = allSheetContents.join("\n");
-      const sheetListText =
-        sheetNames.length > 1
-          ? ` (Sheets: ${sheetNames.join(", ")})`
-          : ` (Sheet: ${sheetNames[0]})`;
-
       const combinedData = {
         id: v4(),
+        document_id: documentId,
         url: `file://${fullFilePath}`,
-        title: metadata.title || `${filename}${sheetListText}`,
+        title: metadata.title || filename,
+        section: `시트: ${sheetNames.join(", ")}`,
         docAuthor: metadata.docAuthor || "Unknown",
         description:
           metadata.description ||
@@ -118,8 +98,10 @@ async function asXlsx({
         const { name, content, wordCount } = processed;
         const sheetData = {
           id: v4(),
+          document_id: documentId,
           url: `file://${path.join(outFolderPath, `${slugify(name)}.csv`)}`,
-          title: metadata.title || `${filename} - Sheet:${name}`,
+          title: metadata.title || filename,
+          section: `시트: ${name}`,
           docAuthor: metadata.docAuthor || "Unknown",
           description:
             metadata.description || `Spreadsheet data from sheet: ${name}`,
@@ -133,7 +115,7 @@ async function asXlsx({
 
         const document = writeToServerDocuments({
           data: sheetData,
-          filename: `sheet-${slugify(name)}`,
+          filename: `sheet-${slugify(name) || "sheet"}-${sheetData.id}`,
           destinationOverride: outFolderPath,
           options: { parseOnly: options.parseOnly },
         });
@@ -142,6 +124,12 @@ async function asXlsx({
           `[SUCCESS]: Sheet "${name}" converted & ready for embedding.`
         );
       }
+    }
+    if(documents.length && !options.parseOnly) {
+      require("./originalSpreadsheet").persistSpreadsheet({
+        sourcePath:fullFilePath,documentId,filename:metadata.title||filename,
+        storageRoot:path.resolve(documentsFolder,"../original-spreadsheets"),
+      });
     }
   } catch (err) {
     console.error("Could not process xlsx file!", err);
@@ -172,12 +160,12 @@ async function asXlsx({
 /**
  * Processes a single sheet and returns its content and metadata
  * @param {{name: string, data: Array<Array<string|number|null|undefined>>}} sheet - Parsed sheet with name and 2D array of cell values
- * @returns {{name: string, content: string, wordCount: number}|null} - Object with name, CSV content, and word count, or null if sheet is empty
+ * @returns {{name: string, content: string, wordCount: number}|null} - Labeled rows, or null if sheet is empty
  */
 function processSheet(sheet) {
   try {
     const { name, data } = sheet;
-    const content = convertToCSV(data);
+    const content = spreadsheetText({ name, data });
 
     if (!content?.length) {
       console.log(`Sheet "${name}" is empty. Skipping.`);

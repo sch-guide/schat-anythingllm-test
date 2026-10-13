@@ -24,6 +24,16 @@ const conflicts = [
     documents: [{ docpath: "test/old.json", documentId: "old" }],
   },
 ];
+test("엑셀 신규 등록은 허용하고 같은 이름 교체는 명확한 안내로 차단", async () => {
+  const excel=[{file:{name:"전화번호부.xlsx"}}];
+  const fresh=setup(async()=>({success:true,conflicts:[]}));
+  assert.equal(await fresh.batch.prepare(excel),true);
+  assert.equal(fresh.uploaded.length,1);
+  const duplicate=setup(async()=>({success:true,conflicts:[{name:"전화번호부.xlsx",documents:[{docpath:"test/sheet.json",documentId:"sheet"}]}]}));
+  assert.equal(await duplicate.batch.prepare(excel),false);
+  assert.equal(duplicate.uploaded.length,0);
+  assert.match(duplicate.states.at(-1).error,/엑셀.*같은 이름/);
+});
 test("파일 읽기 도중 화면을 닫으면 늦은 prepare 호출도 차단한다", async () => {
   const { batch, uploaded, states } = setup(async () => ({ success: true, conflicts: [] }));
   let resolve;

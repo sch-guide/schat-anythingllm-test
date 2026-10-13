@@ -77,12 +77,15 @@ const {
   scheduleSynonymSuggestions,
 } = require("../utils/synonyms/suggestions");
 
+// 체크리스트를 보여줄 문서 번호. 같은 이름 업데이트로 보관된 예전 버전은 빼서
+// 직원·관리자 화면에 예전 버전 체크리스트가 남지 않게 함.
 function workspaceDocumentIds(documents = []) {
   return [
     ...new Set(
       documents
         .map((document) => {
           const metadata = safeJsonParse(document.metadata, {});
+          if (metadata?.schat_document_update_archived === true) return "";
           return String(metadata?.document_id || "").trim();
         })
         .filter(Boolean)
@@ -108,6 +111,7 @@ async function logUploadFailure(request, response, stage, detail = "") {
 
 function workspaceEndpoints(app) {
   if (!app) return;
+  require("./originalSpreadsheets")(app);
   const responseCache = new Map();
 
   // Confirmed batch update: isolated PDF preparation precedes guarded cutover.
@@ -122,6 +126,20 @@ function workspaceEndpoints(app) {
         const result=await require('../utils/documentUpdates/service').executeDocumentUpdate({
           workspace:response.locals.workspace,files:request.files,manifest,
         });
+        // 새 버전 체크리스트 다시 만들기: 예전 버전 체크리스트와 같으면 기존 판정
+        // (공개·관리자 수정)을 이어받고, 다르면 "검토 필요". 실패해도 업데이트는 유지.
+        if (result?.success)
+          await processDocumentChecklists(
+            (result.results || []).flatMap((item) =>
+              (item.documents || []).map((doc) => ({ location: doc.docpath }))
+            ),
+            {
+              onIssues: (issues) =>
+                logChecklistIssues(issues, response.locals?.user?.id),
+            }
+          ).catch((error) =>
+            console.error("[document-update] checklist extraction failed", error?.message)
+          );
         // 새 버전 문서의 동의어 후보: 같은 후보는 다시 만들지 않고 새 표현만 "검토 필요".
         if (result?.success)
           await scheduleSynonymSuggestions(
@@ -206,7 +224,10 @@ function workspaceEndpoints(app) {
           root: documentsPath,
           workspaceId: response.locals.workspace.id,
           prisma: require("../utils/prisma"),
-          pdfMeta: publicOriginalPdfMetadata,
+          pdfMeta: (metadata) => ({
+            ...publicOriginalPdfMetadata(metadata),
+            ...require("../utils/originalSpreadsheet").publicOriginalSpreadsheetMetadata(metadata),
+          }),
           keyOf: (documentId) =>
             require("../utils/schatAdmin/storageCleanup").groupKey(
               "document",

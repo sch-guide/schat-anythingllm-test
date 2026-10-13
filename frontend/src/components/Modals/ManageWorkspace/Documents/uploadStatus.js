@@ -2,6 +2,14 @@
 // 보여주지 않고 관리자 시스템 기록(문서 처리 실패)에서 확인함.
 
 export const PDF_ACCEPT = { "application/pdf": [".pdf"] };
+export const DOCUMENT_ACCEPT = {
+  ...PDF_ACCEPT,
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+  "application/vnd.ms-excel": [".xls"],
+};
+export function isSupportedDocumentFile(file) {
+  return /\.(pdf|xlsx|xls)$/i.test(String(file?.name || ""));
+}
 
 export const STATUS_TEXT = {
   pending: "대기 중",
@@ -21,6 +29,7 @@ export function uploadFailureReason(raw = "") {
     return "지원하지 않는 파일";
   if (/not online|processing api/i.test(text)) return "문서 처리기 연결 안 됨";
   if (/file-too-large/i.test(text)) return "파일이 너무 큼";
+  if (/xlsx|xls\b|spreadsheet|excel|엑셀/i.test(text)) return "엑셀 읽기 실패";
   if (
     /pdf|no text content|could not (read|parse)|encrypted|password/i.test(text)
   )

@@ -221,6 +221,7 @@ test("HTTP cancelled during model selection cannot reach retrieval or generation
   };
   const chunks = [];
   const stream = load("utils/chats/stream.js", {
+    "../agents/aibitat/utils/sheetDepartmentContacts": {departmentContactTarget:()=>null,resolveWorkspaceDepartmentContact:async()=>null},
     uuid: { v4: () => "test" },
     "../DocumentManager": {},
     "../../models/workspaceChats": {},

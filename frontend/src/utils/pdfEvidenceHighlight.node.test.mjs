@@ -274,6 +274,10 @@ test("only practical guide documents receive highlight text without mutating evi
     texts
   );
   assert.equal(documentEvidenceTexts("간호 실무 지침.pdf", texts), texts);
+  assert.equal(
+    documentEvidenceTexts("붙임 2. 2026년도 원내 전화번호부(2026.09.01).pdf", texts),
+    texts
+  );
   for (const name of ["검사 및 시술(260326).pdf", "수술.pdf", "", undefined]) {
     assert.deepEqual(documentEvidenceTexts(name, texts), []);
   }

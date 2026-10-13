@@ -108,6 +108,8 @@ function classifyStorage(input) {
     vectorCounts = { body: 0, image: 0 },
     knownDocumentIds = null,
     originalReferences = null,
+    checklistFilesByDocument = null,
+    liveDocumentIds = null,
   } = input;
   // 실제 운영 자료를 읽을 때는 항상 연결 확인 결과가 들어옴(없으면 null).
   const checksReferences = Object.prototype.hasOwnProperty.call(
@@ -184,6 +186,20 @@ function classifyStorage(input) {
       imageDescriptionVectors: imageVectorsByDocument.get(documentId) || 0,
       relatedImagesReferenced: relatedImageFolders.has(documentId),
     };
+    // 등록·검색·이미지·원본 보기 어디에도 안 쓰이고 체크리스트만 남은 업로드:
+    // 그 체크리스트는 직원·관리자 화면에 나오지 않으므로(등록된 문서만 표시)
+    // 사용 중으로 보지 않고, 삭제할 때 함께 지움(파일 목록을 알 때만).
+    let orphanChecklists = 0;
+    let checklistFiles = [];
+    if (
+      usage.checklists > 0 &&
+      checklistFilesByDocument instanceof Map &&
+      !isInUse({ ...usage, checklists: 0 })
+    ) {
+      orphanChecklists = usage.checklists;
+      checklistFiles = checklistFilesByDocument.get(documentId) || [];
+      usage.checklists = 0;
+    }
     const inUse = isInUse(usage);
     const cacheFiles = records.flatMap((r) => r.cacheFiles || []);
     const reasons = [];
@@ -238,6 +254,8 @@ function classifyStorage(input) {
         ? { exists: true, bytes: original.bytes, inUse: inUse }
         : { exists: false, bytes: 0, inUse: false },
       usage,
+      orphanChecklists,
+      checklistFiles, // internal only
       status,
       reasons,
     });
@@ -355,10 +373,11 @@ function classifyStorage(input) {
         pages: inUse.reduce((s, g) => s + g.usage.workspacePages, 0),
         bodyVectors: vectorCounts.body,
         imageVectors: vectorCounts.image,
-        checklists: [...checklistDocumentIds.values()].reduce(
-          (s, n) => s + n,
-          0
-        ),
+        // 현재 등록 문서(예전 버전 제외)의 체크리스트만 셈. 문서 번호 목록이
+        // 없으면(예전 검사 자료) 전체를 셈.
+        checklists: [...checklistDocumentIds.entries()]
+          .filter(([id]) => !(liveDocumentIds instanceof Set) || liveDocumentIds.has(id))
+          .reduce((sum, [, n]) => sum + n, 0),
         originals: inUse.filter((g) => g.original.exists).length,
       },
       cleanup: {
@@ -512,6 +531,7 @@ function compareOperationalSnapshots(before = {}, after = {}) {
 const SAFE_DOCUMENT_ID = /^[A-Za-z0-9][A-Za-z0-9-]{7,}$/;
 const SAFE_PAGE_FILE = /^[^/\\]+\.json$/;
 const SAFE_CACHE_FILE = /^[a-f0-9-]{36}\.json$/;
+const SAFE_CHECKLIST_FILE = /^[a-f0-9]{64}\.json$/;
 
 function isInside(dir, target) {
   const relative = path.relative(dir, target);
@@ -527,12 +547,13 @@ function isInside(dir, target) {
  * Every file/folder a deletion may remove, resolved from the internal group
  * data. Throws on anything protected or unexpected instead of skipping it.
  */
-function deletionTargets(groups, root) {
+function deletionTargets(groups, root, { checklistsDir = null } = {}) {
   const dirs = {
     pages: path.join(root, "documents", "custom-documents"),
     cache: path.join(root, "vector-cache"),
     images: path.join(root, "document-images"),
     originals: path.join(root, "original-documents"),
+    checklists: checklistsDir || path.join(root, "document-checklists"),
   };
   const files = [];
   const folders = [];
@@ -551,6 +572,11 @@ function deletionTargets(groups, root) {
     for (const name of group.cacheFileNames || []) {
       if (!SAFE_CACHE_FILE.test(name)) throw new Error("unsafe cache file");
       add(files, dirs.cache, name);
+    }
+    for (const name of group.checklistFiles || []) {
+      if (!SAFE_CHECKLIST_FILE.test(name))
+        throw new Error("unsafe checklist file");
+      add(files, dirs.checklists, name);
     }
     if (!group.documentId || !SAFE_DOCUMENT_ID.test(group.documentId))
       throw new Error("unsafe document id");
@@ -611,6 +637,7 @@ async function executeStorageCleanup(
     loadInputs = loadStorageCleanupInputs,
     root = storageRoot(),
     at = new Date(),
+    checklistsDir = null,
   } = {}
 ) {
   const before = classifyStorage(await loadInputs());
@@ -627,7 +654,15 @@ async function executeStorageCleanup(
   if (selected.some((g) => live.has(g.documentId)))
     return { ok: false, stage: "verify", preview };
 
-  const targets = deletionTargets(selected, root);
+  // 실제 운영 경로에서는 체크리스트 저장 위치를 그대로 씀(환경 변수 설정 포함).
+  const targets = deletionTargets(selected, root, {
+    checklistsDir:
+      checklistsDir ||
+      (root === storageRoot()
+        ? require("../documentChecklists/repository").ChecklistRepository
+            .storageRoot
+        : null),
+  });
   const manifest = buildCleanupManifest(before, keys, {
     adminUsername: actorId ? `user:${actorId}` : null,
     at,
@@ -778,6 +813,7 @@ function publicGroup(group) {
     originalName: _originalName,
     pageFiles: _pages,
     cacheFileNames: _cache,
+    checklistFiles: _checklistFiles,
     references,
     ...rest
   } = group;
@@ -871,6 +907,8 @@ async function loadStorageCleanupInputs() {
   });
   const referenceIdentities={checklists:[],workspaces:[],search:[],images:[]};
   const workspaceDocumentIds = new Set();
+  // 현재 등록 문서 번호(같은 이름 업데이트로 보관된 예전 버전 제외): 체크리스트 수 계산용
+  const liveDocumentIds = new Set();
   const imageFolderByKey = new Map();
   const workspaceDocs = rows.map((row) => {
     let metadata = {};
@@ -884,6 +922,8 @@ async function loadStorageCleanupInputs() {
     }
     if (metadata.document_id)
       workspaceDocumentIds.add(String(metadata.document_id).trim());
+    if (metadata.document_id && metadata.schat_document_update_archived !== true)
+      liveDocumentIds.add(String(metadata.document_id).trim());
     if(metadata.document_id)referenceIdentities.workspaces.push({document_id:String(metadata.document_id).trim(),id:JSON.stringify([row.id,row.workspaceId,row.docId,row.docpath])});
     return {
       docpath: row.docpath,
@@ -960,8 +1000,13 @@ async function loadStorageCleanupInputs() {
   }
 
   const checklistDocumentIds = new Map();
-  for (const checklist of ChecklistRepository.listAll()) {
+  const checklistFilesByDocument = new Map();
+  for (const { name, checklist } of ChecklistRepository.listEntries()) {
     if (!checklist?.documentId) continue;
+    checklistFilesByDocument.set(checklist.documentId, [
+      ...(checklistFilesByDocument.get(checklist.documentId) || []),
+      name,
+    ]);
     referenceIdentities.checklists.push({document_id:checklist.documentId,id:checklist.id});
     checklistDocumentIds.set(
       checklist.documentId,
@@ -1077,6 +1122,8 @@ async function loadStorageCleanupInputs() {
     imageVectorsByDocument,
     relatedImageFolders,
     checklistDocumentIds,
+    checklistFilesByDocument,
+    liveDocumentIds,
     imageFolders,
     originals,
     descriptionCache: folderStats(path.join(imagesDir, ".description-cache")),

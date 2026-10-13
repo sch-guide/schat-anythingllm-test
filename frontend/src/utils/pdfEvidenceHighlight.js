@@ -215,6 +215,7 @@ export function pdfHighlightUrl(objectUrl, page, position, zoomPercent) {
 }
 
 // Display policy only; never changes citation selection or source metadata.
+// 연두색 근거 표시는 실무지침서와 전화번호부에만 함(표가 많은 다른 문서는 위치가 부정확).
 export function documentEvidenceTexts(documentName, texts) {
-  return /실무\s*지침/u.test(String(documentName || "")) ? texts : [];
+  return /실무\s*지침|전화번호부/u.test(String(documentName || "")) ? texts : [];
 }

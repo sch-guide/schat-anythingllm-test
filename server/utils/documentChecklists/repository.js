@@ -129,6 +129,20 @@ function createChecklistRepository({
     }
   }
 
+  // 저장공간 점검용: 파일 이름과 내용(읽기만). 등록 안 된 문서의 체크리스트를
+  // 그 문서와 함께 지울 때 어떤 파일인지 알아야 함.
+  function listEntries() {
+    ensureRoot();
+    return fs
+      .readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+      .map((entry) => ({
+        name: entry.name,
+        checklist: readFile(path.join(root, entry.name)),
+      }))
+      .filter((entry) => entry.checklist);
+  }
+
   function listAll() {
     ensureRoot();
     return fs
@@ -336,6 +350,7 @@ function createChecklistRepository({
     findByDocumentIds,
     getById,
     listAll,
+    listEntries,
   };
 }
 

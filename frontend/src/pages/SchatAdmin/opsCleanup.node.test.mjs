@@ -49,7 +49,7 @@ test("mobile citations open a full-screen PDF/텍스트 source view", () => {
   const screen = src(`${dir}MobileSourceScreen.jsx`);
   const canvas = src(`${dir}PdfPageCanvas.jsx`);
   // PC keeps the inline viewer; mobile opens the dedicated screen instead
-  assert.match(row, /!isMobile && isOpen && \(excerpt \|\| source\?\.pdfRef\)/);
+  assert.match(row, /!isMobile && isOpen && \(excerpt \|\| source\?\.pdfRef \|\| isExcel\)/);
   assert.match(row, /isMobile && mobileOpen && \(\s*<MobileSourceScreen/);
   // header: back to chat, source name, both tabs always visible
   assert.match(screen, /채팅으로/);

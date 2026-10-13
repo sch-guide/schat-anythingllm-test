@@ -493,6 +493,25 @@ test("붙여 쓴 말 안의 주제도 본문 근거로 찾고, 그림 설명·�
   assert.equal(none.length, 0);
 });
 
+test("재업로드 자료는 오래된 PDF 번호 대신 현재 등록된 문단 연결로 찾음", async () => {
+  const generation = require("../../../utils/schatQuiz/generation");
+  const vectorDb = { connect: async () => ({ client: { getCollection: async () => ({
+    get: async (args) => args.ids ? {
+      ids: ["linked"], documents: ["가상 중심정맥관 확인 절차"],
+      metadatas: [{ document_id: "old-pdf", page: 3 }],
+    } : { ids: [], documents: [], metadatas: [] },
+  }) } }) };
+  const db = { document_vectors: { findMany: async ({ where }) => {
+    assert.deepEqual(where.docId.in, ["current-page"]);
+    return [{ vectorId: "linked" }];
+  } } };
+  const evidence = await generation.collectEvidence({
+    documentId: "new-pdf", workspaceSlug: "ws", topic: "중심정맥관",
+    docIds: ["current-page"],
+  }, { vectorDb, db });
+  assert.deepEqual(evidence.map((e) => e.page), [3]);
+});
+
 test("근거 없음 안내에 선택한 문서 이름과 주제를 보여줌", async () => {
   const generation = require("../../../utils/schatQuiz/generation");
   const doc = [...LIVE.values()][0];

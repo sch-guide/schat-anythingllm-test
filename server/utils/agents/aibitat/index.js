@@ -324,6 +324,7 @@ class AIbitat {
     this._pendingRagSourceKeys = new Set();
     this._pendingRagImageKeys = new Set();
     this._forcedRagSearchQueries = new Set();
+    this.functions.get("rag-memory")?.searchTracker?.reset("runs");
   }
 
   async forceHospitalRagSearch(question = "", ragMemory = null) {
@@ -1232,6 +1233,8 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
       const completion = await this.#safeProviderCall(() =>
         stream
           ? completeWithEvidence({
+              workspace: this.handlerProps?.invocation?.workspace,
+              currentQuestion: this.chats.findLast(c=>c.from==='USER')?.content,
               provider: this.providerInstance,
               sources: this.getRagMemorySources(),
               messages: attemptMessages,
@@ -1239,6 +1242,8 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
               eventHandler,
             })
           : completeWithEvidence({
+              workspace: this.handlerProps?.invocation?.workspace,
+              currentQuestion: this.chats.findLast(c=>c.from==='USER')?.content,
               provider: this.providerInstance,
               sources: this.getRagMemorySources(),
               messages: attemptMessages,
@@ -1284,6 +1289,8 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     /** @type {{ functionCall: { name: string, arguments: string }, textResponse: string }} */
     const completionStream = await this.#safeProviderCall(() =>
       completeWithEvidence({
+        workspace: this.handlerProps?.invocation?.workspace,
+        currentQuestion: this.chats.findLast(c=>c.from==='USER')?.content,
         provider: this.providerInstance,
         sources: this.getRagMemorySources(),
         messages,
@@ -1481,6 +1488,8 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     // get the chat completion
     const completion = await this.#safeProviderCall(() =>
       completeWithEvidence({
+        workspace: this.handlerProps?.invocation?.workspace,
+        currentQuestion: this.chats.findLast(c=>c.from==='USER')?.content,
         provider: this.providerInstance,
         sources: this.getRagMemorySources(),
         messages,

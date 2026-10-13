@@ -41,9 +41,9 @@ test("직원 이미지 검증은 모델 연결과 문서 검색보다 먼저 실
 test("직원 이미지 질문은 명령·에이전트 우회 없이 안전 채팅 경로만 사용한다", () => {
   assert.match(
     source,
-    /if \(!hasSafetyImage && Object\.keys\(VALID_COMMANDS\)\.includes\(updatedMessage\)\)/
+    /if\s*\(\s*!hasSafetyImage\s*&&\s*updatedMessage !== "\/img"\s*&&\s*Object\.keys\(VALID_COMMANDS\)\.includes\(updatedMessage\)\s*\)/
   );
-  assert.match(source, /const isAgentChat = hasSafetyImage\s*\? false/);
+  assert.match(source, /const isAgentChat =\s*hasSafetyImage \|\| updatedMessage === "\/img"\s*\? false/);
 });
 
 test("검색 근거가 없으면 일반지식 대신 관련 근거 부족 안내로 중단한다", () => {
@@ -53,6 +53,6 @@ test("검색 근거가 없으면 일반지식 대신 관련 근거 부족 안내
   );
   assert.match(
     source,
-    /if \(\(chatMode === "query" \|\| safetyEnabled\) && contextTexts\.length === 0\)/
+    /if\s*\(\s*\(chatMode === "query" \|\| safetyEnabled\) &&\s*contextTexts\.length === 0\s*\)/
   );
 });

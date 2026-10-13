@@ -35,8 +35,14 @@ const HOSPITAL_DOCUMENT_ROOTS = [
   "모니터링",
 ];
 
+// 전화번호부 질문("시설팀 전화번호 알려줘", "○○ 내선 번호")도 등록 문서에서
+// 먼저 찾도록 함. 이런 질문에는 위 지침 용어가 없어 AI가 검색 없이 답하던 문제.
+const CONTACT_ROOTS = ["전화", "번호", "내선", "연락처"];
+
 const HOSPITAL_QUERY_ALIASES = [
   { pattern: /피\s*(?:를\s*)?넣기/u, replacement: "수혈" },
+  // 존칭 "님"은 문서에 없음: "병원장님" → "병원장" (문서 검색어에서만)
+  { pattern: /([가-힣]{2,})님(?=[\s?!.,]|$)/gu, replacement: "$1" },
 ];
 const FOLLOW_UP_PATTERN = /(?:그중에서|그중|그거|그\s*다음|그\s*후)/u;
 
@@ -48,8 +54,10 @@ function applyHospitalQueryAliases(question = "") {
 }
 
 function hasHospitalDocumentTerm(question = "") {
-  return queryTokens(question).some((token) =>
-    HOSPITAL_DOCUMENT_ROOTS.some((root) => token.includes(root))
+  return queryTokens(question).some(
+    (token) =>
+      HOSPITAL_DOCUMENT_ROOTS.some((root) => token.includes(root)) ||
+      CONTACT_ROOTS.some((root) => token.includes(root))
   );
 }
 

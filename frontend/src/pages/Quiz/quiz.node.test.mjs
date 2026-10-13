@@ -98,7 +98,7 @@ test("every admin section has a menu icon", async () => {
   const sidebar = src("../../components/SettingsSidebar/index.jsx");
   const icons = sidebar.slice(sidebar.indexOf("const SECTION_ICONS"));
   for (const { key } of SCHAT_ADMIN_SECTIONS)
-    assert.match(icons, new RegExp(`\\n  ${key}: \\w+,`), key);
+    assert.match(icons, new RegExp(`\\n  ["']?${key}["']?: \\w+,`), key);
 });
 
 test("score, result, own history and wrong-answer notes (no AI)", () => {

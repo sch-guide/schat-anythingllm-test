@@ -17,6 +17,8 @@ import OutlookLogo from "@/pages/Admin/Agents/OutlookSkillPanel/outlook.png";
 import { toPercentString } from "@/utils/numbers";
 import { useTranslation } from "react-i18next";
 import SourceExcerpt from "../../SourcesSidebar/SourceExcerpt";
+import EvidenceText from "../../SourcesSidebar/EvidenceText";
+import SpreadsheetViewer from "./SpreadsheetViewer";
 import RelatedImages from "../RelatedImages";
 import PdfPageViewer from "./PdfPageViewer";
 import MobileSourceScreen, { useMobileViewport } from "./MobileSourceScreen";
@@ -39,6 +41,7 @@ export function SourceEvidenceRow({
   source,
   index,
   workspaceSlug,
+  answerText = "",
   initiallyOpen = false,
   initiallyExpanded = false,
 }) {
@@ -54,8 +57,9 @@ export function SourceEvidenceRow({
   const contentId = useId();
   const excerpt =
     (typeof source?.excerpt === "string" && source.excerpt.trim()) ||
-    (/\.txt$/i.test(sourceDocumentName(source)) && typeof source?.text === "string"
+    (/\.(txt|xlsx|xls)$/i.test(sourceDocumentName(source)) && typeof source?.text === "string"
       ? source.text.trim() : "");
+  const isExcel = /\.(xlsx|xls)$/iu.test(sourceDocumentName(source));
   const isLong = excerpt.length > LONG_EXCERPT_LENGTH;
   const summary = sourceSummary(source);
   const paragraphs = excerpt
@@ -82,17 +86,17 @@ export function SourceEvidenceRow({
           </span>
           {summary && ` · ${summary}`}
         </p>
-        {(excerpt || source?.pdfRef) && isMobile && (
+        {(excerpt || source?.pdfRef || isExcel) && isMobile && (
           <button
             type="button"
             aria-haspopup="dialog"
             onClick={() => setMobileOpen(true)}
             className="w-fit shrink-0 text-left text-xs font-medium text-blue-300 hover:text-blue-200 light:text-blue-700 light:hover:text-blue-800"
           >
-            근거 원문 보기 ▸
+            {isExcel ? "원본 보기 ▸" : "근거 원문 보기 ▸"}
           </button>
         )}
-        {(excerpt || source?.pdfRef) && !isMobile && (
+        {(excerpt || source?.pdfRef || isExcel) && !isMobile && (
           <button
             type="button"
             aria-expanded={isOpen}
@@ -100,7 +104,7 @@ export function SourceEvidenceRow({
             onClick={() => setIsOpen((open) => !open)}
             className="w-fit shrink-0 text-left text-xs font-medium text-blue-300 hover:text-blue-200 light:text-blue-700 light:hover:text-blue-800"
           >
-            {isOpen ? "근거 원문 접기 ▲" : "근거 원문 보기 ▼"}
+            {isExcel ? (isOpen ? "원본 접기 ▲" : "원본 보기 ▼") : (isOpen ? "근거 원문 접기 ▲" : "근거 원문 보기 ▼")}
           </button>
         )}
       </div>
@@ -108,6 +112,7 @@ export function SourceEvidenceRow({
       {isMobile && mobileOpen && (
         <MobileSourceScreen
           source={source}
+          answerText={answerText}
           summary={summary}
           paragraphs={paragraphs}
           documentName={sourceDocumentName(source)}
@@ -116,7 +121,7 @@ export function SourceEvidenceRow({
         />
       )}
 
-      {!isMobile && isOpen && (excerpt || source?.pdfRef) && (
+      {!isMobile && isOpen && (excerpt || source?.pdfRef || isExcel) && (
         <section
           id={contentId}
           className="mt-3 min-w-0 rounded-lg bg-zinc-900/60 px-4 py-4 light:bg-slate-100 sm:px-7"
@@ -131,12 +136,14 @@ export function SourceEvidenceRow({
               onUnavailable={markPdfUnavailable}
               onShowText={() => setTextMode(true)}
             />
+          ) : isExcel ? (
+            <SpreadsheetViewer source={source} workspaceSlug={workspaceSlug} answerText={answerText} />
           ) : (
             <div className="mx-auto w-full max-w-[720px]">
               {pdfDeleted && <p role="status" className="mb-3 text-xs text-zinc-400 light:text-slate-500">원본이 삭제되었습니다</p>}
               {!source?.pdfRef && (
                 <p role="status" className="mb-3 text-xs text-zinc-400 light:text-slate-500">
-                  원문 보기는 PDF 문서만 지원합니다. 아래는 답변에 사용된 근거 텍스트입니다.
+                  아래는 문서에서 읽은 근거 텍스트입니다. 연두색은 답변에 사용된 부분입니다.
                 </p>
               )}
               <div className="mb-3 flex items-center justify-between gap-2">
@@ -161,11 +168,7 @@ export function SourceEvidenceRow({
                       : "max-h-[50vh] overflow-y-auto pr-1"
                   }`}
                 >
-                  {paragraphs.map((paragraph, paragraphIndex) => (
-                    <p key={paragraphIndex} className="whitespace-pre-line">
-                      {paragraph}
-                    </p>
-                  ))}
+                  <EvidenceText text={excerpt} quotes={source.highlightTexts || []} />
                 </div>
                 {isLong && !isExpanded && (
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-zinc-900 to-transparent light:from-slate-100" />
@@ -309,6 +312,7 @@ function normalizedSourcePage(source = {}) {
 }
 
 function sourceIdentity(source = {}) {
+  if(source.spreadsheetRef)return `sheet:${source.spreadsheetRef}:${source.section||""}`;
   if (typeof source.pdfRef === "string" && source.pdfRef.trim())
     return `pdf:${source.pdfRef.trim()}`;
   const documentName = sourceDocumentName(source).trim().toLocaleLowerCase();
@@ -424,7 +428,7 @@ export default function Citations({
               <summary className="cursor-pointer font-medium">검색된 참고 자료 보기</summary>
               <p className="my-2 text-theme-text-secondary">답변의 직접 근거로 확인되지 않은 자료입니다.</p>
               {referenceSources.map((source, index) => (
-                <SourceEvidenceRow key={`reference-${index}`} source={source} index={index} workspaceSlug={workspaceSlug} />
+                <SourceEvidenceRow key={`reference-${index}`} source={source} index={index} workspaceSlug={workspaceSlug} answerText={answer} />
               ))}
             </details>
           )}
@@ -436,6 +440,7 @@ export default function Citations({
             key={`${sourceIdentity(source) || "source"}-${normalizedSourcePage(source) || index}`}
             source={source}
             index={index}
+            answerText={answer}
             workspaceSlug={workspaceSlug}
           />
         ))}

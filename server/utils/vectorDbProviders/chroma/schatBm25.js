@@ -91,10 +91,39 @@ const COVERAGE_REQUEST_WORDS = new Set([
 ]);
 
 const { termAlternatives } = require("../../synonyms");
+const {CONTACT_ALIAS_GROUPS,departmentAlternatives,splitContactAliasQuery}=require("../../chats/directoryContactAliases");
+function directoryQueryTokens(query){return queryTokens(splitContactAliasQuery(query));}
+function matchesDirectorySubject(text,term){return departmentAlternatives(term).some(alias=>exactDirectorySubject(text,alias));}
 
 function coverageTerms(terms = []) {
   const content = terms.filter((term) => !COVERAGE_REQUEST_WORDS.has(term));
   return content.length ? content : terms;
+}
+const DIRECTORY_CONTACT_WORDS = new Set(["전화번호","전화","번호","내선번호","내선","단축번호","단축","직통번호","직통","연락처"]);
+function directoryContactSubjects(terms, candidate) {
+  const title=candidate?.metadata?.title || candidate?.metadata?.document_name || "";
+  const directory=/전화\s*번호부/u.test(title) ||
+    (/\.(xlsx|xls)(?:\s|$)/iu.test(title) && /(?:단축|내선|직통|전화)\s*번호|연락처/u.test(title));
+  if (!directory) return [];
+  if (!terms.some(term=>DIRECTORY_CONTACT_WORDS.has(term))) return [];
+  return coverageTerms(terms).filter(term=>!DIRECTORY_CONTACT_WORDS.has(term));
+}
+function matchesDirectoryContact(terms, candidate) {
+  const subjects = directoryContactSubjects(terms, candidate);
+  return subjects.length > 0 && subjects.every(term => matchesDirectorySubject(candidate.text, term));
+}
+function hasNumberedDirectoryContact(terms, candidate) {
+  if (!matchesDirectoryContact(terms, candidate)) return false;
+  const subjects = directoryContactSubjects(terms, candidate);
+  return String(candidate.text || "").split(/\n/u).some(row =>
+    subjects.every(term => matchesDirectorySubject(row, term)) &&
+    /(?:^|\|)\s*(?:행\s+\d+\s*:\s*)?(?:내선|전화|단축|직통)\s*(?:번호)?\s*[:：]\s*\d{2,}/u.test(row)
+  );
+}
+function exactDirectorySubject(text, term) {
+  const escaped=String(term).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+  const pattern=/^[가-힣]+$/u.test(escaped) ? [...escaped].join("\\s*") : escaped;
+  return new RegExp(`(^|[^가-힣A-Za-z0-9])${pattern}(?=$|[^가-힣A-Za-z0-9])`,"iu").test(String(text||"").normalize("NFKC"));
 }
 
 // Questions that explicitly ask for a picture. Only these questions use the
@@ -865,7 +894,7 @@ function rankByBm25(
   documents = [],
   { k1 = 1.5, b = 0.75, synonymGroups = [] } = {}
 ) {
-  const terms = queryTokens(query);
+  const terms = directoryQueryTokens(query);
   if (terms.length === 0) return [];
   const index = bm25IndexFor(documents);
   const { prepared, averageLength } = index;
@@ -875,9 +904,9 @@ function rankByBm25(
   // words of its group. A group counts as one word of the question and only
   // its best-matching word adds to the score, so a question without synonyms
   // is scored exactly as before.
-  const alternatives = synonymGroups.length
-    ? termAlternatives(terms, synonymGroups, singleTokenForm)
-    : null;
+  const baseAlternatives = synonymGroups.length ? termAlternatives(terms,synonymGroups,singleTokenForm) : null;
+  const groups=terms.some(term=>DIRECTORY_CONTACT_WORDS.has(term))?[...synonymGroups,...CONTACT_ALIAS_GROUPS]:synonymGroups;
+  const alternatives = groups.length ? termAlternatives(terms,groups,singleTokenForm) : null;
   const alternativesOf = (token) => alternatives?.get(token) || [token];
 
   const documentFrequency = new Map();
@@ -901,6 +930,12 @@ function rankByBm25(
   const contentTerms = new Set(coverageTerms(terms));
   return prepared
     .map((document, position) => {
+      // A directory's number column can be labeled "내선번호" while the user
+      // asks for "전화번호". Keep the existing threshold and clinical rules;
+      // only directory candidates measure coverage by the named person/team.
+      const contactSubjects=directoryContactSubjects(terms,document);
+      const documentAlternativesOf=token=>contactSubjects.length?alternativesOf(token):(baseAlternatives?.get(token)||[token]);
+      const documentContentTerms = contactSubjects.length ? new Set(contactSubjects) : contentTerms;
       let bm25Score = 0;
       let matchedQueryTokens = 0;
       let matchedContentTerms = 0;
@@ -913,7 +948,7 @@ function rankByBm25(
       };
       // Does this chunk match a specific (3+ letter) word of the question?
       const strongMatch = terms.some((token) =>
-        alternativesOf(token).some(
+        documentAlternativesOf(token).some(
           (word) =>
             word.length >= SPACING_STRONG_LENGTH && frequencyOf(word, false) > 0
         )
@@ -921,7 +956,7 @@ function rankByBm25(
       for (const token of terms) {
         let best = 0;
         let matched = false;
-        for (const word of alternativesOf(token)) {
+        for (const word of documentAlternativesOf(token)) {
           const frequency = frequencyOf(word, strongMatch);
           if (frequency === 0) continue;
           matched = true;
@@ -942,7 +977,7 @@ function rankByBm25(
         }
         if (!matched) continue;
         matchedQueryTokens += 1;
-        if (contentTerms.has(token)) matchedContentTerms += 1;
+        if (documentContentTerms.has(token)) matchedContentTerms += 1;
         bm25Score += best;
       }
       const { tokenCount, tokens, compact, ...result } = document;
@@ -957,13 +992,17 @@ function rankByBm25(
       return {
         ...result,
         bm25Score: bm25Score * (1 + sectionCoverage + titleCoverage * 0.25),
-        bm25Coverage: matchedContentTerms / contentTerms.size,
+        bm25Coverage: contactSubjects.length
+          ? contactSubjects.filter(term=>matchesDirectorySubject(document.text,term)).length/contactSubjects.length
+          : matchedContentTerms / documentContentTerms.size,
         sectionCoverage,
         titleCoverage,
       };
     })
     .filter((document) => document.bm25Score > 0)
     .sort((left, right) => {
+      const directoryPriority = Number(matchesDirectoryContact(terms, right)) - Number(matchesDirectoryContact(terms, left));
+      if (directoryPriority) return directoryPriority;
       if (right.bm25Score !== left.bm25Score)
         return right.bm25Score - left.bm25Score;
       return stableDocumentOrder(left, right);
@@ -981,6 +1020,13 @@ function fuseGeminiAndBm25(
     maxImageResults = Number.POSITIVE_INFINITY,
   } = {}
 ) {
+  // A named contact found in the directory is the evidence for a number
+  // question. General guidelines mentioning the department add no number.
+  const contactTerms = directoryQueryTokens(queryText);
+  if ([...vectorRanked, ...bm25Ranked].some(candidate => hasNumberedDirectoryContact(contactTerms, candidate))) {
+    vectorRanked = vectorRanked.filter(candidate => hasNumberedDirectoryContact(contactTerms, candidate));
+    bm25Ranked = bm25Ranked.filter(candidate => hasNumberedDirectoryContact(contactTerms, candidate));
+  }
   const eligibleVectorRanked = dedupePublicEvidence(
     filterNonAnswerMaterialCandidates(vectorRanked, queryText)
   );
@@ -1117,7 +1163,7 @@ function filterWeakHybridTail(
     queryText = "",
   } = {}
 ) {
-  const terms = queryTokens(queryText);
+  const terms = directoryQueryTokens(queryText);
   const evidenceTerms = evidenceQueryTerms(queryText);
   const bestExactCoverage = ranked.reduce(
     (best, candidate) =>
@@ -1162,6 +1208,8 @@ function filterWeakHybridTail(
       imageSubjects.length;
 
   return ranked.filter((candidate) => {
+    const contactSubjects=directoryContactSubjects(terms,candidate);
+    if(contactSubjects.length && !contactSubjects.every(term=>matchesDirectorySubject(candidate.text,term))) return false;
     if (
       /(?:전체적|핵심|요약)/u.test(String(queryText)) &&
       /[.·]{5,}/u.test(String(candidate?.text || ""))
@@ -1171,8 +1219,10 @@ function filterWeakHybridTail(
     if (bm25Coverage >= minimumBm25Coverage) return true;
     if (containsAbbreviations(candidate)) return true;
     if (
+      !isImageRequest(queryText) &&
       evidenceTerms.length > 0 &&
-      matchesEveryEvidenceTerm(candidate?.text, evidenceTerms)
+      matchesEveryEvidenceTerm(candidate?.text, evidenceTerms) &&
+      (!detectQuestionIntent(queryText) || matchesEveryEvidenceTerm(candidate?.text, coverageTerms(terms)))
     )
       return true;
     const vectorScore =

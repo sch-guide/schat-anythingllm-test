@@ -18,6 +18,7 @@ const ACCEPTED_MIMES = {
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
     ".xlsx",
   ],
+  "application/vnd.ms-excel": [".xls"],
 
   "application/vnd.oasis.opendocument.text": [".odt"],
   "application/vnd.oasis.opendocument.presentation": [".odp"],
@@ -64,6 +65,7 @@ const SUPPORTED_FILETYPE_CONVERTERS = {
   ".odp": "./convert/asOfficeMime.js",
 
   ".xlsx": "./convert/asXlsx.js",
+  ".xls": "./convert/asXlsx.js",
 
   ".mbox": "./convert/asMbox.js",
 

@@ -156,6 +156,51 @@ test("문서 선택은 작업 공간 안의 허용 정보만 반환함", async (
   assert.equal(result.items[0].registeredAt, "2026-10-01T00:00:00.000Z");
   assert.equal(JSON.stringify(result).includes("private"), false);
 });
+test("같은 이름은 등록 번호·버전이 달라도 목록 하나로 묶고 문단별 버전은 보존", async () => {
+  const { viewer, workspace, docs, vectors } = fixture({ count: 2 });
+  docs[0].metadata = JSON.stringify({ document_id: "pdf", page: 2 });
+  docs.push({ ...docs[0], id: 2, docId: "page-one",
+    metadata: JSON.stringify({ document_id: "pdf", page: 1 }) });
+  docs.push({ ...docs[0], id: 3, docId: "old",
+    metadata: JSON.stringify({ document_id: "old-pdf", page: 1,
+      schat_document_update_archived: true }) });
+  vectors[1].docId = "page-one";
+  const list = await viewer.documents(workspace);
+  assert.equal(list.items.length, 1);
+  assert.equal(list.items[0].pageCount, 2);
+  const result = await viewer.chunks(workspace, { documentId: "doc-a" });
+  assert.deepEqual(result.items.map((item) => item.id), ["v1", "v0"]);
+});
+
+test("요청한 세 문서는 각각 한 항목이며 여러 쪽·문단을 모두 조회함", async () => {
+  const { viewer, workspace, docs, vectors } = fixture({ count: 0 });
+  const base = docs[0];
+  docs.length = 0;
+  const names = ["검사 및 시술(26.04.07).pdf", "2026실무지침서 (26.7).pdf", "수술(260306).pdf"];
+  for (const [n, name] of names.entries()) {
+    for (let p = 1; p <= 3; p++) {
+      const docId = `document-${n}-${p}`;
+      docs.push({ ...base, id: docs.length + 1, docId, filename: name,
+        metadata: JSON.stringify({ title: name, document_id: docId, page: p,
+          document_version: p === 3 ? "old" : "new",
+          schat_document_update_archived: p === 3 }) });
+      vectors.push({ id: vectors.length + 1, docId, vectorId: `v-${n}-${p}` });
+    }
+  }
+  const before = JSON.stringify({ docs, vectors });
+  const list = await viewer.documents(workspace);
+  assert.deepEqual(list.items.map((d) => d.name), names);
+  for (const [i, doc] of list.items.entries()) {
+    const result = await viewer.chunks(workspace, { documentId: doc.documentId });
+    assert.deepEqual(result.items.map((c) => c.id), [1, 2, 3].map((p) => `v-${i}-${p}`));
+    assert.deepEqual(result.items.map((c) => c.documentId), [1, 2, 3].map((p) => `document-${i}-${p}`));
+    assert.deepEqual(result.items.map((c) => c.page), [1, 2, 3]);
+    assert.deepEqual(result.items.map((c) => c.version), ["new", "new", "old"]);
+    assert.deepEqual(result.items.map((c) => c.status), ["current", "current", "previous"]);
+  }
+  assert.deepEqual(await viewer.documents(workspace), list);
+  assert.equal(JSON.stringify({ docs, vectors }), before);
+});
 test("청크 목록·키워드 검색·페이지 이동은 collection.get만 사용함", async () => {
   const { viewer, workspace, reads } = fixture({ count: 55 });
   const first = await viewer.chunks(workspace, { documentId: "doc-a" });
@@ -177,6 +222,26 @@ test("청크 목록·키워드 검색·페이지 이동은 collection.get만 사
   assert.equal(search.items[0].version, "명시 버전");
   assert.ok(reads.length > 0);
   assert.equal(JSON.stringify(search).includes("private"), false);
+});
+
+test("여러 등록 기록으로 나뉜 60쪽도 한 항목에서 다음 목록까지 모두 조회", async () => {
+  const { viewer, workspace, docs, vectors } = fixture({ count: 60 });
+  const base = docs[0];
+  docs.length = 0;
+  for (let i = 0; i < 60; i++) {
+    const docId = `page-${i}`;
+    docs.push({ ...base, id: i + 1, docId,
+      metadata: JSON.stringify({ title: "가짜 전체.pdf", document_id: docId, page: i + 1 }) });
+    vectors[i].docId = docId;
+  }
+  const list = await viewer.documents(workspace);
+  assert.equal(list.items.length, 1);
+  const documentId = list.items[0].documentId;
+  const first = await viewer.chunks(workspace, { documentId });
+  const next = await viewer.chunks(workspace, { documentId, offset: String(first.nextOffset) });
+  assert.equal(next.hasMore, false);
+  assert.deepEqual([...first.items, ...next.items].map((c) => c.page),
+    Array.from({ length: 60 }, (_, i) => i + 1));
 });
 test("빈 검색·없는 문서·지원하지 않는 공급자·조회 오류를 구분함", async () => {
   const { viewer, workspace } = fixture();
@@ -282,7 +347,7 @@ test("원본 PDF id와 페이지 등록 id가 달라도 정확한 chunk_id로 �
   });
   const documents = await viewer.documents(workspace, {});
   assert.equal(documents.items[0].name, "원본 시험.pdf");
-  assert.equal(documents.items[0].page, 2);
+  assert.equal(documents.items[0].pageCount, 1);
   const detail = await viewer.chat(workspace, "7");
   assert.equal(detail.sources[0].chunk.id, "v0");
   assert.equal(detail.sources[0].documentId, "doc-a");

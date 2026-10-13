@@ -13,6 +13,28 @@ const {
   limitImageDescriptionCandidates,
 } = require("../../../../utils/vectorDbProviders/chroma/schatBm25");
 
+test("전화번호부의 전화번호 질문은 이름·부서로 찾되 일반 지침에는 적용하지 않음", () => {
+  const text="성명: 가나다 | 부서: 가상부 | 내선번호: 0123";
+  const docs=[{id:"phone",text,metadata:{title:"통합전화번호부.xlsx"}},
+    {id:"clinical",text,metadata:{title:"실무지침서.pdf"}}];
+  for(const question of ["가나다 전화번호","가상부 전화번호","가나다 연락처"]) {
+    const ranked=rankByBm25(question,docs);
+    assert.equal(ranked.find(d=>d.id==="phone").bm25Coverage,1);
+    assert.equal(ranked.find(d=>d.id==="clinical").bm25Coverage,0.5);
+    assert.deepEqual(fuseGeminiAndBm25([],ranked,{queryText:question}).map(d=>d.id),["phone"]);
+  }
+  assert.equal(rankByBm25("없는사람 전화번호",docs).find(d=>d.id==="phone")?.bm25Coverage||0,0);
+});
+test("전화번호부는 다른 사람 이름의 앞·뒤 일부를 실제 이름으로 취급하지 않음",()=>{
+ const docs=[{id:"other",text:"성명: 가나다라 | 내선번호: 0123",metadata:{title:"전화번호부.xlsx"}}];
+ for(const question of ["가나다 전화번호","나다라 내선번호"])
+  assert.deepEqual(fuseGeminiAndBm25([],rankByBm25(question,docs),{queryText:question}),[]);
+});
+test("단축번호·업무형태처럼 전화번호부라는 이름이 없는 연락처 엑셀도 검색",()=>{
+ const docs=[{id:"contacts",text:"과명: 가상과 | 성명: 가나다/라마바 | 단축번호: 0123",metadata:{title:"가상팀 단축번호_업무형태.xlsx"}}];
+ assert.deepEqual(fuseGeminiAndBm25([],rankByBm25("가나다 전화번호",docs),{queryText:"가나다 전화번호"}).map(d=>d.id),["contacts"]);
+});
+
 test("image descriptions cannot displace more than one text result", () => {
   const candidates = [
     { id: "image-1", metadata: { content_type: "image_description" } },

@@ -1,5 +1,6 @@
 **/server/utils/agents/aibitat/example/**
 **/server/storage/documents/**
+**/server/storage/original-spreadsheets/**
 **/server/storage/vector-cache/**
 **/server/storage/*.db
 **/server/storage/lancedb

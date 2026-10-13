@@ -18,3 +18,4 @@ docs/02_멘토링/산출물_2026-09-30/로컬전용_원자료/
 # Document update journals may contain source text. Never commit runtime data.
 server/storage/document-updates/
 collector/storage/document-updates/
+server/storage/original-spreadsheets/

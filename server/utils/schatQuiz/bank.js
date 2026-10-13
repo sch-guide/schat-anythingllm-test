@@ -66,7 +66,7 @@ async function liveDocuments({ fresh = false, db = prisma } = {}) {
   });
   const slugById = new Map(workspaces.map((w) => [w.id, w.slug]));
   const rows = await db.workspace_documents.findMany({
-    select: { workspaceId: true, metadata: true },
+    select: { workspaceId: true, docId: true, metadata: true },
   });
   const map = new Map();
   for (const row of rows) {
@@ -87,9 +87,12 @@ async function liveDocuments({ fresh = false, db = prisma } = {}) {
       version: m.document_version || null,
       workspaceSlug: slugById.get(row.workspaceId) || null,
       pages: new Set(),
+      docIds: [],
     };
     const page = Number(m.page);
     if (Number.isInteger(page) && page > 0) doc.pages.add(page);
+    if (row.docId && slugById.get(row.workspaceId) === doc.workspaceSlug)
+      doc.docIds.push(row.docId);
     map.set(id, doc);
   }
   if (db === prisma && !writeContext.getStore()) liveCache = { at: Date.now(), map };

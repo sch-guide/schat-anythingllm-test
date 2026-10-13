@@ -23,6 +23,19 @@ const SEARCH_INTENT_TERMS = new Set([
   "주의사항",
 ]);
 
+// 전화번호부 질문용: 전화번호부 본문에는 "전화번호·내선번호" 같은 말이 없고 이름·부서와
+// 숫자만 있어, 이런 말이 검색어에 있으면 핵심 단어 비율이 모자라 결과가 빠짐.
+// 이 말들을 뺀 검색어를 하나 더 만들어 원래 검색과 함께 씀(원래 검색은 그대로).
+const CONTACT_WORD =
+  /^(?:전화번호|내선번호|단축번호|직통번호|휴대폰번호|핸드폰번호|연락처|전화|내선|단축|번호)$/u;
+
+function contactQueryVariant(question = "") {
+  const tokens = queryTokens(String(question || "").normalize("NFKC"));
+  if (!tokens.some((token) => CONTACT_WORD.test(token))) return null;
+  const rest = tokens.filter((token) => !CONTACT_WORD.test(token));
+  return rest.length ? rest.join(" ") : null;
+}
+
 function uniqueQueries(values = [], limit = 4) {
   const seen = new Set();
   const queries = [];
@@ -92,6 +105,8 @@ function buildBodySearchQueries(question = "", { maxVariations = 3 } = {}) {
     ];
   }
 
+  const contact = contactQueryVariant(original);
+  if (contact) variations = [contact, ...variations];
   return uniqueQueries([original, ...variations], variationLimit + 1);
 }
 
@@ -174,6 +189,7 @@ async function runExpandedBodySearch({
 }
 
 module.exports = {
+  contactQueryVariant,
   buildBodySearchQueries,
   mergeBodySearchResults,
   runExpandedBodySearch,

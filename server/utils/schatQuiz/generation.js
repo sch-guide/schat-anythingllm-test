@@ -88,8 +88,8 @@ function systemPrompt({ type, difficulty }) {
  * collection and the existing BM25 ranking. No embedding/LLM call.
  */
 async function collectEvidence(
-  { documentId, workspaceSlug, topic },
-  { vectorDb = null } = {}
+  { documentId, workspaceSlug, topic, docIds },
+  { vectorDb = null, db = prisma } = {}
 ) {
   const { getVectorDbClass } = require("../helpers");
   const {
@@ -103,7 +103,22 @@ async function collectEvidence(
       ? VectorDb.normalize(workspaceSlug)
       : workspaceSlug,
   });
-  const stored = await collection.get({
+  let stored;
+  if (Array.isArray(docIds)) {
+    // Reused vector caches may retain an earlier upload's document_id.
+    // The current registration-to-vector mapping is the authoritative link.
+    const mappings = await db.document_vectors.findMany({
+      where: { docId: { in: docIds } }, select: { vectorId: true },
+    });
+    const ids = [...new Set(mappings.map((v) => v.vectorId))];
+    stored = { ids: [], documents: [], metadatas: [] };
+    for (let i = 0; i < ids.length; i += 100) {
+      const batch = await collection.get({ ids: ids.slice(i, i + 100),
+        include: ["documents", "metadatas"] });
+      for (const key of ["ids", "documents", "metadatas"])
+        stored[key].push(...batch[key]);
+    }
+  } else stored = await collection.get({
     where: { document_id: documentId },
     include: ["documents", "metadatas"],
   });
@@ -285,6 +300,7 @@ async function generate(
       documentId: doc.documentId,
       workspaceSlug: doc.workspaceSlug,
       topic: request.topic,
+      docIds: doc.docIds,
     },
     { vectorDb }
   );
@@ -433,6 +449,7 @@ async function regenerate(
       documentId: q.document_id,
       workspaceSlug: doc.workspaceSlug,
       topic: q.topic,
+      docIds: doc.docIds,
     },
     { vectorDb }
   );

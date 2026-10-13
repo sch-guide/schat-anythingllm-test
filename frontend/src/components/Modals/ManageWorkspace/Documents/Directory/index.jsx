@@ -157,7 +157,7 @@ export default function Directory({
     const status = libraryStatus(doc, staged, processing);
     const removal = deleteState(doc, groups, isAdmin);
     const checklists = checklistCount(doc, groups);
-    const canView = !!doc.pdfRef && doc.originalPdfAvailable === true;
+    const canView = (!!doc.pdfRef && doc.originalPdfAvailable === true) || (!!doc.spreadsheetRef && doc.originalSpreadsheetAvailable === true && ["registered", "partial"].includes(doc.status));
     const current = ["registered", "partial"].includes(doc.status);
     return (
       <div
@@ -339,6 +339,9 @@ export default function Directory({
       {deleting && (
         <DeleteOldDocumentDialog
           doc={deleting}
+          checklists={
+            Number(groups?.get(deleting.cleanupKey)?.orphanChecklists) || 0
+          }
           onClose={() => setDeleting(null)}
           onDeleted={handleDeleted}
         />
@@ -351,7 +354,12 @@ export default function Directory({
  * 예전 문서 삭제 확인창. [삭제]를 누르면 서버가 다시 점검(미리보기)한 뒤
  * 삭제하고, 삭제 직후 현재 자료가 그대로인지 한 번 더 확인함.
  */
-export function DeleteOldDocumentDialog({ doc, onClose, onDeleted }) {
+export function DeleteOldDocumentDialog({
+  doc,
+  checklists = 0,
+  onClose,
+  onDeleted,
+}) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -396,6 +404,12 @@ export function DeleteOldDocumentDialog({ doc, onClose, onDeleted }) {
           <br />
           삭제 후 복구할 수 없습니다.
         </p>
+        {checklists > 0 && (
+          <p className="mt-2 text-xs" data-testid="orphan-checklists">
+            이 문서에만 연결된 체크리스트 {checklists}개도 함께 삭제됩니다.
+            (직원 화면에는 나오지 않던 기록입니다)
+          </p>
+        )}
         {busy && (
           <p className="mt-2 text-xs text-theme-text-secondary animate-pulse">
             서버가 다시 확인하고 삭제하는 중입니다. 1~2분 걸릴 수 있어요.

@@ -7,13 +7,19 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-test("text-only retrieved source remains openable and explains PDF limitation", async () => {
+test("text-only retrieved source remains openable and explains evidence text", async () => {
   const source = { title: "시험.txt", text: "시험카드를 확인합니다." };
   const closed = await renderEvidenceRow(source);
   assert.match(closed, /aria-expanded="false"/);
   const opened = await renderEvidenceRow(source, { initiallyOpen: true });
   assert.match(opened, /시험카드를 확인합니다/);
-  assert.match(opened, /원문 보기는 PDF 문서만 지원합니다/);
+  assert.match(opened, /문서에서 읽은 근거 텍스트/);
+});
+test("엑셀 출처는 설명·변환텍스트 없이 읽기 전용 원본으로 연결",async()=>{
+ const source={documentName:"전화번호부.xlsx",title:"전화번호부.xlsx",text:"변환 텍스트",spreadsheetRef:"ref"};
+ const html=await renderEvidenceRow(source,{initiallyOpen:true});
+ assert.match(html,/원본 접기/);
+ assert.doesNotMatch(html,/근거 원문|문서에서 읽은|변환 텍스트|다운로드|원본 셀 배치/);
 });
 
 const frontendRoot = path.resolve(

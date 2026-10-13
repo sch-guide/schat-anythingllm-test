@@ -10,6 +10,8 @@ import { createPortal } from "react-dom";
 import { ArrowLeft } from "@phosphor-icons/react";
 import RelatedImages from "../RelatedImages";
 import { sourceHighlightTexts } from "@/utils/pdfEvidenceHighlight";
+import EvidenceText from "../../SourcesSidebar/EvidenceText";
+import SpreadsheetViewer from "./SpreadsheetViewer";
 
 // pdf.js is only downloaded when a phone opens an original PDF.
 const PdfPageCanvas = lazy(() => import("./PdfPageCanvas"));
@@ -44,12 +46,14 @@ export function useMobileViewport() {
  */
 export default function MobileSourceScreen({
   source,
+  answerText = "",
   summary,
   paragraphs,
   documentName,
   workspaceSlug,
   onClose,
 }) {
+  const isExcel = /\.(xlsx|xls)$/iu.test(documentName || "");
   const hasPdf = Boolean(source?.pdfRef && workspaceSlug);
   const [tab, setTab] = useState(hasPdf ? "pdf" : "text");
   const [pdfFailed, setPdfFailed] = useState(!hasPdf);
@@ -113,9 +117,9 @@ export default function MobileSourceScreen({
       }}
     >
       <header className="flex flex-col gap-2 border-b border-zinc-800 px-3 pb-2 pt-2 light:border-slate-200">
-        {!source?.pdfRef && (
+        {!source?.pdfRef && !isExcel && (
           <p role="status" className="text-xs text-zinc-400 light:text-slate-500">
-            원문 보기는 PDF 문서만 지원합니다. 아래는 답변에 사용된 근거 텍스트입니다.
+            아래는 문서에서 읽은 근거 텍스트입니다. 연두색은 답변에 사용된 부분입니다.
           </p>
         )}
         <div className="flex items-center gap-2">
@@ -135,7 +139,7 @@ export default function MobileSourceScreen({
         >
           {summary || documentName || "근거 원문"}
         </p>
-        <div
+        {!isExcel && <div
           role="tablist"
           aria-label="원문 보기 방식"
           className="flex gap-1 rounded-lg bg-zinc-800/70 p-1 light:bg-slate-100"
@@ -159,7 +163,7 @@ export default function MobileSourceScreen({
           >
             텍스트 원문
           </button>
-        </div>
+        </div>}
       </header>
 
       {/* Both panels stay mounted so switching tabs keeps the rendered page. */}
@@ -195,17 +199,14 @@ export default function MobileSourceScreen({
           </p>
         )}
         <div className="space-y-3 break-words text-[15px] leading-[1.75] text-zinc-100 light:text-slate-900">
-          {paragraphs.length > 0 ? (
-            paragraphs.map((paragraph, index) => (
-              <p key={index} className="whitespace-pre-line">
-                {paragraph}
-              </p>
-            ))
+          {isExcel && <SpreadsheetViewer source={source} workspaceSlug={workspaceSlug} answerText={answerText} />}
+          {!isExcel && (paragraphs.length > 0 ? (
+            <EvidenceText text={paragraphs.join("\n\n")} quotes={source.highlightTexts || []} />
           ) : (
             <p className="text-zinc-400 light:text-slate-500">
               표시할 텍스트 근거가 없습니다.
             </p>
-          )}
+          ))}
         </div>
         <RelatedImages
           images={source.relatedImages || []}

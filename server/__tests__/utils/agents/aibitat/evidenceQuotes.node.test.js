@@ -16,6 +16,10 @@ const makeSources = () => [
     text: "This unrelated page must not be boxed.",
   },
 ];
+test("같은 이름·본문의 서로 다른 원본 엑셀은 인용 식별자를 공유하지 않음",()=>{
+ const a={documentName:"전화번호부.xlsx",text:"성명: 가나다 | 내선번호: 0123",spreadsheetRef:"first"};
+ assert.notEqual(evidenceSourceId(a),evidenceSourceId({...a,spreadsheetRef:"second"}));
+});
 test("paraphrased answers retain validated verbatim quotes on their own source", async () => {
   const sources = makeSources();
   const quote = "Observe the test indicator after the procedure.";

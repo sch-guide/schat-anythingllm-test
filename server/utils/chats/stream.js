@@ -114,7 +114,8 @@ async function streamChatWithWorkspace(
 
   // Only standalone SCHAT query/chat answers are eligible. Preflight checks the raw
   // history/private-file records and captures document generation before I/O.
-  const answerCacheRequest = await prepareAnswerCache({
+  const directoryContacts = require('../agents/aibitat/utils/sheetDepartmentContacts');
+  const answerCacheRequest = directoryContacts.departmentContactTarget(message) ? null : await prepareAnswerCache({
     workspace, message, updatedMessage, chatMode, user, thread, attachments,
   });
   if (response.destroyed || response.writableEnded) return;
@@ -192,6 +193,17 @@ async function streamChatWithWorkspace(
         session.check();
         writeResponseChunk(response, data);
         return;
+      }
+      if(!attachments.length){
+        const contact=await require('../agents/aibitat/utils/sheetDepartmentContacts').resolveWorkspaceDepartmentContact(workspace,message);
+        session.check();
+        if(contact){
+          const sources=[contact.source],metrics={localDirectoryAnswer:true,prompt_tokens:0,completion_tokens:0,total_tokens:0,duration:0};
+          writeResponseChunk(response,{uuid,type:'textResponseChunk',textResponse:contact.text,sources,close:true,error:false,metrics});
+          const chat=await persistDeliveredAnswer({workspaceId:workspace.id,prompt:message,response:{text:contact.text,sources,type:chatMode,attachments:[],metrics,searchOutcome:{version:2,status:'answered'}},threadId:thread?.id||null,user});
+          writeResponseChunk(response,{uuid,type:'finalizeResponseStream',close:true,error:false,chatId:chat?.id??null,metrics});
+          return;
+        }
       }
       const {
         connector: LLMConnector,

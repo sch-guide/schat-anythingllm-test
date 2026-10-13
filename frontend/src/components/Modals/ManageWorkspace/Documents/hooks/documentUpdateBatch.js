@@ -29,7 +29,7 @@ export function createDocumentUpdateBatch({
       try {
         if (items.some((item) => item.rejected))
           throw new Error(
-            "PDF가 아닌 파일처럼 올릴 수 없는 파일이 포함되어 있습니다. PDF 파일만 다시 선택해 주세요."
+            "올릴 수 없는 파일이 포함되어 있습니다. PDF 또는 엑셀(.xlsx, .xls)만 다시 선택해 주세요."
           );
         const result = await preview(items.map(({ file }) => file.name));
         if (current !== generation) return false;
@@ -55,6 +55,8 @@ export function createDocumentUpdateBatch({
           publish({ phase: "idle" });
           return true;
         }
+        if (items.some(({file})=>/\.(xlsx|xls)$/i.test(file.name)))
+          throw new Error("엑셀이 포함된 묶음은 같은 이름 자동 업데이트를 지원하지 않습니다. 엑셀 파일 이름을 바꾸고 PDF 업데이트와 따로 등록해 주세요. 기존 자료는 변경하지 않았습니다.");
         pending = { items, conflicts: result.conflicts };
         publish({
           phase: "confirming",

@@ -26,6 +26,10 @@ async function asPdf({
 }) {
   const pdfLoader = new PDFLoader(fullFilePath, {
     splitPages: true,
+    // 제목에 "전화번호부"가 있으면 표 칸을 띄어 읽음(다른 문서는 그대로).
+    directoryLayout: require("./directoryText").isDirectoryDocument(
+      metadata.title || filename
+    ),
   });
 
   console.log(`-- Working ${filename} --`);

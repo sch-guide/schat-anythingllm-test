@@ -167,6 +167,7 @@ const memory = {
         aibitat.function({
           super: aibitat,
           tracker: new Deduplicator(),
+          searchTracker: new Deduplicator(),
           name: this.name,
           description:
             "Search your local documents and workspace files for relevant information, or store information to long-term memory. Use search to find answers in uploaded documents, embedded files, or previously stored memories. Use store only when explicitly asked to remember or save something.",
@@ -213,7 +214,10 @@ const memory = {
           },
           handler: async function ({ action = "", content = "" }) {
             try {
-              const { isDuplicate } = this.tracker.isDuplicate(this.name, {
+              // Searches repeat legitimately on the next employee question.
+              // Store deduplication remains session-wide to avoid duplicate writes.
+              const tracker = action === "search" ? this.searchTracker : this.tracker;
+              const { isDuplicate } = tracker.isDuplicate(this.name, {
                 action,
                 content,
               });
@@ -224,7 +228,7 @@ const memory = {
               if (action === "search") response = await this.search(content);
               if (action === "store") response = await this.store(content);
 
-              this.tracker.trackRun(this.name, { action, content });
+              tracker.trackRun(this.name, { action, content });
               return response;
             } catch (error) {
               console.log(error);
@@ -240,18 +244,45 @@ const memory = {
                   prompt: query,
                 });
               const vectorDB = getVectorDbClass();
-              const {
-                contextTexts = [],
-                sources = [],
-                relatedImageSources = [],
-              } =
-                await vectorDB.performSimilaritySearch({
+              const searchOnce = (input) =>
+                vectorDB.performSimilaritySearch({
                   namespace: workspace.slug,
-                  input: query,
+                  input,
                   LLMConnector,
                   topN: workspace?.topN ?? 4,
                   rerank: workspace?.vectorSearchMode === "rerank",
                 });
+              let result = await searchOnce(query);
+              // 전화번호부 질문("○○ 전화번호")은 연락처 단어를 뺀 검색을 한 번 더 해서
+              // 원래 결과와 합침(원래 검색이 먼저). 다른 질문은 그대로 한 번만 검색.
+              const {
+                contactQueryVariant,
+                mergeBodySearchResults,
+              } = require("../../../chats/expandedBodySearch");
+              const contactQuery = contactQueryVariant(query);
+              if (contactQuery && !result?.message) {
+                const extra = await searchOnce(contactQuery).catch(() => null);
+                if (extra && !extra.message)
+                  result = {
+                    ...mergeBodySearchResults([result, extra], {
+                      limit: Math.max(
+                        result.sources?.length || 0,
+                        workspace?.topN ?? 4
+                      ),
+                    }),
+                    relatedImageSources: result.relatedImageSources || [],
+                  };
+              }
+              if (result.sources?.length) {
+                const { enrichDirectorySources } = require("../utils/directoryEvidence");
+                const contactQuestion=String(this.super.handlerProps.invocation.prompt || query).replace(/^@agent\s*/u,'');
+                result.sources = await enrichDirectorySources(result.sources, contactQuestion);
+              }
+              const {
+                contextTexts = [],
+                sources = [],
+                relatedImageSources = [],
+              } = result;
 
               if (sources.length === 0) {
                 this.super.introspect(

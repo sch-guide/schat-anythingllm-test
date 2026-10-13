@@ -444,3 +444,47 @@ test("과거 답변 출처·퀴즈가 가리키는 예전 업로드는 삭제 �
   // 연결 확인 실패(null) → 삭제하지 않음
   assert.equal(statusOfOld(fixture({ originalReferences: null })).status, STATUS.REVIEW);
 });
+
+test("등록 안 된 업로드에만 붙은 체크리스트는 사용 중으로 보지 않고 문서와 함께 삭제", async () => {
+  const { root, loadInputs: baseInputs } = makeStorage();
+  const checklistsDir = path.join(root, "document-checklists");
+  fs.mkdirSync(checklistsDir, { recursive: true });
+  const files = {
+    [CHECKLIST_ONLY]: ["a".repeat(64) + ".json", "b".repeat(64) + ".json"],
+    [CURRENT]: ["c".repeat(64) + ".json"],
+  };
+  for (const [id, names] of Object.entries(files))
+    for (const name of names)
+      fs.writeFileSync(path.join(checklistsDir, name), JSON.stringify({ documentId: id }));
+  const loadInputs = async () => {
+    const input = await baseInputs();
+    const counts = new Map();
+    const byDoc = new Map();
+    for (const name of fs.readdirSync(checklistsDir)) {
+      const { documentId } = JSON.parse(fs.readFileSync(path.join(checklistsDir, name), "utf8"));
+      counts.set(documentId, (counts.get(documentId) || 0) + 1);
+      byDoc.set(documentId, [...(byDoc.get(documentId) || []), name]);
+    }
+    return { ...input, checklistDocumentIds: counts, checklistFilesByDocument: byDoc, liveDocumentIds: new Set([CURRENT]) };
+  };
+  const report = classifyStorage(await loadInputs());
+  const orphan = report.groups.find((g) => g.kind === "upload" && g.title === "가상검사.pdf");
+  assert.equal(orphan.status, STATUS.OLD_UPLOAD);
+  assert.equal(orphan.orphanChecklists, 2);
+  assert.equal(report.summary.current.checklists, 1, "현재 문서 체크리스트만 셈");
+  assert.equal(JSON.stringify(publicReport(report)).includes("a".repeat(64)), false, "파일 이름은 화면에 안 보냄");
+  const current = report.groups.find((g) => g.usage.workspacePages > 0);
+  assert.equal(current.status, STATUS.IN_USE);
+  const result = await executeStorageCleanup([orphan.key], { loadInputs, root, actorId: 1 });
+  assert.equal(result.ok, true);
+  assert.deepEqual(fs.readdirSync(checklistsDir), files[CURRENT], "현재 문서 체크리스트는 그대로");
+  assert.deepEqual(result.before, result.after);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("체크리스트 파일 이름이 이상하면 삭제 대상을 만들지 않음", () => {
+  const group = classifyStorage(fixture({ checklistFilesByDocument: new Map([[CHECKLIST_ONLY, ["../x.json"]]]) }))
+    .groups.find((g) => g.title === "가상검사.pdf");
+  assert.equal(group.status, STATUS.OLD_UPLOAD);
+  assert.throws(() => deletionTargets([group], os.tmpdir()), /unsafe checklist file/);
+});

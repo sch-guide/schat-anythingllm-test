@@ -10,6 +10,28 @@ const {
   ragSourceIdentity,
 } = require("../../../../utils/agents/aibitat/utils/ragSources");
 const AIbitat = require("../../../../utils/agents/aibitat");
+test('이어 묻는 전담 연락처는 최초 질문이 아닌 현재 질문으로 답하고 전체 근거를 전달',async()=>{
+  const contacts=require('../../../../utils/agents/aibitat/utils/sheetDepartmentContacts');
+  const original=contacts.resolveWorkspaceDepartmentContact;
+  const seen=[];
+  contacts.resolveWorkspaceDepartmentContact=async(workspace,question)=>{
+    assert.equal(workspace.id,71);seen.push(question);
+    return {text:'가나다: 1234\n라마바: 5678',source:{title:'합성.xlsx',evidenceQuotes:['가나다: 1234','라마바: 5678']}};
+  };
+  try{
+    const ai=new AIbitat({provider:'openai',handlerProps:{invocation:{workspace:{id:71},prompt:'최초 다른 질문'},log:()=>{}}});
+    const events=[];ai.socket={send:(type,data)=>events.push({type,...data})};
+    ai.providerInstance={resetCumulativeUsage(){},getCumulativeUsage(){return{};},stream(){throw Error('unexpected model call');}};
+    for(const q of ['가상 전담 번호','다른과 전담번호']){
+      ai.clearCitations();ai.newMessage({from:'USER',to:'agent',content:q});
+      const answer=await ai.handleAsyncExecution([{role:'user',content:q}],[],'agent');
+      assert.equal(answer,'가나다: 1234\n라마바: 5678');
+      assert.equal(ai.getRagMemorySources()[0].evidenceQuotes.length,2);
+    }
+    assert.deepEqual(seen,['가상 전담 번호','다른과 전담번호']);
+    assert.equal(events.filter(e=>e.type==='citations').length,2);
+  }finally{contacts.resolveWorkspaceDepartmentContact=original;}
+});
 const { WorkspaceChats } = require("../../../../models/workspaceChats");
 const {
   chatHistory,

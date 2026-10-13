@@ -19,6 +19,7 @@ function fixture() {
     performSimilaritySearch:async()=>{if(state.onSearch)await state.onSearch();return {contextTexts:['synthetic evidence'],sources:[{document_name:'synthetic',page:3}],relatedImageSources:[]};}};
   const connector={promptWindowLimit:()=>1000,defaultTemp:0};
   const modules={
+    '../agents/aibitat/utils/sheetDepartmentContacts':{departmentContactTarget:require('../../utils/agents/aibitat/utils/sheetDepartmentContacts').departmentContactTarget,resolveWorkspaceDepartmentContact:async()=>state.contact||null},
     uuid:{v4:()=>`uuid-${state.records.length}`},
     '../DocumentManager':{DocumentManager:class {async pinnedDocs(){if(state.onPins)await state.onPins();return [];}}},
     '../documentUpdates/searchSnapshot':{withSearchSnapshot:(_workspace,operation)=>state.withSnapshot?state.withSnapshot(operation):operation(),filterArchivedHistory:async(_workspace,history)=>history},
@@ -53,6 +54,16 @@ function fixture() {
   return {cache,state,ask,workspace};
 }
 
+test('전담 연락처는 모델 호출 없이 전체 명단과 근거를 전달하고 성공으로 기록',async()=>{
+  const f=fixture();
+  f.state.contact={text:'가상내과 전담간호사 단축번호입니다.\n- 가나다: 1234\n- 라마바: 5678',source:{document_name:'가상.xlsx',evidenceQuotes:['합성 근거 1','합성 근거 2']}};
+  await f.ask('가상 전담번호');
+  assert.equal(f.state.completions,0);
+  assert.equal(f.state.records.length,1);
+  assert.equal(f.state.records[0].response.searchOutcome.status,'answered');
+  assert.equal(f.state.events.find(e=>e.type==='textResponseChunk').sources[0].evidenceQuotes.length,2);
+  assert.equal(f.state.events.at(-1).type,'finalizeResponseStream');
+});
 test('직원 답변은 고정문서와 검색 사이 교체를 막고 다른 부서는 계속 처리한다',async t=>{
   const directory=await fs.promises.mkdtemp(path.join(require('node:os').tmpdir(),'schat-stream-snapshot-'));
   t.after(()=>fs.promises.rm(directory,{recursive:true,force:true}));

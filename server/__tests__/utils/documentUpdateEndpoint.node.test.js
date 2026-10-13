@@ -38,6 +38,7 @@ function setup({ role = "admin", workspaceAllowed = true, suspended = false, sco
     "../EncryptionManager": { EncryptionManager: class {} },
     "../http": http,
     "../userLocale": { UserMetaCache: { setFromRequest() {} } },
+    "../privacyConsent": { exemptPath: () => false, hasCurrentConsent: async () => true },
   });
   const roles = load("utils/middleware/multiUserProtected.js", {
     "../../models/systemSettings": system, "../http": http,
@@ -64,7 +65,10 @@ function setup({ role = "admin", workspaceAllowed = true, suspended = false, sco
     "../utils/middleware/validWorkspace": access,
     "../utils/documentUpdates/readiness": require("../../utils/documentUpdates/readiness"),
     "../utils/synonyms/suggestions": { scheduleSynonymSuggestions: async () => {} },
+    "../utils/documentChecklists/processDocuments": { processDocumentChecklists: async () => [] },
     "./workspacesParsedFiles": { workspaceParsedFilesEndpoints() {} },
+    "./originalSpreadsheets": () => {},
+    "./answerFeedback": { feedbackSaveHandler: () => () => {} },
     "../utils/documentUpdates/upload": {
       handleDocumentUpdateUpload(request, _, next) { effects.push("upload"); request.files = []; next(); },
       async cleanupIncoming() { effects.push("cleanup"); },

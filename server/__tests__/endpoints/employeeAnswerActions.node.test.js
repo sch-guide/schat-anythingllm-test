@@ -86,6 +86,7 @@ function setup(role = "default", multi = true) {
     "../../models/user": { User: { get: async () => user } },
     "../EncryptionManager": { EncryptionManager: class {} },
     "../userLocale": { UserMetaCache: { setFromRequest() {} } },
+    "../privacyConsent": { exemptPath: () => false, hasCurrentConsent: async () => true },
     "../../models/workspace": {
       Workspace: {
         get: async () => workspace,
@@ -137,6 +138,9 @@ function setup(role = "default", multi = true) {
     "../utils/helpers": { stripThinkingFromText: (text) => text },
     truncate: (text) => text,
     "./workspacesParsedFiles": { workspaceParsedFilesEndpoints() {} },
+    "./originalSpreadsheets": () => {},
+    "./answerFeedback": { feedbackSaveHandler: () => () => {} },
+    "../answerFeedback": { feedbackSaveHandler: () => () => {} },
   };
   function load(file) {
     const module = { exports: {} };

@@ -45,3 +45,15 @@ test("쪽 파일을 문서 하나로 묶고 등록 상태·쪽 수를 셈", () =
   assert.equal(docs.at(-1).documentId, "C", "예전 업로드는 맨 아래");
   assert.equal(JSON.stringify(docs).includes("pageContent"), false);
 });
+
+test("예전 버전 체크리스트는 화면에서 빼고, 같은 이름 업데이트 뒤 새 버전 체크리스트를 다시 만듦", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const ws = fs.readFileSync(path.join(__dirname, "../../endpoints/workspaces.js"), "utf8");
+  const fn = ws.slice(ws.indexOf("function workspaceDocumentIds"), ws.indexOf("async function logUploadFailure"));
+  assert.match(fn, /schat_document_update_archived === true\) return ""/);
+  const update = ws.slice(ws.indexOf("'/workspace/:slug/document-update'"), ws.indexOf("scheduleSynonymSuggestions(", ws.indexOf("'/workspace/:slug/document-update'")));
+  assert.match(update, /processDocumentChecklists\(/);
+  const personal = fs.readFileSync(path.join(__dirname, "../../endpoints/checklistPersonalState.js"), "utf8");
+  assert.match(personal, /schat_document_update_archived !== true/);
+});

@@ -70,6 +70,11 @@ function versionOf(metadata) {
   }
   return null;
 }
+function documentName(row) {
+  const m = parseObject(row.metadata);
+  const name = m.document_name || m.documentName || m.title || row.filename;
+  return typeof name === "string" ? name.normalize("NFC").split(/[\\/]/).pop().trim() : "";
+}
 function documentInfo(row) {
   const metadata = parseObject(row.metadata);
   const page = Number(
@@ -77,12 +82,7 @@ function documentInfo(row) {
   );
   return {
     documentId: row.docId,
-    name: text(
-      metadata.document_name ||
-        metadata.documentName ||
-        metadata.title ||
-        row.filename
-    ),
+    name: text(documentName(row)),
     page: Number.isSafeInteger(page) && page > 0 ? page : null,
     version: versionOf(metadata),
     registeredAt: date(row.createdAt),
@@ -98,12 +98,16 @@ function chunkInfo(id, content, metadata, document) {
   return {
     id,
     ...document,
-    page: Number.isSafeInteger(page) && page > 0 ? page : null,
+    page: document.page || (Number.isSafeInteger(page) && page > 0 ? page : null),
     section: text(metadata.section),
-    version: versionOf(metadata) || document.version,
+    version: document.version || versionOf(metadata),
     text: text(content, MAX_TEXT),
     truncated: typeof content === "string" && content.length > MAX_TEXT,
   };
+}
+function groupKey(row) {
+  // Display grouping only. Individual registration/vector identities stay intact.
+  return documentName(row) ? `name:${documentName(row)}` : `id:${row.docId}`;
 }
 function page(items, offset, hasMore) {
   return { items, hasMore, nextOffset: hasMore ? offset : null };
@@ -146,6 +150,22 @@ function createChunkViewer({
     return db().workspace_documents.findFirst({
       where: { workspaceId, docId: documentId },
     });
+  }
+  async function registrations(workspaceId) {
+    const rows = [];
+    for (let skip = 0; ; skip += MAX_SCAN) {
+      const batch = await db().workspace_documents.findMany({
+        where: { workspaceId }, orderBy: { id: "desc" }, skip, take: MAX_SCAN,
+      });
+      rows.push(...batch);
+      if (batch.length < MAX_SCAN) return rows;
+    }
+  }
+  async function members(workspaceId, row) {
+    const key = groupKey(row);
+    return (await registrations(workspaceId)).filter((r) => groupKey(r) === key)
+      .sort((a, b) => (documentInfo(a).page || 0) - (documentInfo(b).page || 0)
+        || a.docId.localeCompare(b.docId));
   }
   async function sourceDocument(workspaceId, source, vectorId) {
     // source.document_id can be the whole PDF's ID, while docId identifies one
@@ -200,22 +220,24 @@ function createChunkViewer({
   return {
     async documents(workspace, query = {}) {
       const offset = offsetOf(query.offset);
-      const rows = await db().workspace_documents.findMany({
-        where: { workspaceId: workspace.id },
-        orderBy: { id: "desc" },
-        skip: offset,
-        take: PAGE_SIZE + 1,
-        select: {
-          docId: true,
-          filename: true,
-          metadata: true,
-          createdAt: true,
-        },
-      });
+      const groups = new Map();
+      for (const row of await registrations(workspace.id)) {
+        const key = groupKey(row);
+        if (!groups.has(key)) groups.set(key, { ...documentInfo(row), page: null, pages: new Set(), statuses: new Set(), versions: new Set() });
+        groups.get(key).statuses.add(documentInfo(row).status);
+        groups.get(key).versions.add(documentInfo(row).version);
+        const p = documentInfo(row).page;
+        if (p) groups.get(key).pages.add(p);
+      }
+      const rows = [...groups.values()].map(({ pages, statuses, versions, ...doc }) => ({
+        ...doc, pageCount: pages.size,
+        status: statuses.size > 1 ? "mixed" : doc.status,
+        version: versions.size > 1 ? null : doc.version,
+      }));
       return page(
-        rows.slice(0, PAGE_SIZE).map(documentInfo),
+        rows.slice(offset, offset + PAGE_SIZE),
         offset + PAGE_SIZE,
-        rows.length > PAGE_SIZE
+        rows.length > offset + PAGE_SIZE
       );
     },
     async chunks(workspace, query = {}) {
@@ -236,19 +258,23 @@ function createChunkViewer({
       if (!row) fail(404, "이 작업 공간에서 문서를 찾을 수 없습니다.");
       requireChroma();
       const document = documentInfo(row);
+      const group = await members(workspace.id, row);
+      const byId = new Map(group.map((r) => [r.docId, documentInfo(r)]));
+      const order = new Map(group.map((r, i) => [r.docId, i]));
+      const allMappings = await db().document_vectors.findMany({
+        where: { docId: { in: group.map((r) => r.docId) } },
+        orderBy: { id: "asc" }, take: 100001,
+        select: { docId: true, vectorId: true },
+      });
+      if (allMappings.length > 100000) fail(422, "문서가 너무 커서 한 번에 조회할 수 없습니다.");
+      allMappings.sort((a, b) => order.get(a.docId) - order.get(b.docId));
       const collection = await getCollection(workspace);
       const items = [];
       let cursor = offset;
       let scanned = 0;
       let hasMore = true;
       while (items.length < PAGE_SIZE && scanned < MAX_SCAN && hasMore) {
-        const mappings = await db().document_vectors.findMany({
-          where: { docId: documentId },
-          orderBy: { id: "asc" },
-          skip: cursor,
-          take: PAGE_SIZE + 1,
-          select: { vectorId: true },
-        });
+        const mappings = allMappings.slice(cursor, cursor + PAGE_SIZE + 1);
         const batch = mappings.slice(0, PAGE_SIZE);
         hasMore = mappings.length > PAGE_SIZE;
         if (!batch.length) break;
@@ -274,7 +300,7 @@ function createChunkViewer({
                   batch[i].vectorId,
                   content,
                   stored.metadatas[position],
-                  document
+                  byId.get(batch[i].docId)
                 )
               );
           }
@@ -289,6 +315,9 @@ function createChunkViewer({
           409,
           "조회 중 문서 등록 상태가 바뀌었습니다. 잠시 뒤 다시 조회해 주세요."
         );
+      const latest = await members(workspace.id, row);
+      if (latest.length !== group.length || group.some((r, i) => !sameRegistration(r, latest[i])))
+        fail(409, "조회 중 문서 등록 상태가 바뀌었습니다. 잠시 뒤 다시 조회해 주세요.");
       return {
         ...page(items, cursor, hasMore),
         document,

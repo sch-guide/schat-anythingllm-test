@@ -48,6 +48,7 @@ test("the list keeps only 수정 and 사용중지; delete and reset live in 수�
 
 test("reports of deleted accounts stay visible with their snapshot", () => {
   const reports = src("./sections/Reports.jsx");
-  assert.match(reports, /r\.reporterDeleted/);
+  // 통합 목록에는 신고자 칸이 없으며, 원래 신고자 정보는 상세에 남는다.
+  assert.match(reports, /report\.reporterName/);
   assert.match(reports, /report\.reporterDeleted \? " \(삭제된 사용자\)"/);
 });

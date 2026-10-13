@@ -1,9 +1,11 @@
 const fs = require("fs").promises;
 
 class PDFLoader {
-  constructor(filePath, { splitPages = true } = {}) {
+  // directoryLayout: 전화번호부처럼 표로 된 문서는 칸 사이 간격을 공백으로 살림.
+  constructor(filePath, { splitPages = true, directoryLayout = false } = {}) {
     this.filePath = filePath;
     this.splitPages = splitPages;
+    this.directoryLayout = directoryLayout;
   }
 
   async load() {
@@ -28,20 +30,28 @@ class PDFLoader {
         continue;
       }
 
-      let lastY;
-      const textItems = [];
-      for (const item of content.items) {
-        if ("str" in item) {
-          if (lastY === item.transform[5] || !lastY) {
-            textItems.push(item.str);
-          } else {
-            textItems.push(`\n${item.str}`);
+      let text;
+      if (this.directoryLayout) {
+        const {
+          joinWithCellGaps,
+          normalizeDirectoryText,
+        } = require("../directoryText");
+        text = normalizeDirectoryText(joinWithCellGaps(content.items));
+      } else {
+        let lastY;
+        const textItems = [];
+        for (const item of content.items) {
+          if ("str" in item) {
+            if (lastY === item.transform[5] || !lastY) {
+              textItems.push(item.str);
+            } else {
+              textItems.push(`\n${item.str}`);
+            }
+            lastY = item.transform[5];
           }
-          lastY = item.transform[5];
         }
+        text = textItems.join("");
       }
-
-      const text = textItems.join("");
       documents.push({
         pageContent: text.trim(),
         metadata: {

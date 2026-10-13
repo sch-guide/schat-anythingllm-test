@@ -195,11 +195,8 @@ export function ChunksView({
                       {state.documents.items.map((doc) => (
                         <option key={doc.documentId} value={doc.documentId}>
                           {doc.name}
-                          {doc.page ? ` · ${doc.page}쪽` : ""}
+                          {doc.pageCount ? ` · ${doc.pageCount}쪽` : ""}
                           {doc.status === "previous" ? " (이전 버전)" : ""}
-                          {time(doc.registeredAt)
-                            ? ` · ${time(doc.registeredAt)}`
-                            : ""}
                         </option>
                       ))}
                     </select>
@@ -226,7 +223,7 @@ export function ChunksView({
               title="근거 문단"
               description="단어로 찾기"
               help={[
-                "근거 문단은 등록 순서로 보여요.",
+                "같은 지침의 근거 문단을 쪽수 순서로 보여요.",
                 "‘몇 번째’는 목록 순서이며 원문의 문단 번호와 달라요.",
               ]}
             >

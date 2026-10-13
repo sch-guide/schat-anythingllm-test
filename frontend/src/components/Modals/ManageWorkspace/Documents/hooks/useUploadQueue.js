@@ -4,6 +4,7 @@ import System from "@/models/system";
 import { groupDroppedFiles, groupFilesIntoFolder } from "@/utils/folderUpload";
 import Workspace from "@/models/workspace";
 import { createDocumentUpdateBatch } from "./documentUpdateBatch";
+import { isSupportedDocumentFile } from "../uploadStatus";
 
 /**
  * The queue of in-flight uploads, shared by every drop target in the picker.
@@ -13,12 +14,6 @@ import { createDocumentUpdateBatch } from "./documentUpdateBatch";
  * folder structure decides the destination, and an individual folder row,
  * where the user has named the destination by dropping onto it.
  */
-function isPdfFile(file) {
-  return (
-    file?.type === "application/pdf" || /\.pdf$/i.test(String(file?.name || ""))
-  );
-}
-
 export default function useUploadQueue(workspace) {
   /** Whether the document processor is up; nothing can be uploaded if not. */
   const [ready, setReady] = useState(false);
@@ -101,10 +96,10 @@ export default function useUploadQueue(workspace) {
         folderName
       );
       if (targeted.length > 0) {
-        // 폴더 줄에 끌어다 놓은 파일도 PDF만 등록함.
+        // 폴더 끌어놓기도 파일 선택과 같은 형식만 등록함.
         const acceptedBatch = await prepare(
           targeted.map(({ file, relativePath }) =>
-            isPdfFile(file)
+            isSupportedDocumentFile(file)
               ? { uid: v4(), file, folderName, relativePath }
               : {
                   uid: v4(),

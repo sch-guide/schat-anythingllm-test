@@ -49,11 +49,14 @@ function checklistPersonalStateEndpoints(app) {
       const checklist = ChecklistRepository.getById(checklistId);
       if (!checklist || checklist.status !== "active") return false;
       const documents = await Document.forWorkspace(workspace.id);
-      return documents.some(
-        (doc) =>
-          String(safeJsonParse(doc.metadata, {})?.document_id || "") ===
-          checklist.documentId
-      );
+      // 예전 버전(같은 이름 업데이트로 보관)의 체크리스트는 쓰지 않음.
+      return documents.some((doc) => {
+        const metadata = safeJsonParse(doc.metadata, {});
+        return (
+          metadata?.schat_document_update_archived !== true &&
+          String(metadata?.document_id || "") === checklist.documentId
+        );
+      });
     },
   });
   const route = "/workspace/:slug/checklists/:checklistId/personal-state";

@@ -5,6 +5,8 @@ import {
   groupEmbeddingProgress,
   pageInfo,
   uploadFailureText,
+  DOCUMENT_ACCEPT,
+  isSupportedDocumentFile,
 } from "./uploadStatus.js";
 
 const id = (n) => `${String(n).padStart(8, "0")}-aaaa-bbbb-cccc-dddddddddddd`;
@@ -92,7 +94,7 @@ test("업로드 오류는 쉬운 문구와 간단한 원인만 보여줌", () =>
   );
 });
 
-test("새 폴더 버튼·창이 없고 PDF만 받으며 영어 상태 문구가 남지 않음", () => {
+test("새 폴더 버튼·창이 없고 PDF·엑셀을 받으며 영어 상태 문구가 남지 않음", () => {
   const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
   const directory = read("./Directory/index.jsx");
   assert.doesNotMatch(directory, /NewFolderModal|openFolderModal|new-folder/);
@@ -103,8 +105,8 @@ test("새 폴더 버튼·창이 없고 PDF만 받으며 영어 상태 문구가 
     false
   );
   const upload = read("./UploadFile/index.jsx");
-  assert.match(upload, /accept: PDF_ACCEPT/);
-  assert.match(upload, /PDF 파일만 등록할 수 있어요/);
+  assert.match(upload, /accept: DOCUMENT_ACCEPT/);
+  assert.match(upload, /PDF와 엑셀/);
   const right = read("./WorkspaceDirectory/index.jsx");
   assert.doesNotMatch(
     right,
@@ -113,7 +115,7 @@ test("새 폴더 버튼·창이 없고 PDF만 받으며 영어 상태 문구가 
   assert.match(right, /SCHAT 문서 처리/);
   assert.match(right, /쪽별 상세/);
   const queue = read("./hooks/useUploadQueue.js");
-  assert.match(queue, /isPdfFile\(file\)/);
+  assert.match(queue, /isSupportedDocumentFile\(file\)/);
   const ko = readFileSync(
     new URL("../../../../locales/ko/common.js", import.meta.url),
     "utf8"
@@ -121,8 +123,16 @@ test("새 폴더 버튼·창이 없고 PDF만 받으며 영어 상태 문구가 
   assert.match(ko, /"my-documents": "등록할 문서"/);
   assert.match(
     ko,
-    /클릭하여 PDF를 업로드하거나 파일을 이곳으로 끌어다 놓으세요\./
+    /클릭하여 PDF·엑셀을 업로드하거나 파일을 이곳으로 끌어다 놓으세요\./
   );
+});
+test("파일 선택·폴더 끌어놓기에 같은 확장자 규칙 적용", () => {
+  assert.deepEqual(Object.values(DOCUMENT_ACCEPT).flat().sort(),[".pdf",".xls",".xlsx"]);
+  for(const name of ["문서.PDF","전화번호부.xlsx","전화번호부.XLS"])
+    assert.equal(isSupportedDocumentFile({name,type:""}),true);
+  for(const name of ["매크로.xlsm","실행.exe","가짜.xlsx.exe"])
+    assert.equal(isSupportedDocumentFile({name,type:"application/pdf"}),false);
+  assert.equal(uploadFailureText("Error processing test.xlsx: password protected"),"문서 처리에 실패했습니다. (엑셀 읽기 실패)");
 });
 
 test("문서를 빼는 중·고정·감시 안내가 한글로 나옴", () => {

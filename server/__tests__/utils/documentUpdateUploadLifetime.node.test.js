@@ -18,6 +18,8 @@ function routesFor(filename,collect) {
       if(name.endsWith('/collectorApi'))return {CollectorApi:class {online=async()=>true;processDocument=collect;log(){} }};
       if(name.endsWith('/multiUserProtected'))return {ROLES:{},flexUserRoleValid:()=>()=>{}};
       if(name.endsWith('/workspacesParsedFiles'))return {workspaceParsedFilesEndpoints(){}};
+      if(name==='./originalSpreadsheets')return ()=>{};
+      if(name.endsWith('/answerFeedback'))return {feedbackSaveHandler:()=>()=>{}};
       if(name.endsWith('/workspace'))return {Workspace:{get:async()=>({id:1,slug:'test'})}};
       if(name.endsWith('/originalPdfUpload'))return {prepareOriginalPdfUpload:async()=>({metadata:{}})};
       if(name.endsWith('/telemetry'))return {Telemetry:{sendTelemetry:async()=>{}}};

@@ -6,7 +6,7 @@ function evidenceSourceId(source = {}) {
   return createHash("sha256")
     .update(
       JSON.stringify([
-        source.pdfRef || source.document_id || source.documentId || "",
+        source.pdfRef || source.spreadsheetRef || source.document_id || source.documentId || "",
         source.documentName || source.document_name || source.title || "",
         source.page ?? null,
         source.text || source.excerpt || "",
@@ -101,11 +101,34 @@ async function completeWithEvidence({
   messages = [],
   functions = [],
   eventHandler,
+  workspace,
+  currentQuestion,
 }) {
+  if(workspace&&typeof currentQuestion==='string'){
+    const answer=await require('./sheetDepartmentContacts').resolveWorkspaceDepartmentContact(workspace,currentQuestion);
+    if(answer){
+      sources.splice(0,sources.length,answer.source);
+      const uuid=require('node:crypto').randomUUID();
+      eventHandler?.('reportStreamEvent',{type:'textResponseChunk',uuid,content:answer.text});
+      return {uuid,textResponse:answer.text,functionCall:null};
+    }
+  }
   if (!sources.length)
     return eventHandler
       ? provider.stream(messages, functions, eventHandler)
       : provider.complete(messages, functions);
+  const { directoryAnswer } = require("./directoryEvidence");
+  const question = messages.findLast(message => message.role === "user")?.content;
+  const directory = typeof question === "string" ? directoryAnswer(sources, question) : null;
+  if (directory) {
+    for (const source of sources) source.evidenceQuotes = [];
+    directory.source.evidenceQuotes = directory.quotes || [directory.quote];
+    const uuid = require("node:crypto").randomUUID();
+    eventHandler?.("reportStreamEvent", {
+      type: "textResponseChunk", uuid, content: directory.text,
+    });
+    return {uuid, textResponse:directory.text, functionCall:null};
+  }
   const instruction =
     `\nFor the final answer only, append ${OPEN}{"quotes":[{"source_id":"ID","text":"exact original passage used in your answer"}]}${CLOSE}. Copy only the specific supporting sentences or table cells verbatim from the matching source, never a whole page or unrelated headers. Include each supporting passage even when paraphrasing the visible answer. Do not invent quotes. No evidence block on tool calls. Source IDs (same order as retrieved sources): ` +
     sources
@@ -121,6 +144,12 @@ async function completeWithEvidence({
   );
   if (system) system.content += instruction;
   else sentMessages.unshift({ role: "system", content: instruction });
+  if (sources.some(source => /전화번호부/u.test(source.documentName || source.title || ""))) {
+    sentMessages.find(message=>message.role==="system").content +=
+      "\n전화번호부 표의 번호 종류(단축·내선·직통)는 숫자의 길이나 나열 순서로 추측하지 마세요. " +
+      "머리글과 해당 사람의 행 연결이 확인되지 않으면 번호 종류를 확인할 수 없다고 안내하세요. " +
+      "옆 사람이나 다른 부서의 번호를 섞지 마세요.";
+  }
   const stream = eventHandler ? evidenceStream(eventHandler) : null;
   let completion;
   try {

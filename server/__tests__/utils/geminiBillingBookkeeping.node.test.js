@@ -26,10 +26,12 @@ function persistence() {
   const { safeJSONStringify } = load('helpers/chat/responses.js', { uuid: {v4:()=> 'fake'} });
   const {WorkspaceChats} = load('../models/workspaceChats.js', {
     '../utils/prisma': {workspace_chats: {
+      findFirst:async()=>saved ? {response:saved.response} : null,
       create:async({data})=>{saved=data;return{id:1,...data};},
       upsert:async({update})=>{saved=update;return{id:1,...update};},
     }},
     '../utils/helpers/chat/responses': {safeJSONStringify},
+    '../utils/chatSearchOutcome': require('../../utils/chatSearchOutcome'),
   });
   return {WorkspaceChats, saved:()=>JSON.parse(saved.response)};
 }
