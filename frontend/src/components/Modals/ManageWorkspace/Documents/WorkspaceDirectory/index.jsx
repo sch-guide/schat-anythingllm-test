@@ -27,6 +27,8 @@ import { safeJsonParse } from "@/utils/request";
 import { useTranslation } from "react-i18next";
 import { middleTruncate } from "@/utils/directories";
 import { useEmbeddingProgress } from "@/EmbeddingProgressContext";
+import { STATUS_TEXT, groupEmbeddingProgress } from "../uploadStatus";
+import OriginalPdfModal from "../OriginalPdfModal";
 import {
   buildOriginalDocumentRows,
   workspaceDocumentSummary,
@@ -46,8 +48,11 @@ function WorkspaceDirectory({
   hasChanges,
   saveChanges,
   movedItems,
+  embedMeta = {},
+  onUnstage,
 }) {
   const { t } = useTranslation();
+  const [viewing, setViewing] = useState(null);
   const { embeddingProgressMap, removeQueuedFile } = useEmbeddingProgress();
   const embeddingProgress = embeddingProgressMap[workspace.slug] || null;
   const [selectedItems, setSelectedItems] = useState({});
@@ -159,32 +164,35 @@ function WorkspaceDirectory({
   }
 
   if (embeddingProgress) {
+    const documents = groupEmbeddingProgress(embeddingProgress, embedMeta);
     return (
       <div className="px-8">
         <div className="flex items-center justify-start w-[560px]">
           <h3 className="text-white text-base font-bold ml-5">
-            {workspace.name}
+            SCHAT 문서 처리
           </h3>
         </div>
-        <div className="relative w-[560px] h-[445px] bg-theme-settings-input-bg rounded-2xl mt-5 border border-theme-modal-border">
+        <div
+          className="relative w-[560px] h-[445px] bg-theme-settings-input-bg rounded-2xl mt-5 border border-theme-modal-border"
+          data-testid="document-progress"
+        >
           <div className="text-white/80 text-xs grid grid-cols-12 py-2 px-3.5 border-b border-white/20 light:border-theme-modal-border bg-theme-settings-input-bg sticky top-0 z-10 rounded-t-2xl">
-            <div className="col-span-8 flex items-center gap-x-[4px]">
-              <div className="shrink-0 w-3 h-3" />
-              <p className="ml-[7px] text-theme-text-primary">Name</p>
-            </div>
+            <p className="col-span-8 ml-[7px] text-theme-text-primary">문서</p>
             <p className="col-span-4 text-right text-theme-text-primary pr-1">
-              Status
+              상태
             </p>
           </div>
           <div className="overflow-y-auto h-[calc(100%-40px)]">
-            {Object.entries(embeddingProgress).map(([filename, fileStatus]) => (
-              <EmbeddingFileRow
-                key={filename}
-                filename={filename}
-                status={fileStatus}
+            {documents.map((doc) => (
+              <EmbeddingDocumentRow
+                key={doc.key}
+                doc={doc}
                 onRemove={
-                  fileStatus.status === "pending"
-                    ? () => removeQueuedFile(workspace.slug, filename)
+                  doc.removable.length
+                    ? () =>
+                        doc.removable.forEach((docpath) =>
+                          removeQueuedFile(workspace.slug, docpath)
+                        )
                     : null
                 }
               />
@@ -194,13 +202,13 @@ function WorkspaceDirectory({
         {hasChanges && movedItems.length > 0 && (
           <div className="flex items-center justify-between w-[560px] mt-3">
             <p className="text-theme-text-secondary text-sm">
-              {movedItems.length} additional file(s) ready to embed
+              처리를 기다리는 문서가 더 있어요.
             </p>
             <button
               onClick={handleSaveChanges}
               className="border border-slate-200 px-5 py-1.5 rounded-lg text-white text-sm items-center flex gap-x-2 hover:bg-slate-200 hover:text-slate-800 focus:ring-gray-800"
             >
-              Add to queue
+              처리 대기열에 추가
             </button>
           </div>
         )}
@@ -249,7 +257,7 @@ function WorkspaceDirectory({
                 ) : (
                   <div className="shrink-0 w-3 h-3" />
                 )}
-                <p className="ml-[7px] text-theme-text-primary">Name</p>
+                <p className="ml-[7px] text-theme-text-primary">등록 문서</p>
               </div>
               {documentSummary.documents > 0 && (
                 <p className="col-span-2 text-right text-theme-text-secondary pr-2 whitespace-nowrap">
@@ -283,6 +291,15 @@ function WorkspaceDirectory({
                           (checklist) => checklist.source?.pdfRef === row.pdfRef
                         )}
                         onChecklistUpdated={loadChecklists}
+                        staged={row.entries.every((entry) =>
+                          movedItems.some((moved) => moved.id === entry.item.id)
+                        )}
+                        onUnstage={(stagedRow) =>
+                          onUnstage?.(
+                            stagedRow.entries.map((entry) => entry.item.id)
+                          )
+                        }
+                        onView={setViewing}
                       />
                     ) : (
                       <WorkspaceFileRow
@@ -354,6 +371,13 @@ function WorkspaceDirectory({
       <PinAlert />
       <DocumentWatchAlert />
       <WorkspaceDocumentTooltips />
+      {viewing && (
+        <OriginalPdfModal
+          workspaceSlug={workspace.slug}
+          doc={viewing}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </>
   );
 }
@@ -563,119 +587,112 @@ function WorkspaceDocumentTooltips() {
   );
 }
 
-/**
- * @param {string} filename
- */
-const getDisplayName = (filename) => {
-  const base = filename.split("/").pop() || filename;
-  return base.replace(
-    /-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.json$/,
-    ""
-  );
+const STATUS_ICONS = {
+  pending: (
+    <Clock
+      size={16}
+      className="text-slate-100 light:text-slate-900/40 shrink-0"
+      weight="regular"
+    />
+  ),
+  embedding: (
+    <CircleNotch
+      size={16}
+      className="text-slate-100 light:text-slate-900/40 animate-spin shrink-0"
+      weight="bold"
+    />
+  ),
+  complete: (
+    <CheckCircle
+      size={16}
+      className="text-green-400 light:text-green-600 shrink-0"
+      weight="fill"
+    />
+  ),
+  failed: (
+    <XCircle
+      size={16}
+      className="text-red-400 light:text-red-600 shrink-0"
+      weight="fill"
+    />
+  ),
+};
+const STATUS_COLORS = {
+  pending: "text-slate-100 light:text-slate-900/70",
+  embedding: "text-slate-100 light:text-slate-900/70",
+  complete: "text-green-400 light:text-green-600",
+  failed: "text-red-400 light:text-red-600",
 };
 
-const STATUS_STYLES = {
-  pending: {
-    icon: (
-      <Clock
-        size={16}
-        className="text-slate-100 light:text-slate-900/40 shrink-0"
-        weight="regular"
-      />
-    ),
-    textColor: "text-slate-100 light:text-slate-900/70",
-    label: "Queued",
-  },
-  embedding: {
-    icon: (
-      <CircleNotch
-        size={16}
-        className="text-slate-100 light:text-slate-900/40 animate-spin shrink-0"
-        weight="bold"
-      />
-    ),
-    textColor: "text-slate-100 light:text-slate-900/70",
-    label: "Embedding",
-  },
-  complete: {
-    icon: (
-      <CheckCircle
-        size={16}
-        className="text-green-400 light:text-green-600 shrink-0"
-        weight="fill"
-      />
-    ),
-    textColor: "text-green-400 light:text-green-600",
-    label: "Complete",
-  },
-  failed: {
-    icon: (
-      <XCircle
-        size={16}
-        className="text-red-400 light:text-red-600 shrink-0"
-        weight="fill"
-      />
-    ),
-    textColor: "text-red-400 light:text-red-600",
-    label: "Failed",
-  },
-};
-
-function EmbeddingFileRow({ filename, status: fileStatus, onRemove }) {
-  const { status, chunksProcessed = 0, totalChunks = 0 } = fileStatus;
-  const displayName = getDisplayName(filename);
-  const isEmbedding = status === "embedding";
-  const pct =
-    isEmbedding && totalChunks > 0
-      ? Math.round((chunksProcessed / totalChunks) * 100)
-      : 0;
-
+// 문서 하나 = 한 줄. 내부 쪽(page)별 상태는 "쪽별 상세"를 펼칠 때만 보임.
+function EmbeddingDocumentRow({ doc, onRemove }) {
   return (
-    <div className="text-slate-100 light:text-slate-900 text-xs grid grid-cols-12 py-2 pl-3.5 pr-3.5 h-[34px] items-center border-b border-white/5">
-      <div className="col-span-7 flex items-center gap-x-2 overflow-hidden">
-        {STATUS_STYLES[status]?.icon || STATUS_STYLES.pending.icon}
-        <p
-          className={`whitespace-nowrap overflow-hidden text-ellipsis ${
-            status === "failed" ? "text-red-400" : ""
-          }`}
-          title={displayName}
-        >
-          {middleTruncate(displayName, 40)}
-        </p>
-      </div>
-      <div className="col-span-5 flex justify-end items-center gap-x-2">
-        {isEmbedding ? (
-          <div className="flex items-center gap-x-2 w-full justify-end">
-            <div className="w-20 h-[1.5px] bg-white/10 light:bg-sky-900/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-white light:bg-sky-400 rounded-full transition-all duration-300"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <p className="text-xs whitespace-nowrap w-8 text-right">{pct}%</p>
-          </div>
-        ) : (
-          <div className="flex items-center gap-x-2">
-            <p
-              className={`text-xs italic whitespace-nowrap flex gap-2 justify-center items-center ${STATUS_STYLES[status]?.textColor}`}
-            >
-              {STATUS_STYLES[status]?.label || "Queued"}
-            </p>
-            {onRemove && (
-              <button
-                onClick={onRemove}
-                className="border-none hover:bg-white/10 light:hover:bg-sky-900/10 rounded p-0.5 transition-colors"
-                title="Remove from queue"
-              >
-                <X
-                  size={14}
-                  className="text-slate-100 light:text-slate-900/40 hover:text-slate-100 light:hover:text-slate-900"
+    <div
+      className="text-slate-100 light:text-slate-900 text-xs border-b border-white/5 px-3.5 py-2"
+      data-testid="document-progress-row"
+    >
+      <div className="grid grid-cols-12 items-center gap-x-2">
+        <div className="col-span-7 flex items-center gap-x-2 overflow-hidden">
+          {STATUS_ICONS[doc.status] || STATUS_ICONS.pending}
+          <p
+            className={`whitespace-nowrap overflow-hidden text-ellipsis ${doc.status === "failed" ? "text-red-400" : ""}`}
+            title={doc.name}
+          >
+            {middleTruncate(doc.name, 40)}
+          </p>
+        </div>
+        <div className="col-span-5 flex justify-end items-center gap-x-2">
+          {doc.status === "embedding" ? (
+            <div className="flex items-center gap-x-2 w-full justify-end">
+              <div className="w-20 h-[1.5px] bg-white/10 light:bg-sky-900/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-white light:bg-sky-400 rounded-full transition-all duration-300"
+                  style={{ width: `${doc.percent}%` }}
                 />
-              </button>
-            )}
-          </div>
-        )}
+              </div>
+              <p className="text-xs whitespace-nowrap">
+                {doc.label} {doc.percent}%
+              </p>
+            </div>
+          ) : (
+            <p
+              className={`text-xs whitespace-nowrap ${STATUS_COLORS[doc.status]}`}
+            >
+              {doc.status === "failed"
+                ? `문서 처리에 실패했습니다.${doc.failed < doc.total ? ` (${doc.failed}/${doc.total}쪽)` : ""}`
+                : doc.label}
+            </p>
+          )}
+          {onRemove && (
+            <button
+              onClick={onRemove}
+              className="border-none hover:bg-white/10 light:hover:bg-sky-900/10 rounded p-0.5 transition-colors"
+              title="대기열에서 빼기"
+              aria-label={`${doc.name} 대기열에서 빼기`}
+            >
+              <X
+                size={14}
+                className="text-slate-100 light:text-slate-900/40 hover:text-slate-100 light:hover:text-slate-900"
+              />
+            </button>
+          )}
+        </div>
       </div>
+      {doc.total > 1 && (
+        <details className="mt-1 ml-6">
+          <summary className="cursor-pointer text-theme-text-secondary">
+            쪽별 상세 ({doc.total}쪽)
+          </summary>
+          <ul className="mt-1 grid grid-cols-3 gap-x-3 gap-y-0.5 text-theme-text-secondary">
+            {doc.items.map((item) => (
+              <li key={item.docpath}>
+                {item.page ? `${item.page}쪽` : "쪽 정보 없음"} ·{" "}
+                {STATUS_TEXT[item.status] || STATUS_TEXT.pending}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }

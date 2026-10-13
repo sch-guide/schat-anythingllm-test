@@ -7,7 +7,9 @@ function identity(name) {
 
 // Read-only preflight. Returned paths are references, never permission to delete.
 // The replacement endpoint must recheck them under its transaction lock.
-async function previewDocumentUpdates({ root, names }) {
+// registered: 작업공간에 연결된 docpath 목록(Set). 주면 연결 안 된 남은 파일
+// (작업공간에서 뺀 문서의 쪽 파일 등)은 기존 자료로 보지 않아 일반 업로드로 감.
+async function previewDocumentUpdates({ root, names, registered = null }) {
   if (!Array.isArray(names) || !names.length || names.length > 1000 ||
       names.some(name => typeof name !== "string" || !name.trim() ||
         name.length > 1024 || /[\u0000-\u001f]/.test(name) ||
@@ -34,6 +36,7 @@ async function previewDocumentUpdates({ root, names }) {
         continue;
       }
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+      if (registered && !registered.has(docpath)) continue;
       let data;
       try {
         data = JSON.parse(await fs.readFile(filename, "utf8"));

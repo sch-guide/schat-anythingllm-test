@@ -4,6 +4,7 @@ import { CheckCircle, XCircle } from "@phosphor-icons/react";
 import Workspace from "../../../../../../models/workspace";
 import { humanFileSize, milliToHms } from "../../../../../../utils/numbers";
 import PreLoader from "../../../../../Preloader";
+import { uploadFailureText } from "../../uploadStatus";
 
 function FileUploadProgressComponent({
   slug,
@@ -57,7 +58,8 @@ function FileUploadProgressComponent({
       clearInterval(timer);
       if (!response.ok) {
         setStatus("failed");
-        setError(data.error);
+        // 자세한 원문은 관리자 시스템 기록(문서 처리 실패)에 남음.
+        setError(uploadFailureText(data?.error));
       } else {
         setStatus("complete");
       }
@@ -100,7 +102,7 @@ function FileUploadProgressComponent({
             {truncate(relativePath || file.name, 30)}
           </p>
           <p className="text-red-100 light:text-red-600 text-xs font-medium">
-            {reason || "this file failed to upload"}
+            {uploadFailureText(reason)}
           </p>
         </div>
       </div>

@@ -82,7 +82,8 @@ test('unassociated old page cannot remain available for accidental re-embedding'
   const f=await fixture(t);
   await f.prisma.workspace_documents.deleteMany({where:{id:1}});
   await f.live.delete({ids:['old-vector']});
-  await assert.rejects(executeDocumentUpdate(f.request,f.deps),/UNASSOCIATED_DOCUMENT_UPDATE_UNSUPPORTED/);
+  // 연결이 끊긴 남은 쪽은 이제 미리보기에서 빠지므로 '자료 상태 바뀜'으로 먼저 멈출 수 있음. 어느 쪽이든 다시 넣지 않음.
+  await assert.rejects(executeDocumentUpdate(f.request,f.deps),/UNASSOCIATED_DOCUMENT_UPDATE_UNSUPPORTED|DOCUMENT_PREVIEW_CHANGED/);
   assert.deepEqual((await f.live.get({include:[]})).ids,[]);
 });
 test('answer cache stays blocked through cutover and rejects late writes after success or rollback',async t=>{

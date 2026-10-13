@@ -388,11 +388,23 @@ test("사용 중인 묶음의 추가 제안은 출처와 내부 표식을 표시
   for (const value of ["제안 catheter 추가", "무시"])
     assert.ok(html.includes(value), value);
   assert.match(html, /synonym-proposal-chip/);
+  // 기본 줄에는 출처를 보이지 않고, 접힌 "확인할 내용 보기" 안에서만 보여줌
+  const details =
+    html.match(
+      /<details class="synonym-candidate-details"[\s\S]*?<\/details>/
+    )?.[0] || "";
+  assert.ok(details, "확인할 내용 보기");
+  const row = html.replace(details, "");
   assert.doesNotMatch(
-    html,
+    row,
     /검증용|missing.pdf|테스트 근거|synonym-source-link/
   );
   assert.doesNotMatch(html, /제안 정보|추가 후보/);
+  assert.match(details, /missing\.pdf p\.2 \(삭제된 문서\)/);
+  assert.match(details, /테스트 근거/);
+  assert.match(details, /낮음 · 꼭 확인/);
+  assert.match(details, /사용 승인/);
+  assert.match(details, /거절/);
 });
 
 function loadedSynonyms(selected = [], notice = null) {

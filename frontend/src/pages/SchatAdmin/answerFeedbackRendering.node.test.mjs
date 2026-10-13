@@ -172,3 +172,32 @@ test("평가 상세는 전체 질문·답변·참고 지침과 쪽을 보존해 
   button.props.onClick();
   assert.equal(resolved, 1);
 });
+test("평가 상세의 질문·답변은 왼쪽 정렬 전체 폭이고 처리 완료일 때만 삭제 버튼", () => {
+  const base = {
+    question: "가짜 질문",
+    answer: "아주 긴 가짜 답변 ".repeat(30),
+    sources: [],
+  };
+  const open = renderToStaticMarkup(
+    React.createElement(section.FeedbackContent, {
+      feedback: { ...base, status: "open" },
+      onResolve: () => {},
+      onDelete: () => {},
+    })
+  );
+  assert.doesNotMatch(open, />삭제</);
+  assert.doesNotMatch(open, /text-right|justify-between/);
+  assert.match(open, /data-testid="report-text-block"/);
+  assert.match(open, /w-full min-w-0 text-left/);
+  assert.match(open, /break-words/);
+  let removed = 0;
+  const done = renderToStaticMarkup(
+    React.createElement(section.FeedbackContent, {
+      feedback: { ...base, status: "resolved" },
+      onResolve: () => {},
+      onDelete: () => removed++,
+    })
+  );
+  assert.match(done, /data-testid="feedback-resolved"/);
+  assert.match(done, />삭제</);
+});

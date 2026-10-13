@@ -5,6 +5,9 @@ import PdfPageViewer from "@/components/WorkspaceChat/ChatContainer/ChatHistory/
 import { Button, Loading, Notice, inputClass } from "../ui";
 import { SCHAT_ADMIN_TITLE, findSchatAdminSection } from "../menu";
 import {
+  RUN_STATUS_TEXT,
+  RUN_TRIGGER_LABELS,
+  candidateDetail,
   canOpenSource,
   cleanTerm,
   createdText,
@@ -12,6 +15,7 @@ import {
   groupSources,
   isNewAiGroup,
   reviewSelectedGroups,
+  runProblem,
   runTotals,
   saveSynonymGroup,
   synonymTableView,
@@ -238,13 +242,11 @@ export function RunsCard({ runs, onRetried }) {
                 : "날짜 미기록"}{" "}
               실행
               {" · "}
-              {["running", "retrying"].includes(item.status)
-                ? "진행 중"
-                : item.status === "removed"
-                  ? "삭제됨"
-                  : item.status === "persistence_failed"
-                    ? "저장 확인 필요"
-                    : "완료"}
+              {RUN_TRIGGER_LABELS[item.trigger]
+                ? ` · ${RUN_TRIGGER_LABELS[item.trigger]}`
+                : ""}
+              {" · "}
+              {RUN_STATUS_TEXT[item.status] || "완료"}
             </option>
           ))}
         </select>
@@ -333,12 +335,13 @@ export function RunsCard({ runs, onRetried }) {
           </div>
         )}
         {retryError && <Notice tone="error">{retryError}</Notice>}
-        {["running", "retrying", "persistence_failed"].includes(run.status) && (
+        {["running", "retrying"].includes(run.status) && (
           <Notice tone="warning">
-            진행 중이거나 저장 확인이 필요한 기록이에요. 결과가 불확실한 범위는
-            중복 호출을 막기 위해 다시 시도할 수 없어요.
+            진행 중인 기록이에요. 결과가 불확실한 범위는 중복 호출을 막기 위해
+            다시 시도할 수 없어요.
           </Notice>
         )}
+        {runProblem(run) && <RunProblem run={run} />}
         <div className="overflow-x-auto">
           <table
             className="w-full text-left text-xs text-theme-text-primary"
@@ -385,6 +388,121 @@ export function RunsCard({ runs, onRetried }) {
             </tbody>
           </table>
         </div>
+      </div>
+    </details>
+  );
+}
+
+// "저장 확인 필요"가 무슨 뜻이고 관리자가 무엇을 보면 되는지 알려줌.
+export function RunProblem({ run }) {
+  const problem = runProblem(run);
+  if (!problem) return null;
+  return (
+    <div
+      className="rounded-lg border border-amber-400 bg-amber-500/10 p-3 text-sm text-theme-text-primary"
+      role="status"
+      data-synonym-run-problem
+    >
+      <p className="font-medium">저장 확인 필요란?</p>
+      <p className="mt-1">{problem.what}</p>
+      <p className="mt-1 text-xs text-theme-text-secondary">
+        {RUN_TRIGGER_LABELS[run.trigger] || "자동"} 실행 · 시작{" "}
+        {createdText(run.startedAt).replace(/ 자동 생성$/, "") || "기록 없음"}
+        {" · "}끝{" "}
+        {createdText(run.finishedAt).replace(/ 자동 생성$/, "") || "기록 없음"}
+      </p>
+      <p className="mt-2 font-medium">확인할 것</p>
+      <ul className="mt-1 list-disc pl-5">
+        {problem.check.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// 검토 대기 후보마다 "무엇을 확인해야 하는지" 펼쳐 보기.
+export function CandidateDetails({ group, disabled, onReview, onReviewGroup }) {
+  const proposals = [
+    group.status === "needs_review" && group.suggestion
+      ? { proposal: group.suggestion, isGroup: true }
+      : null,
+    ...(group.pendingAdditions || [])
+      .filter((item) => !item.status || item.status === "pending")
+      .map((proposal) => ({ proposal, isGroup: false })),
+  ].filter(Boolean);
+  if (!proposals.length) return null;
+  return (
+    <details className="synonym-candidate-details" data-synonym-details>
+      <summary className="cursor-pointer text-xs text-sky-600">
+        확인할 내용 보기
+      </summary>
+      <div className="mt-2 flex flex-col gap-3">
+        {proposals.map(({ proposal, isGroup }) => {
+          const detail = candidateDetail(proposal, group);
+          return (
+            <dl
+              key={`${isGroup ? "group" : "addition"}-${proposal.id}`}
+              className="grid grid-cols-[6rem_1fr] gap-x-2 gap-y-1 rounded-md border border-theme-sidebar-border p-2 text-xs text-theme-text-primary"
+            >
+              <dt className="text-theme-text-secondary">확인할 표현</dt>
+              <dd className="break-words">{detail.expression}</dd>
+              <dt className="text-theme-text-secondary">관련 묶음</dt>
+              <dd className="break-words">{detail.related}</dd>
+              <dt className="text-theme-text-secondary">발견 경로</dt>
+              <dd>{detail.origins.join(" · ")}</dd>
+              <dt className="text-theme-text-secondary">근거</dt>
+              <dd className="break-words">
+                {detail.staff.map((item, index) => (
+                  <span key={index} className="block">
+                    직원 질문 {item.count ? `${item.count}회` : "여러 번"}
+                    {item.example && ` · 예: ${item.example}`}
+                  </span>
+                ))}
+                {detail.documents && (
+                  <span className="block">{detail.documents}</span>
+                )}
+                {detail.reason && (
+                  <span className="block">{detail.reason}</span>
+                )}
+                {!detail.staff.length &&
+                  !detail.documents &&
+                  !detail.reason &&
+                  "기록된 근거 없음"}
+              </dd>
+              <dt className="text-theme-text-secondary">발견 시각</dt>
+              <dd>{detail.created || "기록 없음"}</dd>
+              <dt className="text-theme-text-secondary">확신도</dt>
+              <dd>
+                {detail.confidence || "기록 없음"}
+                {detail.lowConfidence && " (낮음 · 꼭 확인)"}
+              </dd>
+              <dd className="col-span-2 mt-1 flex flex-wrap gap-2">
+                <Button
+                  disabled={disabled}
+                  onClick={() =>
+                    isGroup
+                      ? onReviewGroup(group, true)
+                      : onReview(proposal, true)
+                  }
+                >
+                  사용 승인
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={disabled}
+                  onClick={() =>
+                    isGroup
+                      ? onReviewGroup(group, false)
+                      : onReview(proposal, false)
+                  }
+                >
+                  거절
+                </Button>
+              </dd>
+            </dl>
+          );
+        })}
       </div>
     </details>
   );
@@ -674,6 +792,12 @@ export function GroupRow({
                     ))}
                 </div>
               ))}
+            <CandidateDetails
+              group={group}
+              disabled={locked}
+              onReview={onReview}
+              onReviewGroup={onReviewGroup}
+            />
           </td>
           <td data-label="분류">
             <span

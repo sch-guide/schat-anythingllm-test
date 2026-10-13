@@ -160,6 +160,23 @@ function createAnswerFeedbackStore(db, clock = Date.now) {
       if (!count) throw fault("NOT_FOUND");
       return this.detail(id);
     },
+    // 처리 완료된 👎 평가만 지움. 직원 계정·채팅 기록은 그대로 둠.
+    async remove(id) {
+      if (!Number.isSafeInteger(Number(id)) || Number(id) < 1)
+        throw fault("NOT_FOUND");
+      const rows = await db.$queryRawUnsafe(
+        "SELECT id, reason, status FROM schat_answer_feedback WHERE id=? AND feedback=0",
+        Number(id)
+      );
+      if (!rows.length) throw fault("NOT_FOUND");
+      if (rows[0].status !== "resolved") throw fault("NOT_RESOLVED");
+      const count = await db.$executeRawUnsafe(
+        "DELETE FROM schat_answer_feedback WHERE id=? AND feedback=0 AND status='resolved'",
+        Number(id)
+      );
+      if (!count) throw fault("NOT_RESOLVED");
+      return { id: Number(id), kind: rows[0].reason };
+    },
   };
 }
 let privateStore;

@@ -558,3 +558,34 @@ test("같은 묶음과 문서의 서로 다른 질문 표현도 각자 횟수와
     7
   );
 });
+
+test("마지막 결과 기록이 실패하면 저장 확인 필요와 실패 단계 이름만 남김", async (t) => {
+  const { sql, db } = fixture(t);
+  const now = () => new Date("2026-10-13T18:00:00Z");
+  const runs = db.schat_synonym_suggestion_runs;
+  const flaky = {
+    ...db,
+    schat_synonym_suggestion_runs: {
+      ...runs,
+      create: (...args) => runs.create(...args),
+      update: async (args) => {
+        if (args.data?.status && args.data.status !== "persistence_failed")
+          throw Error("가짜 DB 오류 원문");
+        return runs.update(args);
+      },
+    },
+  };
+  const result = await api.runQuestionCandidates({
+    prisma: flaky,
+    env: {},
+    now,
+    loadDocument: async () => null,
+    ask: async () => [],
+  });
+  assert.equal(result.status, "failed");
+  const run = sql.prepare("SELECT * FROM schat_synonym_suggestion_runs").get();
+  assert.equal(run.status, "persistence_failed");
+  const summary = JSON.parse(run.summary);
+  assert.equal(summary.failureStep, "final_record");
+  assert.doesNotMatch(run.summary, /가짜 DB 오류 원문/);
+});

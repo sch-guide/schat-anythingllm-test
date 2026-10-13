@@ -868,6 +868,8 @@ async function deleteReport(adminId, id) {
     where: { id: reportId },
   });
   if (!report) throw userError("신고를 찾을 수 없습니다.");
+  if (report.status !== "resolved")
+    throw userError("처리 완료된 신고만 삭제할 수 있습니다.");
   await prisma.$transaction([
     prisma.schat_user_notifications.deleteMany({
       where: { report_id: reportId },

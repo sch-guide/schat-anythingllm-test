@@ -6,6 +6,10 @@ const AI = {
   exhausted: ["한도 소진", "bg-red-500"],
   other: ["확인 필요", "bg-red-500"],
 };
+export function aiStateLabel(ai, aiError) {
+  if (aiError || ai?.persistenceError) return "확인 필요";
+  return (AI[ai?.status] || ["미확인"])[0];
+}
 export function SystemLights({
   ai,
   aiError,

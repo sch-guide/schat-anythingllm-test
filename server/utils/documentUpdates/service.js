@@ -2,6 +2,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { previewDocumentUpdates } = require('./preview');
+// 작업공간에 연결된 문서만 '기존 자료'로 봄(연결이 끊긴 남은 파일은 제외).
+async function registeredDocpaths(prisma){return new Set((await prisma.workspace_documents.findMany({select:{docpath:true}})).map(row=>row.docpath));}
 const { guard: defaultGuard, processOwner } = require('./guard');
 const { documentKey, workspaceKey, searchKey } = require('./scopes');
 const { isDeepStrictEqual } = require('node:util');
@@ -175,7 +177,7 @@ async function executeDocumentUpdate({workspace, files, manifest:input}, injecte
   try {
     releaseWorkspace=await guard.acquireRead(job,workspaceKeys);
     release=await guard.acquire(job,keys);
-    const preview = await previewDocumentUpdates({root:catalog,names:manifest.names});
+    const preview = await previewDocumentUpdates({root:catalog,names:manifest.names,registered:await registeredDocpaths(deps.prisma)});
     if (canonical(preview.conflicts)!==canonical(manifest.conflicts)) fail('DOCUMENT_PREVIEW_CHANGED');
     // New IDs keep originals, images and provisional vector mappings separate.
     for (const file of files) {
@@ -216,7 +218,7 @@ async function executeDocumentUpdate({workspace, files, manifest:input}, injecte
     if ((await stage.count())!==newIds.length || newVectors.metadatas.some(m=>!prepared.some(p=>p.documentId===m.document_id))) fail('VECTOR_VERIFICATION_FAILED');
     releaseSearch=await guard.acquireWhenAvailable(job,searchKeys);
     return await guard.owned(async()=>{
-      const fresh=await previewDocumentUpdates({root:catalog,names:manifest.names});
+      const fresh=await previewDocumentUpdates({root:catalog,names:manifest.names,registered:await registeredDocpaths(deps.prisma)});
       if (canonical(fresh.conflicts)!==canonical(manifest.conflicts)) fail('DOCUMENT_PREVIEW_CHANGED');
       const paths=fresh.conflicts.flatMap(item=>item.documents.map(d=>d.docpath));
       const rows=await deps.prisma.workspace_documents.findMany({where:{docpath:{in:paths}}});

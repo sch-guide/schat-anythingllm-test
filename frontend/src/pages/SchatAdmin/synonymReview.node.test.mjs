@@ -75,3 +75,50 @@ test("the run result shows total, new, duplicates, failures and text shortage", 
   assert.equal(byLabel["재시도"], 0);
   assert.equal(RUN_TRIGGER_LABELS.backfill, "기존 문서 한 번 실행");
 });
+
+test("직원 질문 후보는 표현·관련 묶음·발견 경로·가린 예시·시각·확신도를 정리", async () => {
+  const review = await import("./synonymReview.js");
+  const detail = review.candidateDetail(
+    {
+      id: 3,
+      type: "addition",
+      terms: ["씨라인"],
+      method: "gemini-staff-questions-v1",
+      confidence: 0.86,
+      createdAt: "2026-10-13T01:05:00Z",
+      sources: [
+        {
+          type: "staff_questions",
+          count: 3,
+          example: "[이름] 씨라인 드레싱 주기",
+        },
+      ],
+    },
+    { terms: ["중심정맥관", "C-line"] }
+  );
+  assert.equal(detail.expression, "씨라인");
+  assert.equal(detail.related, "중심정맥관, C-line");
+  assert.deepEqual(detail.origins, ["직원 질문", "AI 자동 제안"]);
+  assert.deepEqual(detail.staff, [
+    { count: 3, example: "[이름] 씨라인 드레싱 주기" },
+  ]);
+  assert.equal(detail.confidence, "확신도 86%");
+  assert.match(detail.created, /^2026-10-13/);
+});
+
+test("저장 확인 필요는 뜻과 확인할 것을 보여주고 다른 상태는 숨김", async () => {
+  const review = await import("./synonymReview.js");
+  assert.equal(review.runProblem({ status: "done" }), null);
+  const problem = review.runProblem({
+    status: "persistence_failed",
+    summary: { failureStep: "final_record" },
+  });
+  assert.match(problem.what, /마지막 결과를 기록하지 못했어요/);
+  assert.ok(problem.check.some((line) => /검토 대기/.test(line)));
+  assert.match(
+    review.runProblem({ status: "persistence_failed" }).what,
+    /실제와 다를 수 있어요/
+  );
+  assert.equal(review.RUN_STATUS_TEXT.failed, "실패");
+  assert.equal(review.RUN_TRIGGER_LABELS.staff_questions, "직원 질문");
+});

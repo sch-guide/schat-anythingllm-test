@@ -10,22 +10,48 @@ import { useWorkspaceEmbeddingProgress } from "@/EmbeddingProgressContext";
 export default function DocumentSettings({ workspace }) {
   const [highlightWorkspace, setHighlightWorkspace] = useState(false);
   const [movedItems, setMovedItems] = useState([]);
+  // docpath → 원래 문서 이름·document_id. 처리 상태를 문서 단위로 묶을 때 씀.
+  const [embedMeta, setEmbedMeta] = useState({});
+  // 왼쪽 문서 목록을 다시 읽게 하는 번호(등록·업데이트가 끝날 때 올림).
+  const [libraryKey, setLibraryKey] = useState(0);
+  const reloadLibrary = useCallback(() => setLibraryKey((k) => k + 1), []);
   // Busy state local to the workspace (right) panel - removing embeddings.
   const [wsBusy, setWsBusy] = useState(false);
   const [wsBusyMessage, setWsBusyMessage] = useState("");
   const picker = useDocumentPicker(workspace);
-  const {
-    refresh,
-    resolveSelection,
-    removeFiles,
-    clearSelection,
-    workspaceDocs: embeddedDocs,
-  } = picker;
+  const { refresh, clearSelection, workspaceDocs: embeddedDocs } = picker;
   const hasChanges = movedItems.length > 0;
 
   const { embeddingProgress, startEmbedding } = useWorkspaceEmbeddingProgress(
     workspace.slug,
-    { onProgressCleared: refresh }
+    {
+      onProgressCleared: () => {
+        refresh();
+        reloadLibrary();
+      },
+    }
+  );
+  const stagedPaths = useMemo(
+    () => new Set(movedItems.map((item) => `${item.folderName}/${item.name}`)),
+    [movedItems]
+  );
+
+  // 왼쪽에서 고른 문서(쪽 파일들)를 오른쪽 등록 목록에 올림. 저장은 오른쪽 버튼.
+  const stageFiles = useCallback((files) => {
+    setMovedItems((prev) => {
+      const seen = new Set(
+        prev.map((item) => `${item.folderName}/${item.name}`)
+      );
+      return [
+        ...prev,
+        ...files.filter((file) => !seen.has(`${file.folderName}/${file.name}`)),
+      ];
+    });
+  }, []);
+  const unstage = useCallback(
+    (ids) =>
+      setMovedItems((prev) => prev.filter((item) => !ids.includes(item.id))),
+    []
   );
 
   /**
@@ -37,28 +63,25 @@ export default function DocumentSettings({ workspace }) {
     [embeddingProgress]
   );
 
-  /**
-   * Stage the current selection for embedding. Files are removed from the
-   * picker optimistically - no refetch, so the move is instant.
-   */
-  const moveSelectedItemsToWorkspace = useCallback(async () => {
-    setHighlightWorkspace(false);
-    const resolved = await resolveSelection();
-    if (resolved.length === 0) return clearSelection();
-
-    setMovedItems((prev) => {
-      const seen = new Set(prev.map((item) => item.id));
-      return [...prev, ...resolved.filter((item) => !seen.has(item.id))];
-    });
-    removeFiles(resolved.map((item) => item.id));
-    clearSelection();
-  }, [resolveSelection, removeFiles, clearSelection]);
-
   const updateWorkspace = async (e) => {
     e?.preventDefault();
     const filenames = movedItems.map(
       (item) => `${item.folderName}/${item.name}`
     );
+    setEmbedMeta((prev) => ({
+      ...prev,
+      ...Object.fromEntries(
+        movedItems.map((item) => [
+          `${item.folderName}/${item.name}`,
+          {
+            title: String(item.title || "")
+              .split(/[\\/]/)
+              .pop(),
+            documentId: item.document_id || null,
+          },
+        ])
+      ),
+    }));
 
     setMovedItems([]);
     setHighlightWorkspace(false);
@@ -72,7 +95,10 @@ export default function DocumentSettings({ workspace }) {
     });
     startEmbedding(workspace.slug, filenames);
     embedPromise.catch((error) => {
-      showToast(`Workspace update failed: ${error}`, "error", { clear: true });
+      console.error("[documents] embed request failed", error);
+      showToast("문서 처리에 실패했습니다. (처리 중 오류)", "error", {
+        clear: true,
+      });
     });
   };
 
@@ -100,11 +126,13 @@ export default function DocumentSettings({ workspace }) {
   return (
     <div className="flex upload-modal -mt-6 z-10 relative">
       <Directory
-        picker={picker}
         workspace={workspace}
-        hiddenPaths={hiddenPaths}
+        reloadKey={libraryKey}
+        stagedPaths={stagedPaths}
+        processingPaths={hiddenPaths}
+        onStage={stageFiles}
+        onUpdateComplete={refresh}
         setHighlightWorkspace={setHighlightWorkspace}
-        moveToWorkspace={moveSelectedItemsToWorkspace}
       />
       <div className="upload-modal-arrow">
         <ArrowsDownUp className="text-white text-base font-bold rotate-90 w-11 h-11" />
@@ -121,6 +149,8 @@ export default function DocumentSettings({ workspace }) {
         hasChanges={hasChanges}
         saveChanges={updateWorkspace}
         movedItems={movedItems}
+        embedMeta={embedMeta}
+        onUnstage={unstage}
       />
     </div>
   );

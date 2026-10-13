@@ -236,6 +236,7 @@ async function runQuestionCandidates({
         });
       },
     });
+  let stage = "run";
   try {
     const result = await runCandidates({
       ledger,
@@ -272,6 +273,7 @@ async function runQuestionCandidates({
         return saved.newGroups + saved.additions;
       },
     });
+    stage = "final_record";
     if (runId)
       await db.schat_synonym_suggestion_runs.update({
         where: { id: runId },
@@ -292,7 +294,12 @@ async function runQuestionCandidates({
       await db.schat_synonym_suggestion_runs
         .update({
           where: { id: runId },
-          data: { status: "persistence_failed", finishedAt: now() },
+          data: {
+            status: "persistence_failed",
+            // 원문 오류 대신 실패한 단계 이름만 남김(관리자 화면 안내용).
+            summary: JSON.stringify({ ...summary, failureStep: stage }),
+            finishedAt: now(),
+          },
         })
         .catch(() => {});
     return { status: "failed", candidates: summary.staffQuestions };

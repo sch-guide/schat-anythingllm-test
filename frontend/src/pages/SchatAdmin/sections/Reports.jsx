@@ -77,8 +77,8 @@ export function ReportRows({ reports, onSelect }) {
           <td className="py-3 pr-3">{row.department || "-"}</td>
           <td className="py-3 pr-3 text-xs">{when(row.createdAt)}</td>
           <td className="py-3 whitespace-nowrap">
-            <Badge tone={row.status === "resolved" ? "ok" : "neutral"}>
-              {row.status === "resolved" ? "처리 완료" : "확인 전"}
+            <Badge tone={TONES[row.status] || "neutral"}>
+              {STATUS[row.status] || STATUS.open}
             </Badge>
           </td>
         </tr>
@@ -87,27 +87,36 @@ export function ReportRows({ reports, onSelect }) {
   );
 }
 
-export function FeedbackContent({ feedback, onResolve, saving = false }) {
+// 질문·답변처럼 긴 글은 왼쪽 정렬로 부모 폭을 그대로 씀(InfoRow는 짧은 값용).
+export function TextBlock({ label, children }) {
   return (
-    <div className="rounded-lg border border-theme-sidebar-border p-4 flex flex-col gap-3">
+    <div className="w-full min-w-0 text-left" data-testid="report-text-block">
+      <p className="text-sm text-theme-text-secondary">{label}</p>
+      <div className="mt-1 w-full min-w-0 text-sm text-theme-text-primary whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function FeedbackContent({
+  feedback,
+  onResolve,
+  onDelete,
+  saving = false,
+}) {
+  return (
+    <div className="w-full min-w-0 rounded-lg border border-theme-sidebar-border p-4 flex flex-col gap-3">
       <h3 className="font-semibold text-theme-text-primary">
         {FEEDBACK_KINDS[feedback.kind] || "답변 평가"}
       </h3>
-      <InfoRow label="질문">
-        <span className="whitespace-pre-wrap break-words">
-          {feedback.question}
-        </span>
-      </InfoRow>
+      <TextBlock label="질문">{feedback.question}</TextBlock>
       {feedback.memo && (
         <p className="text-sm text-theme-text-secondary break-words">
           {feedback.memo}
         </p>
       )}
-      <InfoRow label="답변">
-        <span className="whitespace-pre-wrap break-words">
-          {feedback.answer}
-        </span>
-      </InfoRow>
+      <TextBlock label="답변">{feedback.answer}</TextBlock>
       <div>
         <p className="text-sm font-medium text-theme-text-primary">
           참고한 지침
@@ -135,16 +144,27 @@ export function FeedbackContent({ feedback, onResolve, saving = false }) {
           {saving ? "저장 중..." : "처리 완료"}
         </Button>
       ) : (
-        <p className="text-sm text-theme-text-secondary">처리 완료</p>
+        <div
+          className="flex flex-wrap items-center gap-3"
+          data-testid="feedback-resolved"
+        >
+          <p className="text-sm text-theme-text-secondary">처리 완료</p>
+          {onDelete && (
+            <Button variant="danger" onClick={onDelete} disabled={saving}>
+              삭제
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-function FeedbackDetail({ id, onSaved }) {
+function FeedbackDetail({ id, onSaved, onDeleted }) {
   const [feedback, setFeedback] = useState(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   useEffect(() => {
     let active = true;
     SchatAccount.answerFeedback(id)
@@ -182,10 +202,18 @@ function FeedbackDetail({ id, onSaved }) {
         <FeedbackContent
           feedback={feedback}
           onResolve={resolve}
+          onDelete={() => setConfirmDelete(true)}
           saving={saving}
         />
       ) : (
         !error && <Loading />
+      )}
+      {confirmDelete && (
+        <DeleteReportDialog
+          remove={() => SchatAccount.deleteAnswerFeedback(id)}
+          onClose={() => setConfirmDelete(false)}
+          onDeleted={onDeleted}
+        />
       )}
     </>
   );
@@ -400,6 +428,10 @@ function ReportList({ onMakeFaq }) {
           key={`feedback-${selected.id}`}
           id={selected.id}
           onSaved={load}
+          onDeleted={() => {
+            setSelected(null);
+            load();
+          }}
         />
       )}
       {selected && !isFeedback(selected) && (
@@ -509,19 +541,28 @@ function ReportDetail({ report, onSaved, onMakeFaq, onDeleted }) {
         data-testid="report-danger"
       >
         <p className="text-sm font-semibold text-red-500">위험 영역</p>
-        <p className="text-xs text-theme-text-secondary">
-          테스트·중복·잘못 등록된 신고처럼 더 보관할 필요가 없는 신고만
-          삭제하세요. 삭제한 신고는 복구할 수 없습니다.
-        </p>
-        <div>
-          <Button variant="danger" onClick={() => setConfirmDelete(true)}>
-            신고 삭제
-          </Button>
-        </div>
+        {report.status === "resolved" ? (
+          <>
+            <p className="text-xs text-theme-text-secondary">
+              처리가 끝나 더 보관할 필요가 없는 신고만 삭제하세요. 삭제한 신고는
+              복구할 수 없습니다.
+            </p>
+            <div>
+              <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+                신고 삭제
+              </Button>
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-theme-text-secondary">
+            처리 완료로 저장한 신고만 삭제할 수 있어요.
+          </p>
+        )}
       </section>
       {confirmDelete && (
         <DeleteReportDialog
           report={report}
+          remove={() => SchatAccount.deleteReport(report.id)}
           onClose={() => setConfirmDelete(false)}
           onDeleted={onDeleted}
         />
@@ -530,12 +571,18 @@ function ReportDetail({ report, onSaved, onMakeFaq, onDeleted }) {
   );
 }
 
-// 신고 삭제: the server removes the report for good (admin only).
-function DeleteReportDialog({ report, onClose, onDeleted }) {
+// 신고 삭제: the server removes the report for good (admin only, 처리 완료만).
+// 직원 계정과 채팅 기록은 지우지 않음.
+export function DeleteReportDialog({
+  report,
+  remove: request,
+  onClose,
+  onDeleted,
+}) {
   const [deleting, setDeleting] = useState(false);
   async function remove() {
     setDeleting(true);
-    const result = await SchatAccount.deleteReport(report.id);
+    const result = await request().catch(() => ({ success: false }));
     setDeleting(false);
     if (!result.success)
       return showToast(result.error || "삭제하지 못했습니다.", "error");
@@ -545,30 +592,36 @@ function DeleteReportDialog({ report, onClose, onDeleted }) {
   }
   return (
     <Modal isOpen onClose={onClose} size="md">
-      <ModalHeader title="문제 신고를 삭제하시겠습니까?" onClose={onClose} />
+      <ModalHeader title="이 문제 신고를 삭제하시겠습니까?" onClose={onClose} />
       <ModalBody>
         <div
           className="flex flex-col gap-y-3"
           data-testid="report-delete-dialog"
         >
-          <dl className="grid grid-cols-[4rem_1fr] gap-y-1 text-sm">
-            <dt className="text-theme-text-secondary">제목</dt>
-            <dd className="text-theme-text-primary break-all">
-              {report.title}
-            </dd>
-            <dt className="text-theme-text-secondary">신고자</dt>
-            <dd className="text-theme-text-primary">
-              {report.reporterName || "-"}
-              {report.reporterDeleted ? " (삭제된 사용자)" : ""}
-            </dd>
-            <dt className="text-theme-text-secondary">등록일</dt>
-            <dd className="text-theme-text-primary">
-              {when(report.createdAt)}
-            </dd>
-          </dl>
+          <p className="text-sm text-theme-text-primary">
+            삭제한 신고는 복구할 수 없습니다.
+          </p>
+          {report && (
+            <dl className="grid grid-cols-[4rem_1fr] gap-y-1 text-sm">
+              <dt className="text-theme-text-secondary">제목</dt>
+              <dd className="text-theme-text-primary break-all">
+                {report.title}
+              </dd>
+              <dt className="text-theme-text-secondary">신고자</dt>
+              <dd className="text-theme-text-primary">
+                {report.reporterName || "-"}
+                {report.reporterDeleted ? " (삭제된 사용자)" : ""}
+              </dd>
+              <dt className="text-theme-text-secondary">등록일</dt>
+              <dd className="text-theme-text-primary">
+                {when(report.createdAt)}
+              </dd>
+            </dl>
+          )}
           <Notice tone="warning">
-            이 신고는 삭제 후 복구할 수 없습니다. 이 신고로 보낸 직원 알림도
-            함께 지워지고, 이 신고로 만든 FAQ는 그대로 남습니다.
+            {report
+              ? "이 신고로 보낸 직원 알림도 함께 지워지고, 이 신고로 만든 FAQ는 그대로 남습니다. 직원 계정은 지워지지 않습니다."
+              : "이 평가 기록만 지워집니다. 직원 계정과 원래 대화 기록은 그대로 남습니다."}
           </Notice>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={onClose} disabled={deleting}>

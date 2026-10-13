@@ -82,10 +82,12 @@ test("저장·관리자 오류 응답과 로그는 메모·driver오류를 포�
 test("관리자 목록·상세·완료 경로 모두 adminOnly 사용, 신고와 평가의 같은 id를 구분", async () => {
   assert.equal(typeof api.registerFeedbackAdminEndpoints, "function");
   const routes = [];
+  const logged = [];
   const adminOnly = [() => {}];
   const app = {
     get: (...args) => routes.push(["GET", ...args]),
     patch: (...args) => routes.push(["PATCH", ...args]),
+    delete: (...args) => routes.push(["DELETE", ...args]),
   };
   const row = {
     id: 1,
@@ -102,9 +104,15 @@ test("관리자 목록·상세·완료 경로 모두 adminOnly 사용, 신고와
       list: async () => [row],
       detail: async () => ({ ...row, answer: "전체 답변", sources: [] }),
       resolve: async () => ({ ...row, status: "resolved" }),
+      remove: async (id) => {
+        if (Number(id) === 2)
+          throw Object.assign(new Error("x"), { code: "NOT_RESOLVED" });
+        return { id: Number(id), kind: "wrong" };
+      },
     }),
+    logEvent: async (...args) => logged.push(args),
   });
-  assert.equal(routes.length, 3);
+  assert.equal(routes.length, 4);
   for (const route of routes) assert.equal(route[2], adminOnly);
   const res = response();
   await routes[0][3]({ query: {} }, res);
@@ -124,4 +132,15 @@ test("관리자 목록·상세·완료 경로 모두 adminOnly 사용, 신고와
   const done = response();
   await routes[2][3]({ params: { id: 1 } }, done);
   assert.equal(done.body.feedback.status, "resolved");
+  const removed = response();
+  removed.locals.user = { id: 5 };
+  await routes[3][3]({ params: { id: 1 } }, removed);
+  assert.deepEqual(removed.body, { success: true, id: 1 });
+  assert.deepEqual(logged, [
+    ["schat_report_deleted", { feedbackId: 1, kind: "wrong", status: "resolved" }, 5],
+  ]);
+  const blocked = response();
+  await routes[3][3]({ params: { id: 2 } }, blocked);
+  assert.equal(blocked.statusCode, 409);
+  assert.equal(logged.length, 1);
 });

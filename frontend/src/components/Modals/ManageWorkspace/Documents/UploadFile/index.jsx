@@ -8,6 +8,7 @@ import Workspace from "../../../../../models/workspace";
 import debounce from "lodash.debounce";
 import DocumentUpdateStatus from "./DocumentUpdateStatus";
 import { getFilesFromUploadEvent } from "../../../../../utils/folderUpload";
+import { PDF_ACCEPT } from "../uploadStatus";
 import {
   mergeUploadCompletion,
   runUploadCompletionSync,
@@ -116,7 +117,7 @@ export default function UploadFile({
         });
         if (!result.ok)
           showToast(
-            "The upload finished, but the new documents could not be selected. Refresh the document list and try again.",
+            "업로드는 끝났지만 새 문서를 목록에서 고르지 못했어요. 창을 닫았다가 다시 열어 주세요.",
             "error"
           );
       }, 750),
@@ -138,6 +139,8 @@ export default function UploadFile({
     onDrop: enqueueDrop,
     disabled: !ready || busy,
     getFilesFromEvent: getFilesFromUploadEvent,
+    // SCHAT은 병원 PDF만 등록함(원본 PDF·쪽 근거·체크리스트가 PDF 기준).
+    accept: PDF_ACCEPT,
   });
 
   return (
@@ -164,8 +167,14 @@ export default function UploadFile({
         ) : files.length === 0 ? (
           <div className="flex flex-col items-center justify-center">
             <CloudArrowUp className="w-8 h-8 text-white/80 light:invert" />
-            <div className="text-white text-opacity-80 text-sm font-semibold py-1">
+            <div className="text-white text-opacity-80 text-sm font-semibold py-1 text-center">
               {t("connectors.upload.click-upload")}
+            </div>
+            <div
+              className="text-white text-opacity-60 text-xs font-medium"
+              data-testid="pdf-only"
+            >
+              PDF 파일만 등록할 수 있어요.
             </div>
           </div>
         ) : (

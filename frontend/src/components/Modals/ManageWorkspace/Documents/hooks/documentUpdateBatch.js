@@ -29,7 +29,7 @@ export function createDocumentUpdateBatch({
       try {
         if (items.some((item) => item.rejected))
           throw new Error(
-            "올릴 수 없는 파일이 포함되어 있습니다. 파일을 확인한 뒤 전체 묶음을 다시 선택해 주세요."
+            "PDF가 아닌 파일처럼 올릴 수 없는 파일이 포함되어 있습니다. PDF 파일만 다시 선택해 주세요."
           );
         const result = await preview(items.map(({ file }) => file.name));
         if (current !== generation) return false;

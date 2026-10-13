@@ -13,6 +13,9 @@ export default function OriginalPdfRow({
   onOriginalLinked,
   checklists = [],
   onChecklistUpdated,
+  staged = false,
+  onUnstage,
+  onView,
 }) {
   const selected = selectionState === "all";
   const partial = selectionState === "some";
@@ -96,7 +99,21 @@ export default function OriginalPdfRow({
           weight="fill"
         />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{row.title}</p>
+          {!staged && row.pdfRef && row.originalPdfAvailable && onView ? (
+            <button
+              type="button"
+              className="block max-w-full truncate text-left font-medium underline-offset-2 hover:underline"
+              title="원본 PDF 보기"
+              onClick={(event) => {
+                event.stopPropagation();
+                onView(row);
+              }}
+            >
+              {row.title}
+            </button>
+          ) : (
+            <p className="truncate font-medium">{row.title}</p>
+          )}
           {row.pageCount > 0 && (
             <p className="text-[10px] text-theme-text-secondary">
               {row.pageCount}페이지
@@ -116,7 +133,25 @@ export default function OriginalPdfRow({
           onClick={(event) => event.stopPropagation()}
           onChange={linkOriginal}
         />
-        {row.originalPdfAvailable ? (
+        {staged ? (
+          <span className="flex shrink-0 items-center gap-x-2">
+            <span className="text-[10px] font-medium text-sky-300 light:text-sky-700">
+              저장 전
+            </span>
+            {onUnstage && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onUnstage(row);
+                }}
+                className="rounded border border-theme-modal-border px-2 py-1 text-[10px] font-medium hover:bg-theme-file-picker-hover"
+              >
+                빼기
+              </button>
+            )}
+          </span>
+        ) : row.originalPdfAvailable ? (
           <span className="shrink-0 text-[10px] font-medium text-green-400 light:text-green-700">
             원본 연결됨
           </span>

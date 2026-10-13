@@ -6,6 +6,16 @@ import { v4 } from "uuid";
 import { ABORT_STREAM_EVENT } from "@/utils/chat";
 
 const Workspace = {
+  // 문서 등록 창 왼쪽 목록(문서 단위). 실패하면 null.
+  documentLibrary: async function (slug) {
+    return fetch(
+      `${API_BASE}/workspace/${encodeURIComponent(slug)}/document-library`,
+      { headers: baseHeaders() }
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => (data?.success ? data.documents : null))
+      .catch(() => null);
+  },
   previewDocumentUpdate: async function (slug, names) {
     const response = await fetch(
       `${API_BASE}/workspace/${encodeURIComponent(slug)}/document-update-preview`,
@@ -320,7 +330,10 @@ const Workspace = {
       headers: baseHeaders(),
     });
 
-    const data = await response.json();
+    // 서버가 JSON이 아닌 오류를 돌려줘도 업로드 줄이 멈추지 않게 함.
+    const data = await response
+      .json()
+      .catch(() => ({ success: false, error: "" }));
     return { response, data };
   },
   linkOriginalPdf: async function (slug, pdfRef, file) {

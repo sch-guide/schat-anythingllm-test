@@ -5,13 +5,21 @@ function safeFeedbackHandler(fn) {
     try {
       await fn(request, response);
     } catch (error) {
-      const code = ["INVALID_FEEDBACK", "NOT_FOUND"].includes(error?.code)
+      const code = ["INVALID_FEEDBACK", "NOT_FOUND", "NOT_RESOLVED"].includes(
+        error?.code
+      )
         ? error.code
         : "UNAVAILABLE";
       console.error("[answer-feedback]", code);
       response
         .status(
-          code === "INVALID_FEEDBACK" ? 400 : code === "NOT_FOUND" ? 404 : 503
+          code === "INVALID_FEEDBACK"
+            ? 400
+            : code === "NOT_FOUND"
+              ? 404
+              : code === "NOT_RESOLVED"
+                ? 409
+                : 503
         )
         .json({
           success: false,
@@ -19,7 +27,9 @@ function safeFeedbackHandler(fn) {
           error:
             code === "INVALID_FEEDBACK"
               ? "이유를 선택하고 메모를 한 줄 200자 이내로 적어 주세요."
-              : "평가를 처리하지 못했습니다. 다시 시도해 주세요.",
+              : code === "NOT_RESOLVED"
+                ? "처리 완료된 항목만 삭제할 수 있어요."
+                : "평가를 처리하지 못했습니다. 다시 시도해 주세요.",
         });
     }
   };
@@ -46,7 +56,13 @@ function feedbackSaveHandler({
 }
 function registerFeedbackAdminEndpoints(
   app,
-  { adminOnly, listReports, getStore = answerFeedbackStore }
+  {
+    adminOnly,
+    listReports,
+    getStore = answerFeedbackStore,
+    logEvent = (...args) =>
+      require("../models/eventLogs").EventLogs.logEvent(...args),
+  }
 ) {
   app.get(
     "/schat-admin/reports",
@@ -88,6 +104,22 @@ function registerFeedbackAdminEndpoints(
           success: true,
           feedback: await getStore().resolve(request.params.id),
         });
+    })
+  );
+  // 처리 완료된 👎 평가 삭제. 시스템 기록에는 번호와 종류만 남김.
+  app.delete(
+    "/schat-admin/answer-feedback/:id",
+    adminOnly,
+    safeFeedbackHandler(async (request, response) => {
+      const removed = await getStore().remove(request.params.id);
+      await Promise.resolve(
+        logEvent(
+          "schat_report_deleted",
+          { feedbackId: removed.id, kind: removed.kind, status: "resolved" },
+          response.locals?.user?.id
+        )
+      ).catch(() => null);
+      response.status(200).json({ success: true, id: removed.id });
     })
   );
 }

@@ -68,6 +68,11 @@ export function GeminiBudgetSummary({ budget }) {
           </div>
         ))}
       </div>
+      {available && budget.partial && budget.reason && (
+        <p className="text-sm text-theme-text-secondary">
+          {budget.reason}. 빠진 기록만큼 실제 사용 금액은 더 클 수 있어요.
+        </p>
+      )}
       <p className="text-sm text-theme-text-secondary">
         SCHAT에 기록된 채팅만 계산한 추정치예요. 실제 잔액과 다를 수 있어요.
       </p>

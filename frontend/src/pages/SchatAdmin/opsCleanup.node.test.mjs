@@ -21,11 +21,15 @@ test("a report is deleted from its detail view after a confirmation", () => {
   assert.match(detail, /위험 영역/);
   assert.match(detail, /setConfirmDelete\(true\)/);
   const dialog = reports.slice(reports.indexOf("function DeleteReportDialog"));
-  assert.match(dialog, /문제 신고를 삭제하시겠습니까\?/);
+  assert.match(dialog, /이 문제 신고를 삭제하시겠습니까\?/);
   for (const label of ["제목", "신고자", "등록일"])
     assert.match(dialog, new RegExp(label));
-  assert.match(dialog, /삭제 후 복구할 수 없습니다/);
-  assert.match(dialog, /SchatAccount\.deleteReport\(report\.id\)/);
+  assert.match(dialog, /삭제한 신고는 복구할 수 없습니다/);
+  assert.match(dialog, /취소/);
+  // 처리 완료로 저장된 신고에서만 삭제 버튼을 보여줌
+  assert.match(detail, /report\.status === "resolved" \? \(/);
+  assert.match(detail, /처리 완료로 저장한 신고만 삭제할 수 있어요/);
+  assert.match(detail, /SchatAccount\.deleteReport\(report\.id\)/);
   // after deleting, the list reloads and the detail closes
   assert.match(
     list,

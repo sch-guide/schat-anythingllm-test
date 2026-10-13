@@ -90,6 +90,22 @@ function workspaceDocumentIds(documents = []) {
   ];
 }
 
+// 문서 처리 실패는 화면에 짧은 이유만 보여주고, 자세한 내용은 관리자만 보는
+// 시스템 기록에 남김(원문 일부만, 300자 이내).
+async function logUploadFailure(request, response, stage, detail = "") {
+  try {
+    await EventLogs.logEvent(
+      "schat_document_upload_failed",
+      {
+        documentName: request.file?.originalname || "",
+        stage,
+        detail: String(detail || "").slice(0, 300),
+      },
+      response.locals?.user?.id
+    );
+  } catch {}
+}
+
 function workspaceEndpoints(app) {
   if (!app) return;
   const responseCache = new Map();
@@ -152,7 +168,18 @@ function workspaceEndpoints(app) {
       try {
         const { documentsPath } = require("../utils/files");
         const { names } = reqBody(request);
-        const preview = await previewDocumentUpdates({ root: documentsPath, names });
+        const registered = new Set(
+          (
+            await require("../utils/prisma").workspace_documents.findMany({
+              select: { docpath: true },
+            })
+          ).map((row) => row.docpath)
+        );
+        const preview = await previewDocumentUpdates({
+          root: documentsPath,
+          names,
+          registered,
+        });
         return response.status(200).json({ success: true, ...preview });
       } catch (error) {
         const invalid = ["INVALID_UPLOAD_NAMES", "DUPLICATE_BATCH_NAME"].includes(error.message);
@@ -162,6 +189,32 @@ function workspaceEndpoints(app) {
             ? "파일 이름을 확인해주세요. 같은 이름의 파일은 한 번에 하나씩 올려주세요."
             : "기존 자료를 확인하지 못해 업로드를 중단함. 문서 목록을 확인해주세요.",
         });
+      }
+    }
+  );
+
+  // 문서 등록 창 왼쪽 목록: 쪽 파일을 문서 단위로 묶어 돌려줌(읽기 전용).
+  app.get(
+    "/workspace/:slug/document-library",
+    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager]), validWorkspaceSlug],
+    async (_request, response) => {
+      try {
+        const { documentsPath } = require("../utils/files");
+        const { documentLibrary } = require("../utils/documentLibrary");
+        const { publicOriginalPdfMetadata } = require("../utils/originalDocuments");
+        const documents = await documentLibrary({
+          root: documentsPath,
+          workspaceId: response.locals.workspace.id,
+          prisma: require("../utils/prisma"),
+          pdfMeta: publicOriginalPdfMetadata,
+        });
+        response.set("Cache-Control", "no-store");
+        return response.status(200).json({ success: true, documents });
+      } catch (error) {
+        console.error("[document-library]", error.message);
+        return response
+          .status(500)
+          .json({ success: false, error: "문서 목록을 불러오지 못했습니다." });
       }
     }
   );
@@ -262,6 +315,7 @@ function workspaceEndpoints(app) {
         const processingOnline = await Collector.online();
 
         if (!processingOnline) {
+          await logUploadFailure(request, response, "processor_offline");
           response
             .status(500)
             .json({
@@ -287,6 +341,7 @@ function workspaceEndpoints(app) {
         if (!success) {
           if (stagedOriginal?.created && stagedDocumentId)
             await removeOriginalPdf(stagedDocumentId);
+          await logUploadFailure(request, response, "collector", reason);
           response.status(500).json({ success: false, error: reason }).end();
           return;
         }
@@ -321,6 +376,12 @@ function workspaceEndpoints(app) {
           await removeOriginalPdf(stagedDocumentId).catch(() => {});
         console.error(e.message, e);
         const status = e?.code === "INVALID_PDF" ? 400 : 500;
+        await logUploadFailure(
+          request,
+          response,
+          status === 400 ? "invalid_pdf" : "server",
+          e?.message
+        );
         response
           .status(status)
           .json({

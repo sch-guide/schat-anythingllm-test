@@ -436,6 +436,13 @@ export default function PromptInput({
                 </div>
               )}
             </div>
+            <p
+              className="mt-1.5 px-2 text-center text-[11px] leading-4 text-zinc-400 light:text-slate-500"
+              data-testid="schat-mistake-notice"
+            >
+              SCHAT은 실수할 수 있습니다. 중요한 내용은 원문 지침을 꼭
+              확인하세요.
+            </p>
           </div>
         </div>
       </form>

@@ -124,16 +124,8 @@ test("seven usage items, without any author information", () => {
     { name: "하병동", hidden: false, questions: 5 },
   ]);
   // (7) stored tokens only
+  // 예상 요금은 시스템 상태(Gemini AI)로 옮겨 사용 통계에는 없음
   assert.deepEqual(stats.aiUsage, {
-    estimatedCost: {
-      estimatedKrw: null,
-      chargedQuestions: 7,
-      missingChats: 7,
-      models: [],
-      unknownModels: [],
-      reason: "과거 기록이나 확인되지 않은 사용량이 있어 계산할 수 없어요.",
-      priceVerified: "2026-10-11",
-    },
     questions: 7,
     chatsWithTokens: 5,
     promptTokens: 500,

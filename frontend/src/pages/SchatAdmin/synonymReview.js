@@ -159,6 +159,7 @@ export function createdText(value) {
 }
 
 export const RUN_TRIGGER_LABELS = {
+  staff_questions: "직원 질문",
   upload: "문서 등록",
   document_update: "문서 새 버전",
   backfill: "기존 문서 한 번 실행",
@@ -178,6 +179,68 @@ export function runTotals(summary = {}) {
     ["Gemini 호출", summary.geminiCalls],
     ["재시도", summary.retries],
   ].map(([label, value]) => ({ label, value: Number(value) || 0 }));
+}
+
+// 후보 하나를 관리자가 확인할 수 있는 형태로 정리함. 직원 질문 예시는 서버에서
+// 이미 이름·번호를 가린 한 줄만 옴(원문 질문은 내려오지 않음).
+export function candidateDetail(proposal = {}, group = {}) {
+  const sources = proposal.sources || [];
+  const staff = sources.filter((item) => item.type === "staff_questions");
+  const documents = sources.filter((item) => item.type !== "staff_questions");
+  const origins = [];
+  if (staff.length) origins.push("직원 질문");
+  if (documents.length) origins.push("문서");
+  if (String(proposal.method || "").startsWith("gemini") || !origins.length)
+    origins.push("AI 자동 제안");
+  const isAddition = proposal.type === "addition";
+  const terms = proposal.terms?.length ? proposal.terms : group.terms || [];
+  return {
+    expression: terms.join(", "),
+    related: isAddition
+      ? (group.terms || []).join(", ")
+      : "새 묶음 (관련된 기존 묶음 없음)",
+    origins,
+    staff: staff.map((item) => ({
+      count: Number(item.count) || 0,
+      example: item.example || "",
+    })),
+    documents: describeSources(documents),
+    reason: proposal.reason || "",
+    created: createdText(proposal.createdAt).replace(/ 자동 생성$/, ""),
+    confidence: confidenceText(proposal.confidence),
+    lowConfidence: proposal.lowConfidence === true,
+  };
+}
+
+// 실행 기록 상태를 쉬운 말로. 저장 확인 필요는 실행 결과를 마지막에 기록하지
+// 못한 상태라 화면 숫자가 실제와 다를 수 있음.
+export const RUN_STATUS_TEXT = {
+  done: "완료",
+  failed: "실패",
+  limited: "한도 도달로 중단",
+  skipped: "건너뜀",
+  running: "진행 중",
+  retrying: "진행 중",
+  removed: "삭제됨",
+  persistence_failed: "저장 확인 필요",
+};
+export const RUN_FAILURE_STEPS = {
+  run: "후보를 찾는 도중 실행 기록을 저장하지 못했어요.",
+  final_record: "후보 찾기는 끝났지만 마지막 결과를 기록하지 못했어요.",
+};
+export function runProblem(run = {}) {
+  if (run.status !== "persistence_failed") return null;
+  const step = RUN_FAILURE_STEPS[run.summary?.failureStep];
+  return {
+    what:
+      step ||
+      "실행 결과를 마지막에 기록하지 못했어요. 아래 숫자는 실제와 다를 수 있어요.",
+    check: [
+      "동의어 목록에서 이 날짜에 새로 생긴 '검토 대기' 후보가 있는지 확인해 주세요. 있으면 각 후보의 '확인할 내용 보기'로 검토하면 돼요.",
+      "같은 범위를 다시 호출하면 AI 요금이 중복될 수 있어 자동으로 다시 시도하지 않아요. 다음 예약 실행에서 새로 찾아요.",
+      "같은 표시가 매일 반복되면 시스템 상태의 시스템 기록과 서버 상태를 기술 담당자에게 확인 요청해 주세요.",
+    ],
+  };
 }
 
 export function groupSources(group = {}) {

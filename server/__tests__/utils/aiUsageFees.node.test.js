@@ -194,12 +194,13 @@ test("forecast needs ten charged questions over three active KST days and avoids
     null
   );
 });
-test("usage statistics apply the same calculator and retain small department suppression", () => {
+test("usage statistics no longer carry the cost (moved to 시스템 상태) and retain small department suppression", () => {
   const { computeUsageStats } = require("../../utils/schatAdmin/usageStats");
   const chats = [row(measured)];
   chats[0].user_id = 1;
   const stats = computeUsageStats({ chats, now: new Date(at) });
-  assert.equal(stats.aiUsage.estimatedCost.estimatedKrw, 1575);
+  assert.equal(stats.aiUsage.estimatedCost, undefined);
+  assert.equal(stats.aiUsage.questions, 1);
   const filtered = computeUsageStats({
     chats,
     now: new Date(at),
@@ -209,4 +210,38 @@ test("usage statistics apply the same calculator and retain small department sup
   });
   assert.equal(filtered.suppressed, true);
   assert.equal(filtered.aiUsage, undefined);
+});
+test("단가는 한 곳(MODEL_PRICING)에서 관리하고 확인 안 된 모델은 넣지 않음", () => {
+  assert.deepEqual(Object.keys(fees.MODEL_PRICING), ["gemini-3.8-flash"]);
+  assert.equal(fees.priceFor("gemini-3.1-flash", at), null);
+  assert.equal(fees.priceFor("gemini-3.8-flash", at).inputUsd, 0.75);
+});
+test("모델이 섞이면 기록마다 그 모델로 계산하고, 단가 없는 기록만 일부 제외", () => {
+  const result = fees.estimateChatCost([
+    row(measured),
+    row(measured, at, "gemini-3.1-flash"),
+    { createdAt: new Date(at), response: JSON.stringify({ metrics: measured }) },
+  ]);
+  assert.equal(result.estimatedKrw, 1575);
+  assert.equal(result.calculatedChats, 1);
+  assert.equal(result.unpricedChats, 1);
+  assert.equal(result.noUsageChats, 1);
+  assert.equal(result.partial, true);
+  assert.deepEqual(result.unknownModels, ["gemini-3.1-flash"]);
+  assert.match(result.reason, /일부 기록 제외 2건/);
+  assert.match(result.reason, /단가 정보 없음 1건/);
+  assert.deepEqual(
+    result.byModel.map((m) => [m.model, m.krw]),
+    [["gemini-3.8-flash", 1575]]
+  );
+});
+test("이번 달 예상 비용은 한국 시간 이번 달 기록만 셈", () => {
+  const now = new Date("2026-10-13T03:00:00Z");
+  const result = fees.monthEstimate(
+    [row(measured, "2026-09-30T14:00:00Z"), row(measured, "2026-09-30T16:00:00Z")],
+    now
+  );
+  assert.equal(result.estimatedKrw, 1575);
+  assert.equal(result.since, "2026-09-30T15:00:00.000Z");
+  assert.equal(fees.monthEstimate([], now).estimatedKrw, null);
 });

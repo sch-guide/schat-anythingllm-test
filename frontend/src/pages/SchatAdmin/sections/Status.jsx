@@ -3,6 +3,7 @@ import System from "@/models/system";
 import SchatAdmin from "@/models/schatAdmin";
 import { Button, Card, InfoRow, Loading, Notice } from "../ui";
 import GeminiBudgetPanel from '../GeminiBudgetPanel';
+import GeminiCostCard from '../GeminiCostCard';
 import ConnectionsSection from './Connections';
 import ChatAdmissionPanel from '../ChatAdmissionPanel';
 import { useGeminiAvailability } from '../GeminiAvailabilityBanner';
@@ -47,6 +48,8 @@ export const EVENT_LABELS = {
   schat_department_deleted: "부서 삭제",
   schat_storage_cleanup: "저장공간 정리",
   schat_original_pdf_cleanup: "연결되지 않은 원본 PDF 삭제",
+  schat_report_deleted: "문제 신고 삭제",
+  schat_document_upload_failed: "문서 처리 실패",
 };
 
 const CHECKLIST_ISSUE_TEXT = {
@@ -155,6 +158,7 @@ export default function StatusSection() {
       <Button className="self-start" variant="secondary" onClick={testConnections} disabled={testing}>
         {testing ? '확인 중…' : '연결 시험'}
       </Button>
+      <GeminiCostCard ai={availability?.state} aiError={availabilityError} budget={availability?.budget} />
       <ChatAdmissionPanel onState={setAdmission} showDaily={false} />
       <Card
         title="등록 지침과 체크리스트"

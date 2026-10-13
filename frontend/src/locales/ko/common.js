@@ -1141,7 +1141,7 @@ const TRANSLATIONS = {
       editing: "편집 중",
     },
     directory: {
-      "my-documents": "내 문서",
+      "my-documents": "등록할 문서",
       "new-folder": "새 폴더",
       "search-document": "문서 검색",
       "no-documents": "문서 없음",
@@ -1165,7 +1165,8 @@ const TRANSLATIONS = {
       "processor-offline": "문서 처리기가 오프라인 상태입니다",
       "processor-offline-desc":
         "현재 문서 처리기가 오프라인이어서 파일을 업로드할 수 없습니다. 잠시 후 다시 시도해 주세요.",
-      "click-upload": "클릭하여 업로드하거나 파일을 끌어다 놓으세요",
+      "click-upload":
+        "클릭하여 PDF를 업로드하거나 파일을 이곳으로 끌어다 놓으세요.",
       "file-types":
         "텍스트 파일, CSV, 스프레드시트, 오디오 파일 등 다양한 파일을 지원합니다!",
       "or-submit-link": "또는 링크 제출",

@@ -11,7 +11,7 @@ test('failed PDF preparation leaves live document files unchanged', async () => 
     const { executeDocumentUpdate } = require('../../utils/documentUpdates/service');
     await assert.rejects(executeDocumentUpdate({workspace:{id:1,slug:'test'}, files:[{originalname:'규정.pdf',filename:'test.pdf',path:'fake'}], manifest:{names:['규정.pdf'],conflicts:[{name:'규정.pdf',documents:[{docpath:'custom-documents/old.json',documentId:'old'}]}]}}, {
       root, guard:new (require('../../utils/documentUpdates/guard').UpdateGuard)(path.join(root,'guard')), provider:'chroma', collector:{processDocument:async()=>{throw new Error('parser failed');}},
-      preserve:async()=>{}, prisma:{document_vectors:{deleteMany:async()=>{}}}, vector:{normalize:x=>x,connect:async()=>({client:{deleteCollection:async()=>{}}})},
+      preserve:async()=>{}, prisma:{document_vectors:{deleteMany:async()=>{}},workspace_documents:{findMany:async()=>[{docpath:'custom-documents/old.json'}]}}, vector:{normalize:x=>x,connect:async()=>({client:{deleteCollection:async()=>{}}})},
     }), /parser failed/);
     assert.equal(JSON.parse(await fs.readFile(path.join(root,'documents','custom-documents','old.json'),'utf8')).document_id,'old');
     assert.deepEqual(await fs.readdir(path.join(root,'documents','custom-documents')),['old.json']);

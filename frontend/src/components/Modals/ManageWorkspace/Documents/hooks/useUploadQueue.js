@@ -13,6 +13,12 @@ import { createDocumentUpdateBatch } from "./documentUpdateBatch";
  * folder structure decides the destination, and an individual folder row,
  * where the user has named the destination by dropping onto it.
  */
+function isPdfFile(file) {
+  return (
+    file?.type === "application/pdf" || /\.pdf$/i.test(String(file?.name || ""))
+  );
+}
+
 export default function useUploadQueue(workspace) {
   /** Whether the document processor is up; nothing can be uploaded if not. */
   const [ready, setReady] = useState(false);
@@ -95,13 +101,18 @@ export default function useUploadQueue(workspace) {
         folderName
       );
       if (targeted.length > 0) {
+        // 폴더 줄에 끌어다 놓은 파일도 PDF만 등록함.
         const acceptedBatch = await prepare(
-          targeted.map(({ file, relativePath }) => ({
-            uid: v4(),
-            file,
-            folderName,
-            relativePath,
-          }))
+          targeted.map(({ file, relativePath }) =>
+            isPdfFile(file)
+              ? { uid: v4(), file, folderName, relativePath }
+              : {
+                  uid: v4(),
+                  file,
+                  rejected: true,
+                  reason: "file-invalid-type",
+                }
+          )
         );
         if (!acceptedBatch) return { queued: 0, skipped, blocked: true };
       }

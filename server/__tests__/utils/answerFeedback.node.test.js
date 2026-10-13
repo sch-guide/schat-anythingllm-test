@@ -175,3 +175,15 @@ test("관리자 목록 필터·전체 답변과 참고 지침·처리 완료·�
   await store.save(7, 2, 11, { feedback: null });
   assert.equal((await store.list()).length, 0);
 });
+test("처리 완료된 평가만 삭제하고 직원·대화 기록은 남김", async (t) => {
+  const { sqlite, store } = setup(t);
+  const saved = await store.save(7, 2, 11, { feedback: false, reason: "wrong" });
+  const id = saved.id ?? sqlite.prepare("SELECT id FROM schat_answer_feedback").get().id;
+  await assert.rejects(store.remove(id), { code: "NOT_RESOLVED" });
+  await store.resolve(id);
+  assert.deepEqual(await store.remove(id), { id: Number(id), kind: "wrong" });
+  assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM schat_answer_feedback").get().n, 0);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM users").get().n, 2);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM workspace_chats").get().n, 1);
+  await assert.rejects(store.remove(id), { code: "NOT_FOUND" });
+});

@@ -462,3 +462,70 @@ test("no evidence for the topic means no Gemini call at all", async () => {
   assert.equal(generation.counters.geminiCalls, before);
   assert.equal(logs[0].status, "no_evidence");
 });
+
+test("붙여 쓴 말 안의 주제도 본문 근거로 찾고, 그림 설명·없는 주제는 여전히 제외", async () => {
+  const generation = require("../../../utils/schatQuiz/generation");
+  const evidence = await generation.collectEvidence(
+    { documentId: "D1", workspaceSlug: "ws", topic: "수혈" },
+    {
+      vectorDb: fakeVectorDb([
+        ["가상 수혈간호는 두 명이 확인한다", { document_id: "D1", page: 3 }],
+        ["관련 없는 가상 내용", { document_id: "D1", page: 4 }],
+        [
+          "가상 수혈간호 그림",
+          { document_id: "D1", page: 6, content_type: "image_description" },
+        ],
+      ]),
+    }
+  );
+  assert.deepEqual(
+    evidence.map((e) => e.page),
+    [3]
+  );
+  const none = await generation.collectEvidence(
+    { documentId: "D1", workspaceSlug: "ws", topic: "낙상" },
+    {
+      vectorDb: fakeVectorDb([
+        ["가상 수혈간호는 두 명이 확인한다", { document_id: "D1", page: 3 }],
+      ]),
+    }
+  );
+  assert.equal(none.length, 0);
+});
+
+test("근거 없음 안내에 선택한 문서 이름과 주제를 보여줌", async () => {
+  const generation = require("../../../utils/schatQuiz/generation");
+  const doc = [...LIVE.values()][0];
+  await assert.rejects(
+    generation.generate(1, INPUT, {
+      live: LIVE,
+      log: async () => null,
+      vectorDb: fakeVectorDb([
+        ["관련 없는 가상 내용", { document_id: doc.documentId, page: 5 }],
+      ]),
+      llm: { getChatCompletion: async () => null },
+    }),
+    (error) =>
+      error.message.includes(`「${doc.title}」`) &&
+      error.message.includes(INPUT.topic)
+  );
+});
+
+test("보조 검색은 주제의 모든 단어가 있어야 하고 영문은 단어 전체가 같아야 함", async () => {
+  const generation = require("../../../utils/schatQuiz/generation");
+  const docs = [
+    ["가상 pizza 메뉴 안내", { document_id: "D1", page: 1 }],
+    ["가상 수혈간호와 낙상예방 교육", { document_id: "D1", page: 2 }],
+    ["가상 수혈간호만 있는 쪽", { document_id: "D1", page: 3 }],
+  ];
+  const pages = async (topic) =>
+    (
+      await generation.collectEvidence(
+        { documentId: "D1", workspaceSlug: "ws", topic },
+        { vectorDb: fakeVectorDb(docs) }
+      )
+    ).map((e) => e.page);
+  assert.deepEqual(await pages("zz존재하지않는주제"), []);
+  assert.deepEqual(await pages("zz"), []);
+  assert.deepEqual(await pages("수혈 낙상"), [2]);
+});

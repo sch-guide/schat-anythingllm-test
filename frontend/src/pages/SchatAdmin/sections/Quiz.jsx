@@ -22,6 +22,8 @@ const when = (iso) =>
 export default function QuizSection() {
   const [tab, setTab] = useState("questions");
   const [listFilter, setListFilter] = useState({});
+  // 문제 생성 입력값은 탭을 오가도 유지함(문제 삭제 후 돌아와도 같은 문서·주제).
+  const [generateForm, setGenerateForm] = useState(EMPTY_GENERATE_FORM);
   const [usage, setUsage] = useState(null);
   const loadUsage = useCallback(
     () => SchatQuiz.usage().then((r) => setUsage(r?.success ? r : null)),
@@ -75,6 +77,8 @@ export default function QuizSection() {
       )}
       {tab === "generate" && (
         <Generate
+          form={generateForm}
+          setForm={setGenerateForm}
           onDone={(result) => {
             loadUsage();
             setListFilter({ quizSetId: String(result.quizSetId) });
@@ -90,15 +94,21 @@ export default function QuizSection() {
 
 // ---- 문제 생성 ---------------------------------------------------------------------
 
-function Generate({ onDone, onFailed }) {
+export const EMPTY_GENERATE_FORM = {
+  docKey: "",
+  topic: "",
+  count: "10",
+  difficulty: "intermediate",
+  questionType: "multiple_choice",
+};
+
+// 저장된 문서 선택이 지금 목록에 없으면(문서 교체 등) 첫 문서로 맞춤.
+export function keepDocKey(docKey, docs) {
+  return docs.some((d) => d.docKey === docKey) ? docKey : docs[0]?.docKey || "";
+}
+
+function Generate({ form, setForm, onDone, onFailed }) {
   const [documents, setDocuments] = useState(null);
-  const [form, setForm] = useState({
-    docKey: "",
-    topic: "",
-    count: "10",
-    difficulty: "intermediate",
-    questionType: "multiple_choice",
-  });
   const [running, setRunning] = useState(false);
   const [error, setError] = useState(null);
 
@@ -106,10 +116,9 @@ function Generate({ onDone, onFailed }) {
     SchatQuiz.documents().then((r) => {
       const docs = r?.documents || [];
       setDocuments(docs);
-      if (docs[0])
-        setForm((p) => ({ ...p, docKey: p.docKey || docs[0].docKey }));
+      setForm((p) => ({ ...p, docKey: keepDocKey(p.docKey, docs) }));
     });
-  }, []);
+  }, [setForm]);
 
   const set = (key) => (e) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }));

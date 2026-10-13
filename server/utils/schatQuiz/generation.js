@@ -92,7 +92,10 @@ async function collectEvidence(
   { vectorDb = null } = {}
 ) {
   const { getVectorDbClass } = require("../helpers");
-  const { rankByBm25 } = require("../vectorDbProviders/chroma/schatBm25");
+  const {
+    rankByBm25,
+    queryTokens,
+  } = require("../vectorDbProviders/chroma/schatBm25");
   const VectorDb = vectorDb || getVectorDbClass();
   const { client } = await VectorDb.connect();
   const collection = await client.getCollection({
@@ -117,7 +120,11 @@ async function collectEvidence(
         d.metadata.content_type !== "image_description" &&
         Number.isInteger(Number(d.metadata.page))
     );
-  const ranked = rankByBm25(topic, corpus);
+  let ranked = rankByBm25(topic, corpus);
+  // 퀴즈 전용 보조 검색: BM25는 띄어쓴 단어만 맞춰서, 주제 "수혈"이 문서의
+  // "수혈간호는"처럼 붙여 쓴 말 안에만 있으면 0건이 됨. 그때만 주제 단어가
+  // 글자 그대로 들어 있는 본문 조각을 씀(근거 없는 쪽은 여전히 제외).
+  if (!ranked.length) ranked = literalTopicMatches(topic, corpus, queryTokens);
   const pages = new Map();
   let chars = 0;
   for (const hit of ranked) {
@@ -145,6 +152,44 @@ async function collectEvidence(
       section: p.section,
       text: p.texts.join("\n"),
     }));
+}
+
+// 주제의 모든 단어가 본문에 글자 그대로 있는 조각만 씀. 한글 단어는 붙여 쓴
+// 말 안에서도 찾고(수혈 → 수혈간호는), 영문·숫자 단어는 단어 전체가 같아야 함.
+function literalTopicMatches(topic, corpus, queryTokens) {
+  const terms = queryTokens(topic).map((t) => t.toLowerCase());
+  if (!terms.length) return [];
+  const escape = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matchers = terms.map((t) =>
+    /[가-힣]/.test(t)
+      ? (text) => text.split(t).length - 1
+      : (text) =>
+          (
+            text.match(
+              new RegExp(`(^|[^a-z0-9])${escape(t)}(?![a-z0-9])`, "g")
+            ) || []
+          ).length
+  );
+  return corpus
+    .map((doc) => {
+      const text = String(doc.text || "").toLowerCase();
+      const counts = matchers.map((count) => count(text));
+      return {
+        doc,
+        all: counts.every((n) => n > 0),
+        count: counts.reduce((a, b) => a + b, 0),
+      };
+    })
+    .filter((row) => row.all)
+    .sort(
+      (a, b) => b.count - a.count || a.doc.corpusPosition - b.doc.corpusPosition
+    )
+    .map((row) => row.doc);
+}
+
+function noEvidenceMessage(doc, topic) {
+  const name = doc?.title ? `「${doc.title}」` : "이 문서";
+  return `${name}에서 '${topic}' 주제의 근거를 찾지 못했습니다. 대상 문서가 맞는지 확인하거나 주제를 바꿔 다시 시도해 주세요.`;
 }
 
 function evidencePrompt(evidence, { topic, count, type, difficulty }) {
@@ -251,9 +296,7 @@ async function generate(
       requested: request.count,
       status: "no_evidence",
     });
-    throw bank.userError(
-      "이 문서에서 해당 주제의 근거를 찾지 못했습니다. 주제를 바꿔 다시 시도해 주세요."
-    );
+    throw bank.userError(noEvidenceMessage(doc, request.topic));
   }
 
   let output;
@@ -393,8 +436,16 @@ async function regenerate(
     },
     { vectorDb }
   );
-  if (!evidence.length)
-    throw bank.userError("이 문서에서 해당 주제의 근거를 찾지 못했습니다.");
+  if (!evidence.length) {
+    await logGeneration({
+      admin_id: adminId,
+      document_id: q.document_id,
+      topic: q.topic,
+      requested: 1,
+      status: "no_evidence",
+    }).catch(() => null);
+    throw bank.userError(noEvidenceMessage(doc, q.topic));
+  }
   let output;
   try {
     output = await askGemini(llm || defaultLlm(), [

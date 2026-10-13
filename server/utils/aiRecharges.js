@@ -1,5 +1,10 @@
 const { randomUUID } = require("node:crypto");
-const { kstDay, kstMidnight, summarizeFees } = require("./aiUsageFees");
+const {
+  kstDay,
+  kstMidnight,
+  summarizeFees,
+  monthEstimate,
+} = require("./aiUsageFees");
 const SETTING_KEY = "schat_ai_recharges";
 const fail = (status, message) => {
   const error = Error(message);
@@ -93,8 +98,14 @@ function createFeesLoader({ read, readRows, clock = Date.now }) {
     if (pending.has(key)) return pending.get(key);
     const work = (async () => {
       const firstDate = saved.records.map((r) => r.date).sort()[0];
-      const rows = firstDate ? await readRows(kstMidnight(firstDate), now) : [];
-      const value = { ...summarizeFees(rows, saved.records, now), ...saved };
+      const monthStart = `${kstDay(now).slice(0, 7)}-01`;
+      const since = firstDate && firstDate < monthStart ? firstDate : monthStart;
+      const rows = await readRows(kstMidnight(since), now);
+      const value = {
+        ...summarizeFees(rows, saved.records, now),
+        month: monthEstimate(rows, now),
+        ...saved,
+      };
       cache = { key, at: clock(), value };
       return value;
     })();

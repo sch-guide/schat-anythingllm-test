@@ -158,11 +158,7 @@ test("document folder shows a Korean name without changing its key", async () =>
   const { folderDisplayName } = await import("../../utils/directories.js");
   assert.equal(folderDisplayName("custom-documents"), "등록된 문서");
   assert.equal(folderDisplayName("my-folder"), "my-folder");
-  const row = src(
-    "../../components/Modals/ManageWorkspace/Documents/Directory/FolderRow/index.jsx"
-  );
-  assert.match(row, /middleTruncate\(folderDisplayName\(item\.name\), 35\)/);
-  assert.match(row, /onToggleExpanded\(item\.name\)/);
+  // 폴더·쪽 줄 대신 문서 단위 목록을 씀(Directory/index.jsx).
   const upload = src(
     "../../components/Modals/ManageWorkspace/Documents/UploadFile/index.jsx"
   );
@@ -184,8 +180,9 @@ test("document screen hides raw file counts and shows documents and pages", asyn
   const directory = src(
     "../../components/Modals/ManageWorkspace/Documents/Directory/index.jsx"
   );
-  assert.match(directory, /const SHOW_LIBRARY_TOTAL = false/);
-  assert.match(directory, /displayCount: 0,/);
+  // 쪽 파일 수 대신 문서 수만 보여줌
+  assert.match(directory, /`문서 \$\{documents\.length\}개`/);
+  assert.doesNotMatch(directory, /totalCount|fileCount/);
   const workspaceDir = src(
     "../../components/Modals/ManageWorkspace/Documents/WorkspaceDirectory/index.jsx"
   );
