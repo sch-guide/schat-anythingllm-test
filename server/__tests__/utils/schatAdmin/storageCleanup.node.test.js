@@ -426,3 +426,21 @@ test("delete endpoints are admin only and need a matching preview", () => {
     /app\.delete\(\s*"\/schat-admin\/reports\/:id",\s*adminOnly,/
   );
 });
+
+test("과거 답변 출처·퀴즈가 가리키는 예전 업로드는 삭제 후보가 아님", () => {
+  const counts = (extra) => ({ chats: 0, quizSets: 0, quizQuestions: 0, quizRuns: 0, checklists: 0, workspaces: 0, search: 0, images: 0, ...extra });
+  const statusOfOld = (input) =>
+    classifyStorage(input).groups.find((g) => g.kind === "upload" && g.title === "가상지침.pdf" && g.usage.workspacePages === 0);
+  // 연결 확인 결과 없이 만든 예전 검사 자료: 기존 판단 그대로
+  assert.equal(statusOfOld(fixture()).status, STATUS.OLD_UPLOAD);
+  // 아무도 가리키지 않음 → 삭제 가능
+  assert.equal(statusOfOld(fixture({ originalReferences: new Map() })).status, STATUS.OLD_UPLOAD);
+  // 과거 답변이 가리킴 → 검토 필요(삭제 불가)
+  const cited = statusOfOld(fixture({ originalReferences: new Map([[originalStorageKey(OLD), { counts: counts({ chats: 2 }) }]]) }));
+  assert.equal(cited.status, STATUS.REVIEW);
+  assert.match(cited.reasons.join(" "), /과거 답변 출처나 퀴즈/);
+  // 퀴즈가 가리킴 → 검토 필요
+  assert.equal(statusOfOld(fixture({ originalReferences: new Map([[originalStorageKey(OLD), { counts: counts({ quizQuestions: 1 }) }]]) })).status, STATUS.REVIEW);
+  // 연결 확인 실패(null) → 삭제하지 않음
+  assert.equal(statusOfOld(fixture({ originalReferences: null })).status, STATUS.REVIEW);
+});

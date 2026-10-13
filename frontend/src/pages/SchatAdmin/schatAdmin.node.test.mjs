@@ -23,7 +23,6 @@ test("the wrench opens exactly the SCHAT admin sections in order", () => {
       "동의어 관리",
       "사용 통계",
       "시스템 상태",
-      "저장공간 정리",
     ]
   );
   assert.equal(findSchatAdminSection("nope").key, "brand");
@@ -189,21 +188,29 @@ test("document screen hides raw file counts and shows documents and pages", asyn
   assert.match(workspaceDir, /등록 문서 \{documentSummary\.documents\}개 · 총/);
 });
 
-test("storage cleanup deletes only after preview and a final confirmation", async () => {
-  const storage = src("./sections/Storage.jsx");
-  assert.doesNotMatch(storage, /DELETE_ENABLED/);
-  assert.doesNotMatch(storage, /아직 승인 전이라/);
-  assert.match(storage, /disabled=\{!selectable\}/);
-  // 삭제 진행 only opens the final confirmation; the dialog sends the delete
-  assert.match(storage, /onClick=\{onDelete\}/);
-  assert.match(storage, /confirming && preview\?\.ok &&/);
-  assert.match(storage, /예전 데이터를 삭제하시겠습니까\?/);
-  assert.match(storage, /이 작업은 되돌릴 수 없습니다\./);
-  assert.match(
-    storage,
-    /SchatAdmin\.storageDelete\(\s*selected,\s*preview\?\.previewToken\s*\)/
+test("저장공간 정리 메뉴는 없고, 현재 사용 중 요약은 답변 근거 보기로, 예전 문서 삭제는 문서 등록 창으로", async () => {
+  const menu = src("./menu.js");
+  assert.doesNotMatch(menu, /label: "저장공간 정리"/);
+  assert.match(menu, /if \(key === "storage"\) key = "chunks";/);
+  const index = src("./index.jsx");
+  assert.doesNotMatch(index, /StorageSection|sections\/Storage/);
+  const chunks = src("./sections/Chunks.jsx");
+  assert.match(chunks, /<CurrentUsageCard \/>/);
+  const card = src("./CurrentUsageCard.jsx");
+  for (const label of ["등록 문서", "총 페이지", "검색 데이터", "체크리스트"])
+    assert.match(card, new RegExp(label));
+  assert.doesNotMatch(card, /예전 업로드|연결되지 않은|확보 용량/);
+  const library = src(
+    "../../components/Modals/ManageWorkspace/Documents/Directory/index.jsx"
   );
-  assert.match(storage, /예전 데이터가 삭제되었습니다\./);
+  assert.match(library, /이 예전 문서를 삭제하시겠습니까\?/);
+  assert.match(library, /현재 SCHAT에서 사용되지 않는 자료만 삭제됩니다\./);
+  assert.match(library, /삭제 후 복구할 수 없습니다\./);
+  // 삭제 직전 서버 재점검(미리보기) 후에만 삭제 요청
+  assert.match(
+    library,
+    /SchatAdmin\.storagePreview\(\[doc\.cleanupKey\]\)[\s\S]*SchatAdmin\.storageDelete\(\s*\[doc\.cleanupKey\],\s*preview\.previewToken\s*\)/
+  );
   const model = src("../../models/schatAdmin.js");
   assert.match(model, /storage-cleanup\/delete/);
   assert.match(model, /previewToken, confirm: true/);

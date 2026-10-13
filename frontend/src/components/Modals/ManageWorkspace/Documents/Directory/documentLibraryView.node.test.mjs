@@ -90,3 +90,62 @@ test("왼쪽 목록에 더 보기·폴더·쪽 줄이 없고 원문 보기가 �
   assert.match(row, /원본 PDF 보기/);
   assert.match(row, /저장 전/);
 });
+
+test("현재 사용 중 문서는 삭제 불가, 예전 문서는 서버 점검이 삭제 가능일 때만", async () => {
+  const { deleteState, librarySections, checklistCount } = await import(
+    "./documentLibraryView.js"
+  );
+  const current = { key: "a", status: "registered", cleanupKey: "ka" };
+  const old = { key: "c", status: "unregistered", cleanupKey: "kc" };
+  const cited = { key: "d", status: "unregistered", cleanupKey: "kd" };
+  const groups = new Map([
+    ["ka", { status: "in_use", usage: { checklists: 80 } }],
+    ["kc", { status: "old_upload", usage: { checklists: 0 } }],
+    [
+      "kd",
+      {
+        status: "review",
+        reasons: [
+          "과거 답변 출처나 퀴즈가 이 문서를 가리키고 있어 삭제하지 않습니다.",
+        ],
+      },
+    ],
+  ]);
+  assert.deepEqual(deleteState(current, groups, true), {
+    deletable: false,
+    reason: "현재 사용 중인 문서입니다.",
+  });
+  assert.equal(deleteState(old, groups, true).deletable, true);
+  assert.equal(
+    deleteState(old, groups, false).deletable,
+    false,
+    "관리자만 삭제"
+  );
+  assert.equal(
+    deleteState(old, null, true).deletable,
+    false,
+    "점검 결과 전에는 삭제 버튼 없음"
+  );
+  assert.match(
+    deleteState(cited, groups, true).reason,
+    /과거 답변 출처나 퀴즈/
+  );
+  assert.equal(
+    deleteState({ ...old, cleanupKey: "zz" }, groups, true).deletable,
+    false
+  );
+  assert.equal(checklistCount(current, groups), 80);
+  const sections = librarySections([
+    current,
+    old,
+    { key: "p", status: "partial" },
+  ]);
+  assert.deepEqual(
+    sections.current.map((d) => d.key),
+    ["a", "p"]
+  );
+  assert.deepEqual(
+    sections.old.map((d) => d.key),
+    ["c"]
+  );
+});

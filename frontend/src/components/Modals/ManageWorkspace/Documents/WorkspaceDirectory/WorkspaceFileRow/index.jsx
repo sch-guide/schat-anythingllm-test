@@ -28,7 +28,7 @@ export default function WorkspaceFileRow({
     setLoading(true);
 
     try {
-      setLoadingMessage(`Removing file from workspace`);
+      setLoadingMessage("문서를 등록 목록에서 빼는 중입니다...");
       await Workspace.modifyEmbeddings(workspace.slug, {
         adds: [],
         deletes: [`${folderName}/${item.name}`],
@@ -137,20 +137,24 @@ const PinItemToWorkspace = memo(({ workspace, docPath, item }) => {
       );
 
       if (!success) {
-        showToast(`Failed to ${!pinned ? "pin" : "unpin"} document.`, "error", {
-          clear: true,
-        });
+        showToast(
+          `문서 ${!pinned ? "고정" : "고정 해제"}에 실패했습니다.`,
+          "error",
+          {
+            clear: true,
+          }
+        );
         return;
       }
 
       showToast(
-        `Document ${!pinned ? "pinned to" : "unpinned from"} workspace`,
+        `문서를 ${!pinned ? "고정했습니다" : "고정 해제했습니다"}.`,
         "success",
         { clear: true }
       );
       setPinned(!pinned);
     } catch (error) {
-      showToast(`Failed to pin document. ${error.message}`, "error", {
+      showToast("문서 고정에 실패했습니다.", "error", {
         clear: true,
       });
       return;
@@ -164,9 +168,7 @@ const PinItemToWorkspace = memo(({ workspace, docPath, item }) => {
       onClick={updatePinStatus}
       className="group flex items-center ml-2 cursor-pointer"
       data-tooltip-id="pin-document"
-      data-tooltip-content={
-        pinned ? "Un-pin from workspace" : "Pin to workspace"
-      }
+      data-tooltip-content={pinned ? "고정 해제" : "문서 고정"}
     >
       {pinned ? (
         <div className="bg-theme-settings-input-active group-hover:bg-red-500/20 rounded-3xl whitespace-nowrap">
@@ -203,7 +205,7 @@ const WatchForChanges = memo(({ workspace, docPath, item }) => {
 
       if (!success) {
         showToast(
-          `Failed to ${!watched ? "watch" : "unwatch"} document.`,
+          `문서 변경 ${!watched ? "감시" : "감시 해제"}에 실패했습니다.`,
           "error",
           {
             clear: true,
@@ -213,17 +215,15 @@ const WatchForChanges = memo(({ workspace, docPath, item }) => {
       }
 
       showToast(
-        `Document ${
-          !watched
-            ? "will be watched for changes"
-            : "will no longer be watched for changes"
-        }.`,
+        !watched
+          ? "이제 문서 변경을 감시합니다."
+          : "문서 변경 감시를 멈췄습니다.",
         "success",
         { clear: true }
       );
       setWatched(!watched);
     } catch (error) {
-      showToast(`Failed to watch document. ${error.message}`, "error", {
+      showToast("문서 변경 감시에 실패했습니다.", "error", {
         clear: true,
       });
       return;
@@ -238,9 +238,7 @@ const WatchForChanges = memo(({ workspace, docPath, item }) => {
       onClick={updateWatchStatus}
       data-tooltip-id="watch-changes"
       data-active={watched}
-      data-tooltip-content={
-        watched ? "Stop watching for changes" : "Watch document for changes"
-      }
+      data-tooltip-content={watched ? "변경 감시 중지" : "문서 변경 감시"}
     >
       <Eye
         size={16}
@@ -261,7 +259,7 @@ const RemoveItemFromWorkspace = ({ item: _item, onClick }) => {
     <div>
       <ArrowUUpLeft
         data-tooltip-id="remove-document"
-        data-tooltip-content="Remove document from workspace"
+        data-tooltip-content="등록 목록에서 빼기"
         onClick={onClick}
         className="text-base font-bold w-4 h-4 ml-2 flex-shrink-0 cursor-pointer"
       />

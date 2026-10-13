@@ -293,9 +293,9 @@
     "document": "docs/00_현재상태/SCHAT_버전_체계.md"
   },
   "tests": {
-    "totalFiles": 277,
+    "totalFiles": 276,
     "byArea": {
-      "frontend": 75,
+      "frontend": 74,
       "server": 171,
       "collector": 9,
       "Python 안전검사": 13,
@@ -310,6 +310,13 @@
     "검색 관련 변경 뒤 기존 질문 회귀검사를 실행함."
   ],
   "history": [
+    {
+      "date": "2026-10-13",
+      "title": "저장공간 정리 메뉴 정리와 예전 문서 삭제 (release-admin-9, 미커밋)",
+      "summary": "관리자 메뉴의 `저장공간 정리` 제거, 그 화면의 `현재 사용 중` 요약만 `답변 근거 보기` 위로 이동.",
+      "feature": "저장공간정리 메뉴정리",
+      "document": "docs/01_작업일지/2026-10-13_저장공간정리_메뉴정리.md"
+    },
     {
       "date": "2026-10-13",
       "title": "관리자 운영 불편 7건과 질문창 안내 문구 (release-admin-9, 미커밋)",

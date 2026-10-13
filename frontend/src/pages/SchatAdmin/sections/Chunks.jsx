@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import ChunkViewer from "@/models/chunkViewer";
 import { createChunkViewerController } from "../chunkViewerController";
 import { Badge, Button, Card, Help, Notice, inputClass } from "../ui";
+import CurrentUsageCard from "../CurrentUsageCard";
 
 function time(value) {
   if (!value) return "";
@@ -9,12 +10,14 @@ function time(value) {
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("ko-KR");
 }
 function Version({ item }) {
-  const parts = [item.page ? `${item.page}쪽` : "", item.version ? `등록 버전: ${item.version}` : "", time(item.registeredAt)].filter(Boolean);
+  const parts = [
+    item.page ? `${item.page}쪽` : "",
+    item.version ? `등록 버전: ${item.version}` : "",
+    time(item.registeredAt),
+  ].filter(Boolean);
   if (!parts.length) return null;
   return (
-    <p className="text-xs text-theme-text-secondary">
-      {parts.join(" · ")}
-    </p>
+    <p className="text-xs text-theme-text-secondary">{parts.join(" · ")}</p>
   );
 }
 function Text({ children }) {
@@ -35,8 +38,11 @@ export function ChatEvidence({ detail }) {
     >
       <p className="text-sm text-theme-text-primary">{detail.question}</p>
       {detail.notice && <Notice tone="warning">{detail.notice}</Notice>}
-      {detail.sources.some(source => source.status === "unavailable") && (
-        <Notice>일부 원본의 현재 상태는 확인할 수 없습니다. 답할 때 참고한 내용을 확인해 주세요.</Notice>
+      {detail.sources.some((source) => source.status === "unavailable") && (
+        <Notice>
+          일부 원본의 현재 상태는 확인할 수 없습니다. 답할 때 참고한 내용을
+          확인해 주세요.
+        </Notice>
       )}
       {detail.sourcesTruncated && (
         <Notice>근거가 많아 앞의 50개만 표시합니다.</Notice>
@@ -114,11 +120,18 @@ export function ChunksView({
   return (
     <div className="flex flex-col gap-5">
       <Notice>
-        <Help label="근거 조회 도움말" heading={<span>근거를 확인하는 화면이며 지침은 바뀌지 않습니다.</span>}>{[
-          "관리자만 볼 수 있어요.",
-          "질문의 전화번호와 긴 숫자는 가려요.",
-          "이전 버전은 현재 검색 대상에서 제외해요.",
-        ]}</Help>
+        <Help
+          label="근거 조회 도움말"
+          heading={
+            <span>근거를 확인하는 화면이며 지침은 바뀌지 않습니다.</span>
+          }
+        >
+          {[
+            "관리자만 볼 수 있어요.",
+            "질문의 전화번호와 긴 숫자는 가려요.",
+            "이전 버전은 현재 검색 대상에서 제외해요.",
+          ]}
+        </Help>
       </Notice>
       <div
         className="flex flex-wrap gap-2"
@@ -184,7 +197,9 @@ export function ChunksView({
                           {doc.name}
                           {doc.page ? ` · ${doc.page}쪽` : ""}
                           {doc.status === "previous" ? " (이전 버전)" : ""}
-                          {time(doc.registeredAt) ? ` · ${time(doc.registeredAt)}` : ""}
+                          {time(doc.registeredAt)
+                            ? ` · ${time(doc.registeredAt)}`
+                            : ""}
                         </option>
                       ))}
                     </select>
@@ -276,7 +291,8 @@ export function ChunksView({
                       className="rounded-lg border border-theme-sidebar-border p-3 text-theme-text-primary"
                     >
                       <summary className="cursor-pointer text-sm">
-                        {chunk.page ? `${chunk.page}쪽` : "근거 문단"} {index + 1}번째
+                        {chunk.page ? `${chunk.page}쪽` : "근거 문단"}{" "}
+                        {index + 1}번째
                         {chunk.section ? ` · ${chunk.section}` : ""}
                       </summary>
                       <div className="flex flex-col gap-2 pt-3">
@@ -393,8 +409,19 @@ export default function ChunksSection({ workspace }) {
   }, [workspace?.id, state.selectedDocument]);
   if (!workspace) return <Notice>관리할 작업 공간을 선택해 주세요.</Notice>;
   return (
-    <ChunksView
-      {...{ controller, state, workspace, mode, setMode, keyword, setKeyword }}
-    />
+    <div className="flex flex-col gap-5">
+      <CurrentUsageCard />
+      <ChunksView
+        {...{
+          controller,
+          state,
+          workspace,
+          mode,
+          setMode,
+          keyword,
+          setKeyword,
+        }}
+      />
+    </div>
   );
 }

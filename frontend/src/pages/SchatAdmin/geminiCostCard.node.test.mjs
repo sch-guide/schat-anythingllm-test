@@ -109,7 +109,6 @@ test("사용 통계에는 예상 요금 대신 위치 안내만 남음", () => {
   );
   assert.doesNotMatch(usage, /예상 AI 요금"/);
   assert.doesNotMatch(usage, /estimatedCost/);
-  assert.match(usage, /시스템 상태의 Gemini AI 칸/);
   const status = readFileSync(
     new URL("./sections/Status.jsx", import.meta.url),
     "utf8"
@@ -130,4 +129,17 @@ test("질문창 아래에 SCHAT이 실수할 수 있다는 안내가 항상 보�
     input,
     /SCHAT은 실수할 수 있습니다\. 중요한 내용은 원문 지침을 꼭\s+확인하세요\./
   );
+});
+
+test("사용 통계에는 AI 사용량 카드가 없음(요금은 시스템 상태에서 확인)", () => {
+  const usage = readFileSync(
+    new URL("./sections/UsageStats.jsx", import.meta.url),
+    "utf8"
+  );
+  assert.doesNotMatch(usage, /대략적인 AI 사용량|aiUsage|AI가 읽은 분량/);
+  const ko = readFileSync(
+    new URL("../../locales/ko/common.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(ko, /save_embed: "저장",/);
 });

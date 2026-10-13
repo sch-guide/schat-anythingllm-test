@@ -1155,7 +1155,7 @@ const TRANSLATIONS = {
       select_all: "전체 선택",
       deselect_all: "전체 선택 해제",
       remove_selected: "선택 항목 삭제",
-      save_embed: "저장 및 임베딩",
+      save_embed: "저장",
       "total-documents_one": "{{count}} 문서",
       "total-documents_other": "{{count}} 관련 문서",
       "search-results_one": "{{count}} 결과",

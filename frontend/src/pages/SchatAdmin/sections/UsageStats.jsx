@@ -303,30 +303,6 @@ export default function UsageStatsSection() {
             )}
           </Card>
 
-          <Card
-            title="대략적인 AI 사용량"
-            help={[
-              "기록된 AI 입력·출력 분량을 합해서 보여요.",
-              "글자 수나 실제 요금과는 달라요.",
-              "일부 사용량은 빠질 수 있어요.",
-            ]}
-          >
-            <div>
-              <p className="text-xs text-theme-text-secondary" data-testid="usage-cost-moved">
-                예상 AI 요금은 시스템 상태의 Gemini AI 칸에서 확인해요.
-              </p>
-              <InfoRow label="질문 수">{n(stats.aiUsage.questions)}건</InfoRow>
-              <InfoRow label="사용량 기록이 있는 답변">
-                {n(stats.aiUsage.chatsWithTokens)}건
-              </InfoRow>
-              <InfoRow label="AI가 읽은 분량">
-                {n(stats.aiUsage.promptTokens)}
-              </InfoRow>
-              <InfoRow label="AI가 작성한 분량">
-                {n(stats.aiUsage.completionTokens)}
-              </InfoRow>
-            </div>
-          </Card>
         </div>
       )}
     </div>

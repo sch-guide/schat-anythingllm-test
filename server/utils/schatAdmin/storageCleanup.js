@@ -109,6 +109,11 @@ function classifyStorage(input) {
     knownDocumentIds = null,
     originalReferences = null,
   } = input;
+  // 실제 운영 자료를 읽을 때는 항상 연결 확인 결과가 들어옴(없으면 null).
+  const checksReferences = Object.prototype.hasOwnProperty.call(
+    input,
+    "originalReferences"
+  );
   // Original PDFs are stored as sha256(document_id). Every document id still
   // mentioned anywhere (pages, workspace, search data, checklists, images,
   // chats, quizzes) is hashed the same way; an original matching none of them
@@ -186,6 +191,30 @@ function classifyStorage(input) {
     if (!inUse && titles.length !== 1) {
       status = STATUS.REVIEW;
       reasons.push("한 업로드에 문서 이름이 여러 개입니다.");
+    }
+    // 과거 답변 출처(Citation)·퀴즈가 이 문서를 가리키면 지우지 않음.
+    // 연결 확인 결과(originalReferences)를 받았는데 확인에 실패했으면 역시 지우지 않음.
+    if (!inUse && status === STATUS.OLD_UPLOAD && checksReferences) {
+      const refs =
+        originalReferences instanceof Map
+          ? originalReferences.get(originalStorageKey(documentId))
+          : undefined;
+      if (!(originalReferences instanceof Map)) {
+        status = STATUS.REVIEW;
+        reasons.push("다른 자료와의 연결을 확인하지 못해 삭제하지 않습니다.");
+      } else if (
+        refs &&
+        refs.counts.chats +
+          refs.counts.quizSets +
+          refs.counts.quizQuestions +
+          refs.counts.quizRuns >
+          0
+      ) {
+        status = STATUS.REVIEW;
+        reasons.push(
+          "과거 답변 출처나 퀴즈가 이 문서를 가리키고 있어 삭제하지 않습니다."
+        );
+      }
     }
 
     groups.push({
@@ -1057,6 +1086,7 @@ async function loadStorageCleanupInputs() {
 
 module.exports = {
   STATUS,
+  groupKey,
   classifyStorage,
   buildCleanupPreview,
   buildCleanupManifest,

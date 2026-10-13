@@ -38,6 +38,33 @@ const originalReviewApi=require('../utils/schatAdmin/originalReviewApi').createO
 // the list view reuses a recent scan. The preview below always rescans.
 const STORAGE_REPORT_TTL_MS = 10 * 60 * 1000;
 let storageReportCache = null;
+// "현재 사용 중" 요약은 전체 계산에 20초쯤 걸려 저장해 두고, 등록 문서·체크리스트·
+// 쪽 파일 수가 바뀌었을 때만 다시 계산함(빠른 확인만 함).
+async function currentStorageSignature() {
+  const prisma = require("../utils/prisma");
+  const rows = await prisma.workspace_documents.aggregate({
+    _count: { _all: true },
+    _max: { lastUpdatedAt: true },
+  });
+  let pageFiles = 0;
+  try {
+    const { documentsPath } = require("../utils/files");
+    pageFiles = require("node:fs").readdirSync(
+      require("node:path").join(documentsPath, "custom-documents")
+    ).length;
+  } catch {}
+  let checklists = 0;
+  try {
+    checklists = require("../utils/documentChecklists/repository")
+      .ChecklistRepository.listAll().length;
+  } catch {}
+  return JSON.stringify([
+    rows._count._all,
+    rows._max.lastUpdatedAt?.toISOString?.() || null,
+    pageFiles,
+    checklists,
+  ]);
+}
 
 // A deletion must follow a successful preview of exactly the same selection
 // by the same admin. Tokens are single use and expire; the delete itself
@@ -152,13 +179,20 @@ function schatAdminEndpoints(app) {
     async (request, response) => {
       try {
         const refresh = request.query?.refresh === "1";
+        const signature = await currentStorageSignature().catch(() => null);
         if (
           refresh ||
           !storageReportCache ||
+          !signature ||
+          storageReportCache.signature !== signature ||
           Date.now() - storageReportCache.at > STORAGE_REPORT_TTL_MS
         ) {
           const report = classifyStorage(await loadStorageCleanupInputs());
-          storageReportCache = { at: Date.now(), body: publicReport(report) };
+          storageReportCache = {
+            at: Date.now(),
+            signature,
+            body: publicReport(report),
+          };
         }
         response.status(200).json({
           ...storageReportCache.body,
@@ -183,7 +217,11 @@ function schatAdminEndpoints(app) {
             .status(400)
             .json({ ok: false, message: "정리할 항목을 선택해 주세요." });
         const report = classifyStorage(await loadStorageCleanupInputs());
-        storageReportCache = { at: Date.now(), body: publicReport(report) };
+        storageReportCache = {
+          at: Date.now(),
+          signature: await currentStorageSignature().catch(() => null),
+          body: publicReport(report),
+        };
         const preview = buildCleanupPreview(report, keys.map(String));
         response.status(200).json({
           ...preview,
@@ -232,6 +270,7 @@ function schatAdminEndpoints(app) {
         if (result.report)
           storageReportCache = {
             at: Date.now(),
+            signature: await currentStorageSignature().catch(() => null),
             body: publicReport(result.report),
           };
         await EventLogs.logEvent(
@@ -307,6 +346,7 @@ function schatAdminEndpoints(app) {
         });
         storageReportCache = {
           at: Date.now(),
+          signature: await currentStorageSignature().catch(() => null),
           body: publicReport(result.report),
         };
         await EventLogs.logEvent(

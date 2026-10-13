@@ -39,7 +39,7 @@ test("쪽 파일을 문서 하나로 묶고 등록 상태·쪽 수를 셈", () =
   assert.equal(by.A.pdfRef, "ref-A");
   assert.equal(by.B.status, "unregistered");
   assert.equal(by.B.freeFiles.length, 1);
-  assert.equal(by.B.pdfRef, undefined);
+  assert.equal(by.B.pdfRef, "ref-B", "등록 전 문서도 원본 링크를 가짐(관리자 원본 보기)");
   assert.equal(by.C.olderCopy, true);
   assert.equal(by.D, undefined, "이전 버전(보관)은 목록에서 뺌");
   assert.equal(docs.at(-1).documentId, "C", "예전 업로드는 맨 아래");

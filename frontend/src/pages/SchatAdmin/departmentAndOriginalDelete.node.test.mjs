@@ -32,38 +32,7 @@ test("부서 삭제 버튼은 직원 0명인 부서에만 나온다", async () =
   assert.match(page, /d\.active \? "사용중지" : "다시 사용"/);
 });
 
-test("원본 PDF는 따로 모아 파일별 결과와 확보 공간을 보여 준다", async () => {
-  // isOriginalPdf, originalDeleteSummary and formatBytes sit together
-  const { isOriginalPdf, originalDeleteSummary } = await helper(
-    "Storage.jsx",
-    "export function isOriginalPdf",
-    "const n = (value)"
-  );
-  assert.equal(isOriginalPdf({ kind: "original" }), true);
-  assert.equal(isOriginalPdf({ kind: "upload" }), false);
-  assert.equal(
-    originalDeleteSummary({
-      deleted: 3,
-      refused: 0,
-      freedBytes: 81 * 1024 ** 2,
-    }),
-    "선택한 원본 PDF 3개 삭제 · 확보 공간: 약 81MB"
-  );
-  assert.match(
-    originalDeleteSummary({ deleted: 1, refused: 2, freedBytes: 2048 }),
-    /삭제하지 않음 2개/
-  );
-
-  const page = source("Storage.jsx");
-  assert.match(page, /\.filter\(\(group\) => !isOriginalPdf\(group\)\)/);
-  assert.match(
-    page,
-    /선택한 원본 PDF \$\{selected\.length\}개를 삭제하시겠습니까\?/
-  );
-  assert.match(page, /삭제 후 복구할 수 없습니다/);
-  assert.match(page, /disabled=\{!selectable \|\| previewing \|\| deleting\}/);
-  assert.match(page, /SchatAdmin\.storageDeleteOriginals\(selected,preview\.previewToken\)/);
-});
+// 저장공간 정리 화면은 없앰. 연결 정보가 없는 원본 PDF 정리는 서버 안전 기능으로만 남음.
 
 test("시스템 기록에 부서 삭제와 원본 PDF 정리가 쉬운 말로 나온다", async () => {
   const text = source("Status.jsx");

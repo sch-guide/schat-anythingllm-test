@@ -113,7 +113,7 @@ function WorkspaceDirectory({
 
   const removeSelectedItems = async () => {
     setLoading(true);
-    setLoadingMessage("Removing selected files from workspace");
+    setLoadingMessage("선택한 문서를 등록 목록에서 빼는 중입니다...");
 
     const itemsToRemove = Object.keys(selectedItems).map((itemId) => {
       const folder = files.items.find((f) =>

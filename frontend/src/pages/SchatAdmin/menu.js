@@ -65,16 +65,12 @@ export const SCHAT_ADMIN_SECTIONS = [
     label: "시스템 상태",
     description: "등록 문서, 체크리스트, 검색 데이터와 연결 상태를 확인합니다.",
   },
-  {
-    key: "storage",
-    label: "저장공간 정리",
-    description:
-      "예전 업로드로 남은 페이지 기록과 이미지를 확인합니다. 현재 사용 중인 자료는 보호됩니다.",
-  },
 ];
 
 export function findSchatAdminSection(key) {
   if (key === "connections") key = "status";
+  // 저장공간 정리 메뉴는 없앰: 예전 주소는 현재 사용 중 요약이 있는 답변 근거 보기로.
+  if (key === "storage") key = "chunks";
   return (
     SCHAT_ADMIN_SECTIONS.find((section) => section.key === key) ||
     SCHAT_ADMIN_SECTIONS[0]

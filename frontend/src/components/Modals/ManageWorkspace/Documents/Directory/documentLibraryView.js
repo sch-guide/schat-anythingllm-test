@@ -54,3 +54,50 @@ export function filesToStage(
     .flatMap((doc) => doc.freeFiles || [])
     .filter((file) => !staged.has(docpathOf(file)));
 }
+
+// "현재 사용 중"(등록·일부 등록)과 "예전 문서·등록 전"으로 나눔.
+export function librarySections(documents = []) {
+  const current = documents.filter((doc) =>
+    ["registered", "partial"].includes(doc.status)
+  );
+  const old = documents.filter(
+    (doc) => !["registered", "partial"].includes(doc.status)
+  );
+  return { current, old };
+}
+
+/**
+ * 서버 안전 점검(저장공간 점검 보고서)으로 삭제 가능 여부를 정함.
+ * 화면 표시는 참고용이며, 실제 삭제 직전에 서버가 다시 확인함.
+ * @param {object} doc 문서 목록 한 줄
+ * @param {Map<string, object>|null} groups 점검 보고서 묶음(key별)
+ * @param {boolean} isAdmin 관리자만 삭제 가능
+ */
+export function deleteState(doc, groups, isAdmin) {
+  if (["registered", "partial"].includes(doc.status))
+    return { deletable: false, reason: "현재 사용 중인 문서입니다." };
+  if (!isAdmin) return { deletable: false, reason: "" };
+  if (!groups) return { deletable: false, reason: "안전 점검 중..." };
+  const group = doc.cleanupKey ? groups.get(doc.cleanupKey) : null;
+  if (!group)
+    return {
+      deletable: false,
+      reason: "안전 점검 결과가 아직 없어요. 잠시 뒤 다시 열어 주세요.",
+    };
+  if (group.status === "old_upload") return { deletable: true, reason: "" };
+  if (group.status === "in_use")
+    return {
+      deletable: false,
+      reason: "현재 사용 중인 자료와 연결되어 있습니다.",
+    };
+  return {
+    deletable: false,
+    reason:
+      (group.reasons || []).join(" ") || "확인이 필요해 삭제할 수 없습니다.",
+  };
+}
+
+export function checklistCount(doc, groups) {
+  const group = doc.cleanupKey && groups ? groups.get(doc.cleanupKey) : null;
+  return Number(group?.usage?.checklists) || 0;
+}

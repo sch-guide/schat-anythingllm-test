@@ -131,7 +131,7 @@ function load(relative, deps = {}, globals = {}) {
 test("근거 화면은 저장 발췌·실제 청크·버전 상태를 구분하고 HTML을 실행하지 않음", () => {
   const ui = load("./ui.jsx");
   const view = load("./sections/Chunks.jsx", {
-    "../ui": ui,
+    "../ui": ui, "../CurrentUsageCard": { __esModule: true, default: () => null },
     "@/models/chunkViewer": { default: {} },
     "../chunkViewerController": { createChunkViewerController },
   });
@@ -171,7 +171,7 @@ test("근거 화면은 저장 발췌·실제 청크·버전 상태를 구분하�
 test("긴 내부 번호 대신 쪽과 목록 순서를 표시하고 없는 정보는 숨김", () => {
   const ui = load("./ui.jsx");
   const view = load("./sections/Chunks.jsx", {
-    "../ui": ui,
+    "../ui": ui, "../CurrentUsageCard": { __esModule: true, default: () => null },
     "@/models/chunkViewer": { default: {} },
     "../chunkViewerController": { createChunkViewerController },
   });
@@ -198,7 +198,7 @@ test("긴 내부 번호 대신 쪽과 목록 순서를 표시하고 없는 정�
 test("여러 미확인 출처의 공통 주의는 한 번만 표시함", () => {
   const ui = load("./ui.jsx");
   const view = load("./sections/Chunks.jsx", {
-    "../ui": ui, "@/models/chunkViewer": { default: {} },
+    "../ui": ui, "../CurrentUsageCard": { __esModule: true, default: () => null }, "@/models/chunkViewer": { default: {} },
     "../chunkViewerController": { createChunkViewerController },
   });
   const html = renderToStaticMarkup(React.createElement(view.ChatEvidence, {
@@ -276,7 +276,7 @@ test("문서 화면의 선택·검색·다음 목록 버튼이 조회 처리에 
   await controller.start();
   const ui = load("./ui.jsx");
   const view = load("./sections/Chunks.jsx", {
-    "../ui": ui,
+    "../ui": ui, "../CurrentUsageCard": { __esModule: true, default: () => null },
     "@/models/chunkViewer": { default: {} },
     "../chunkViewerController": { createChunkViewerController },
   });

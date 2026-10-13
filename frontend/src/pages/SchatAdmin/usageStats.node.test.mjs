@@ -7,7 +7,7 @@ const source = readFileSync(
   "utf8"
 );
 
-test("usage statistics offer the four periods and seven cards", () => {
+test("usage statistics offer the four periods and six cards (AI 사용량 카드 없음)", () => {
   for (const label of ["오늘", "최근 7일", "최근 30일", "최근 90일"])
     assert.match(source, new RegExp(label));
   for (const title of [
@@ -18,9 +18,9 @@ test("usage statistics offer the four periods and seven cards", () => {
     "검색 실패 질문",
     "근거 없음 응답",
     "부서별 사용량",
-    "대략적인 AI 사용량",
   ])
     assert.match(source, new RegExp(title));
+  assert.doesNotMatch(source, /대략적인 AI 사용량/);
   assert.match(source, /인원이 적어 표시하지 않음/);
 });
 

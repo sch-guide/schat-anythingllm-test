@@ -24,7 +24,6 @@ import ChecklistsSection from "./sections/Checklists";
 import SynonymsSection from "./sections/Synonyms";
 import UsageStatsSection from "./sections/UsageStats";
 import StatusSection from "./sections/Status";
-import StorageSection from "./sections/Storage";
 import GeminiAvailabilityBanner from "./GeminiAvailabilityBanner";
 
 const SECTIONS = {
@@ -39,7 +38,6 @@ const SECTIONS = {
   synonyms: SynonymsSection,
   usage: UsageStatsSection,
   status: StatusSection,
-  storage: StorageSection,
 };
 
 // Sections that change one workspace show a picker when there is more than one.
@@ -60,7 +58,6 @@ const WIDE_SECTIONS = [
   "checklists",
   "synonyms",
   "usage",
-  "storage",
 ];
 
 function preferredSlug(workspaces = []) {

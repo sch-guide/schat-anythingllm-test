@@ -124,3 +124,13 @@ test("새 폴더 버튼·창이 없고 PDF만 받으며 영어 상태 문구가 
     /클릭하여 PDF를 업로드하거나 파일을 이곳으로 끌어다 놓으세요\./
   );
 });
+
+test("문서를 빼는 중·고정·감시 안내가 한글로 나옴", () => {
+  const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
+  const panel = read("./WorkspaceDirectory/index.jsx");
+  const row = read("./WorkspaceDirectory/WorkspaceFileRow/index.jsx");
+  assert.match(panel, /선택한 문서를 등록 목록에서 빼는 중입니다/);
+  assert.match(row, /문서를 등록 목록에서 빼는 중입니다/);
+  for (const english of [/Removing (selected )?files? from workspace/, /Pin to workspace/, /Remove document from workspace/, /will be watched for changes/])
+    assert.doesNotMatch(panel + row, english);
+});

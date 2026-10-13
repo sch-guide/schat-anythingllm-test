@@ -207,6 +207,11 @@ function workspaceEndpoints(app) {
           workspaceId: response.locals.workspace.id,
           prisma: require("../utils/prisma"),
           pdfMeta: publicOriginalPdfMetadata,
+          keyOf: (documentId) =>
+            require("../utils/schatAdmin/storageCleanup").groupKey(
+              "document",
+              documentId
+            ),
         });
         response.set("Cache-Control", "no-store");
         return response.status(200).json({ success: true, documents });
@@ -902,7 +907,24 @@ function workspaceEndpoints(app) {
         if (!workspace) return response.sendStatus(404);
 
         const documents = await Document.forWorkspace(workspace.id);
-        const original = resolveWorkspaceOriginalPdf({ pdfRef, documents });
+        let original = resolveWorkspaceOriginalPdf({ pdfRef, documents });
+        // 관리자·매니저는 문서 등록 창에서 아직 등록하지 않은(예전) 업로드의
+        // 원본도 볼 수 있음. 직원은 지금처럼 등록된 문서만 볼 수 있음.
+        if (!original && ["admin", "manager"].includes(user?.role)) {
+          const { readCatalog } = require("../utils/documentLibrary");
+          const { documentsPath } = require("../utils/files");
+          const ids = [
+            ...new Set(
+              (await readCatalog(documentsPath))
+                .map((file) => file.documentId)
+                .filter(Boolean)
+            ),
+          ];
+          original = resolveWorkspaceOriginalPdf({
+            pdfRef,
+            documents: ids.map((id) => ({ metadata: { document_id: id } })),
+          });
+        }
         if (!original) {
           const {wasOriginalPdfDeleted,responseReferencesPdf}=require('../utils/originalDocuments');
           if(wasOriginalPdfDeleted(pdfRef)) {

@@ -49,7 +49,13 @@ async function readCatalog(root) {
   return files;
 }
 
-function summarize(files, rows, workspaceId, pdfMeta = () => ({})) {
+function summarize(
+  files,
+  rows,
+  workspaceId,
+  pdfMeta = () => ({}),
+  keyOf = () => null
+) {
   const byPath = new Map();
   for (const row of rows) {
     let archived = false;
@@ -121,9 +127,9 @@ function summarize(files, rows, workspaceId, pdfMeta = () => ({})) {
         // (작업공간에서 뺀 예전 업로드 등) 따로 표시함.
         olderCopy:
           status === "unregistered" && registeredTitles.has(group.title),
-        ...(status !== "unregistered"
-          ? pdfMeta({ document_id: group.documentId, title: group.title })
-          : {}),
+        // 원본 PDF 링크(관리자 화면 원본 보기용)와 안전 점검 열쇠(예전 문서 삭제용).
+        ...pdfMeta({ document_id: group.documentId, title: group.title }),
+        cleanupKey: group.documentId ? keyOf(group.documentId) : null,
       };
     })
     .sort(
@@ -134,14 +140,14 @@ function summarize(files, rows, workspaceId, pdfMeta = () => ({})) {
     );
 }
 
-async function documentLibrary({ root, workspaceId, prisma, pdfMeta }) {
+async function documentLibrary({ root, workspaceId, prisma, pdfMeta, keyOf }) {
   const [files, rows] = await Promise.all([
     readCatalog(root),
     prisma.workspace_documents.findMany({
       select: { docpath: true, workspaceId: true, metadata: true },
     }),
   ]);
-  return summarize(files, rows, workspaceId, pdfMeta);
+  return summarize(files, rows, workspaceId, pdfMeta, keyOf);
 }
 
 module.exports = { documentLibrary, summarize, readCatalog };
