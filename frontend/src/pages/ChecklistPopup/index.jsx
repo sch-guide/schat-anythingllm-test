@@ -110,7 +110,8 @@ export default function ChecklistPopup() {
               id="patient"
               title="환자정보"
               compact
-              placeholder="예: 612호 / 홍길동"
+              placeholder="예: 홍길동"
+              hint="환자등록번호 및 호실은 적지 마세요"
               value={patientInfo}
               onChange={(value) => setMemoField("patient", value)}
               onBlur={flush}

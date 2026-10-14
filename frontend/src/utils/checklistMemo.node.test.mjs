@@ -131,7 +131,9 @@ test("employee screens: 환자정보 above the checklist, 기타메모 below, bl
     const tree = screen.indexOf("<ChecklistTree");
     const other = screen.indexOf('title="기타메모"');
     assert.ok(patient > 0 && patient < tree && tree < other, path);
-    assert.match(screen, /placeholder="예: 612호 \/ 홍길동"/);
+    assert.match(screen, /placeholder="예: 홍길동"/);
+    assert.doesNotMatch(screen, /612호/);
+    assert.match(screen, /hint="환자등록번호 및 호실은 적지 마세요"/);
     assert.match(screen, /placeholder="추가로 기록할 내용을 입력하세요"/);
     assert.match(screen, /tone="blue"/);
     assert.match(screen, /title="환자정보"\s+compact/);
@@ -157,6 +159,10 @@ test("notes stay in the browser and apart from checks and checklist data", () =>
   const checksHook = read("../hooks/useChecklistChecks.js");
   assert.doesNotMatch(checksHook, /Memo/);
   assert.match(card, /<textarea/);
+  // 환자정보 제목 옆 주황 안내(신고 창의 "환자 이름·등록번호는 적지 마세요"와 같은 색),
+  // 좁은 화면에서는 제목 아래로 내려감(flex-wrap).
+  assert.match(card, /flex-wrap items-baseline/);
+  assert.match(card, /text-xs font-normal text-orange-500/);
   // 환자정보 is a small one-line box (52px, grows to ~3 lines); 기타메모
   // keeps the large 3-row box.
   assert.match(card, /rows=\{compact \? 1 : 3\}/);

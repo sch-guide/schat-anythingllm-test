@@ -13,6 +13,7 @@ export default function ChecklistMemo({
   id,
   title,
   placeholder,
+  hint = "",
   value = "",
   onChange,
   onBlur,
@@ -41,12 +42,22 @@ export default function ChecklistMemo({
       <div
         className={`flex items-center justify-between gap-3 px-4 py-3 ${colors.header}`}
       >
-        <label
-          htmlFor={`checklist-memo-${id}`}
-          className="m-0 text-base font-semibold"
-        >
-          {title}
-        </label>
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <label
+            htmlFor={`checklist-memo-${id}`}
+            className="m-0 text-base font-semibold"
+          >
+            {title}
+          </label>
+          {hint && (
+            <span
+              data-checklist-memo-hint
+              className="text-xs font-normal text-orange-500"
+            >
+              {hint}
+            </span>
+          )}
+        </div>
         {hasText && (
           <button
             type="button"
