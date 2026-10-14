@@ -111,7 +111,9 @@ test("employee tree renders read-only rows, parent/child checkboxes, indetermina
   const tree = source("./ChecklistTree.jsx");
   assert.match(tree, /isInformationalItem\(item\)/);
   assert.match(tree, /\.indeterminate = state === "indeterminate"/);
-  assert.match(tree, /toggleParent\(scope, item, checkedItems\)/);
+  assert.doesNotMatch(tree, /toggleParent\(/);
+  assert.match(tree, /standalone && <ParentCheckbox/);
+  assert.match(tree, /toggleDetail\(scope, item, "self", checkedItems\)/);
   assert.match(tree, /toggleDetail\(scope, item, index, checkedItems\)/);
   assert.match(tree, /checklistId: checklist\.id, sectionId: section\.id/);
   assert.match(tree, /isCheckableDetail\(item, index\)/);

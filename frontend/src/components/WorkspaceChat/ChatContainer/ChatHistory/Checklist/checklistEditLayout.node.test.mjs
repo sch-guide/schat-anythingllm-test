@@ -188,8 +188,9 @@ test("보기와 수정 화면은 항목 순서·계층·체크박스·설명 줄
   // 금식여부 lines as notes, IV line 18G / note / child
   const tokens = skeleton(view);
   const from = (label) => tokens.indexOf(`text:${label}`);
-  assert.deepEqual(tokens.slice(from("동의서") - 1, from("동의서") + 7), [
-    "parent",
+  // 세부 줄이 있는 큰 항목은 제목만 표시(체크박스 없음)
+  assert.notEqual(tokens[from("동의서") - 1], "parent");
+  assert.deepEqual(tokens.slice(from("동의서"), from("동의서") + 7), [
     "text:동의서",
     "child",
     "text:① 기관지 내시경 검사 동의서",
@@ -198,16 +199,18 @@ test("보기와 수정 화면은 항목 순서·계층·체크박스·설명 줄
     "child",
     "text:③ 진정 비급여 동의서",
   ]);
-  assert.deepEqual(tokens.slice(from("금식여부") - 1, from("금식여부") + 5), [
-    "parent",
+  // 세부 줄이 있는 큰 항목은 제목만 표시(체크박스 없음)
+  assert.notEqual(tokens[from("금식여부") - 1], "parent");
+  assert.deepEqual(tokens.slice(from("금식여부"), from("금식여부") + 5), [
     "text:금식여부",
     "note",
     "text:AM : MN NPO",
     "note",
     "text:PM : 아침 먹고 NPO",
   ]);
-  assert.deepEqual(tokens.slice(from("IV line") - 1, from("IV line") + 7), [
-    "parent",
+  // 세부 줄이 있는 큰 항목은 제목만 표시(체크박스 없음)
+  assert.notEqual(tokens[from("IV line") - 1], "parent");
+  assert.deepEqual(tokens.slice(from("IV line"), from("IV line") + 7), [
     "text:IV line",
     "child",
     "text:18G",
@@ -251,10 +254,12 @@ test("수정 화면은 한 줄 입력 목록이 아니라 제자리 입력칸과
   assert.match(edit, /aria-label="항목 삭제"/);
   assert.match(edit, /체크 줄/);
   assert.match(edit, /설명 줄/);
-  // checkboxes are shown where employees see them but cannot be ticked
+  // checkboxes are shown where employees see them but cannot be ticked;
+  // 세부 줄이 있는 큰 항목은 직원 화면처럼 수정 화면에도 체크박스가 없음
   assert.match(
     edit,
-    /data-checklist-parent=""[^>]*disabled|disabled[^>]*data-checklist-parent=""/
+    /data-checklist-child=""[^>]*disabled|disabled[^>]*data-checklist-child=""/
   );
+  assert.doesNotMatch(edit, /data-checklist-parent=""/);
   assert.doesNotMatch(view, /<textarea|항목 추가|줄 추가/);
 });

@@ -13,7 +13,6 @@ import {
   isInformationalItem,
   parentState,
   toggleDetail,
-  toggleParent,
 } from "@/utils/checklistTree";
 import {
   addLine,
@@ -272,22 +271,23 @@ function CheckableItem({
   onLabel,
   boxClass,
 }) {
-  const state = parentState(scope, item, checkedItems);
-  const Row = editing ? "div" : "label";
+  const standalone = item.details.length === 0;
+  const state = standalone ? parentState(scope, item, checkedItems) : "unchecked";
+  const Row = editing || !standalone ? "div" : "label";
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <Row
-        className={`flex items-start gap-3 ${editing ? "" : "cursor-pointer"}`}
+        className={`flex items-start gap-3 ${editing || !standalone ? "" : "cursor-pointer"}`}
       >
-        <ParentCheckbox
+        {standalone && <ParentCheckbox
           state={state}
           label={item.label}
           disabled={editing}
           boxClass={boxClass}
           onChange={() =>
-            onCheckedChange?.(toggleParent(scope, item, checkedItems))
+            onCheckedChange?.(toggleDetail(scope, item, "self", checkedItems))
           }
-        />
+        />}
         {editing ? (
           <div className="flex min-w-0 flex-1 items-start gap-2">
             <EditableText
@@ -301,7 +301,7 @@ function CheckableItem({
         ) : (
           <span
             data-checklist-text=""
-            className="min-w-0 text-sm font-semibold leading-[1.7] text-zinc-100 light:text-slate-900"
+            className={`min-w-0 text-sm font-semibold leading-[1.7] text-zinc-100 light:text-slate-900 ${standalone && state === "checked" ? "line-through" : ""}`}
           >
             {item.label}
           </span>

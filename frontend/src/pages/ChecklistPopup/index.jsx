@@ -1,3 +1,4 @@
+import ChecklistPrintButton from "@/components/WorkspaceChat/ChatContainer/ChatHistory/Checklist/ChecklistPrintButton";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import Checklist from "@/models/checklist";
@@ -80,6 +81,10 @@ export default function ChecklistPopup() {
               <h1 className="m-0 min-w-0 flex-1 text-base font-semibold text-zinc-50 light:text-slate-900">
                 {checklist.title} 체크리스트
               </h1>
+              <ChecklistPrintButton
+            checklist={checklist} checkedItems={checkedItems}
+            patientInfo={patientInfo} otherMemo={otherMemo} disabled={disabled}
+          />
               <ChecklistResetButton
                 checkedItems={checkedItems}
                 onReset={resetCheckedItems}

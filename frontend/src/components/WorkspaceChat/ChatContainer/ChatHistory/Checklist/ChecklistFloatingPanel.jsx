@@ -1,3 +1,4 @@
+import ChecklistPrintButton from "./ChecklistPrintButton";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowSquareOut, CaretUp, Minus, X } from "@phosphor-icons/react";
@@ -208,6 +209,10 @@ export default function ChecklistFloatingPanel({
           <p className="m-0 min-w-0 flex-1 truncate text-xs text-zinc-400 light:text-slate-600">
             {checklist.source?.filename || ""}
           </p>
+          <ChecklistPrintButton
+            checklist={checklist} checkedItems={checkedItems}
+            patientInfo={patientInfo} otherMemo={otherMemo} disabled={disabled}
+          />
           <ChecklistResetButton
             checkedItems={checkedItems}
             onReset={resetCheckedItems}
