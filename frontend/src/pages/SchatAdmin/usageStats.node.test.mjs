@@ -21,7 +21,9 @@ test("usage statistics offer the four periods and six cards (AI 사용량 카드
   ])
     assert.match(source, new RegExp(title));
   assert.doesNotMatch(source, /대략적인 AI 사용량/);
-  assert.match(source, /인원이 적어 표시하지 않음/);
+  // 2026-10-14: 5명 미만 부서도 숨기지 않고 인원·질문 합계를 보여 준다.
+  assert.doesNotMatch(source, /인원이 적어 표시하지 않음/);
+  assert.match(source, /사용자 \$\{n\(dept\.users\)\}명 · 질문 \$\{n\(dept\.questions\)\}건/);
 });
 
 test("usage statistics never show who asked", () => {

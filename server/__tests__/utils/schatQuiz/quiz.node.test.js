@@ -606,3 +606,21 @@ test("쪽마다 머리글만 읽힌 문서(스캔 PDF)는 AI를 부르지 않고
   assert.equal(generation.counters.geminiCalls, before);
   assert.equal(logs[0].status, "no_evidence");
 });
+
+test("주제의 핵심 단어 일부만 맞는 쪽은 근거로 쓰지 않음(관계없는 주제 문제 방지)", async () => {
+  const generation = require("../../../utils/schatQuiz/generation");
+  const docs = [
+    ["가상 중심정맥관 감염 예방을 위해 손위생을 한다", { document_id: "D1", page: 1 }],
+    ["가상 중심정맥관 드레싱은 2일마다 교환한다", { document_id: "D1", page: 2 }],
+  ];
+  const pages = async (topic) =>
+    (
+      await generation.collectEvidence(
+        { documentId: "D1", workspaceSlug: "ws", topic, title: "가상지침_중심정맥관.pdf" },
+        { vectorDb: fakeVectorDb(docs) }
+      )
+    ).map((e) => e.page);
+  assert.deepEqual(await pages("낙상 예방"), []);
+  assert.deepEqual(await pages("감염 예방"), [1]);
+  assert.deepEqual(await pages("드레싱"), [2]);
+});

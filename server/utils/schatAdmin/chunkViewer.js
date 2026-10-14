@@ -3,6 +3,11 @@ const { maskSensitive } = require("./usageStats");
 const PAGE_SIZE = 50;
 const MAX_SCAN = 1000;
 const MAX_TEXT = 12000;
+// 지침별 보기의 "이 문단을 근거로 쓴 질문" 계산에 읽는 최근 질문 수와 보관 시간.
+const REFERENCE_SCAN = 3000;
+const REFERENCE_TTL_MS = 60 * 1000;
+const REFERENCE_ITEMS = 20;
+const ANSWER_MAX_TEXT = 60000;
 function fail(status, message) {
   const error = new Error(message);
   error.status = status;
@@ -104,6 +109,41 @@ function chunkInfo(id, content, metadata, document) {
     text: text(content, MAX_TEXT),
     truncated: typeof content === "string" && content.length > MAX_TEXT,
   };
+}
+// 저장된 출처와 근거 문단을 대조할 때 공백·전각 차이를 무시한다.
+function compact(value) {
+  return typeof value === "string"
+    ? value.normalize("NFKC").replace(/\s+/g, "").toLocaleLowerCase()
+    : "";
+}
+function baseName(value) {
+  return typeof value === "string"
+    ? value.normalize("NFC").split(/[\\/]/).pop().trim()
+    : "";
+}
+function numberOf(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+// 저장된 검색 점수. similarity는 의미 검색 유사도(코사인, 0~1),
+// score는 예전 경로의 순위 점수로 서로 다른 값이라 따로 돌려준다.
+function scoreOf(source) {
+  return numberOf(source?.score);
+}
+function similarityOf(source) {
+  return numberOf(source?.similarity);
+}
+// 저장된 출처 하나가 근거 문단(chunk)과 같은 내용인지 판단한다.
+// 문서명과 쪽이 같고, 출처에 남은 인용 문장이 문단 안에 있으면 같은 문단으로 본다.
+// 인용 문장이 없거나 너무 짧은 과거 기록은 같은 쪽이면 연결한다.
+function sourceMatchesChunk(ref, chunk) {
+  if (ref.vectorId && ref.vectorId === chunk.id) return true;
+  if (!ref.name || ref.name !== chunk.name) return false;
+  if (ref.page && chunk.page && ref.page !== chunk.page) return false;
+  if (!ref.page && chunk.page) return false;
+  if (ref.excerptKey.length < 15) return true;
+  return chunk.compactText.includes(ref.excerptKey);
 }
 function groupKey(row) {
   // Display grouping only. Individual registration/vector identities stay intact.
@@ -210,6 +250,99 @@ function createChunkViewer({
     });
     return matches.length === 1 ? matches[0] : null;
   }
+  // 최근 질문의 저장 출처를 읽어 문단별 참조를 계산한다(읽기 전용, 짧게 보관).
+  const referenceCache = new Map();
+  async function chatReferences(workspaceId) {
+    const cached = referenceCache.get(workspaceId);
+    if (cached && Date.now() - cached.at < REFERENCE_TTL_MS) return cached.refs;
+    const rows = await db().workspace_chats.findMany({
+      where: { workspaceId, api_session_id: null },
+      orderBy: { id: "desc" },
+      take: REFERENCE_SCAN,
+      select: { id: true, prompt: true, response: true, createdAt: true },
+    });
+    const refs = [];
+    for (const row of rows) {
+      const response = parseObject(row.response);
+      const sources = Array.isArray(response.sources) ? response.sources : [];
+      for (const entry of sources.slice(0, PAGE_SIZE)) {
+        const source = parseObject(entry?.metadata || entry);
+        const page = Number(source.page);
+        const excerpt = compact(source.excerpt || source.text || "");
+        refs.push({
+          chatId: row.id,
+          question: row.prompt,
+          createdAt: row.createdAt,
+          vectorId: text(source.chunk_id || source.id),
+          name: baseName(
+            source.documentName || source.document_name || source.title || ""
+          ),
+          page: Number.isSafeInteger(page) && page > 0 ? page : null,
+          // 앞부분 일부만 비교해 출처 머리말·생략 차이에 덜 민감하게 한다.
+          excerptKey: excerpt.slice(0, 40),
+          score: scoreOf(source),
+          similarity: similarityOf(source),
+        });
+      }
+    }
+    if (referenceCache.size > 20) referenceCache.clear();
+    referenceCache.set(workspaceId, { at: Date.now(), refs });
+    return refs;
+  }
+  function referencesFor(refs, chunk) {
+    const target = { ...chunk, compactText: compact(chunk.text) };
+    const chats = new Map();
+    for (const ref of refs) {
+      if (!sourceMatchesChunk(ref, target)) continue;
+      const known = chats.get(ref.chatId);
+      if (known) {
+        if (ref.similarity !== null && (known.similarity === null || ref.similarity > known.similarity))
+          known.similarity = ref.similarity;
+        if (ref.score !== null && (known.score === null || ref.score > known.score))
+          known.score = ref.score;
+        continue;
+      }
+      chats.set(ref.chatId, {
+        id: ref.chatId,
+        question: maskSensitive(ref.question).slice(0, 300),
+        createdAt: date(ref.createdAt),
+        similarity: ref.similarity,
+        score: ref.score,
+      });
+    }
+    const items = [...chats.values()].sort((a, b) => b.id - a.id);
+    return { count: items.length, items: items.slice(0, REFERENCE_ITEMS) };
+  }
+  function documentReferenceCount(refs, name) {
+    return new Set(refs.filter((ref) => ref.name === name).map((ref) => ref.chatId)).size;
+  }
+  // 직원이 실제로 본 답변을 그대로 돌려준다. 내용은 저장된 값만 사용하고 새로 만들지 않는다.
+  function storedAnswer(response) {
+    const textValue = typeof response.text === "string" ? response.text : null;
+    const sources = (Array.isArray(response.sources) ? response.sources : [])
+      .slice(0, PAGE_SIZE)
+      .map((entry) => parseObject(entry?.metadata || entry))
+      // 채팅 화면이 받는 출처와 같은 값. 내부 벡터 본문 머리말은 이미 제거되어 저장된다.
+      .map(({ vector, embedding, ...source }) => source);
+    const missing = [];
+    if (textValue === null) missing.push("답변 본문");
+    if (!Array.isArray(response.sources)) missing.push("출처");
+    return {
+      available: textValue !== null,
+      text: textValue === null ? "" : textValue.slice(0, ANSWER_MAX_TEXT),
+      textTruncated: textValue !== null && textValue.length > ANSWER_MAX_TEXT,
+      type: typeof response.type === "string" ? response.type : null,
+      sources,
+      presentation:
+        response.presentation && typeof response.presentation === "object"
+          ? response.presentation
+          : null,
+      relatedImages: Array.isArray(response.relatedImages)
+        ? response.relatedImages
+        : [],
+      missing,
+    };
+  }
   function chatSummary(row) {
     return {
       id: row.id,
@@ -229,8 +362,10 @@ function createChunkViewer({
         const p = documentInfo(row).page;
         if (p) groups.get(key).pages.add(p);
       }
+      const refs = await chatReferences(workspace.id).catch(() => null);
       const rows = [...groups.values()].map(({ pages, statuses, versions, ...doc }) => ({
         ...doc, pageCount: pages.size,
+        referenceCount: refs ? documentReferenceCount(refs, doc.name) : null,
         status: statuses.size > 1 ? "mixed" : doc.status,
         version: versions.size > 1 ? null : doc.version,
       }));
@@ -318,9 +453,18 @@ function createChunkViewer({
       const latest = await members(workspace.id, row);
       if (latest.length !== group.length || group.some((r, i) => !sameRegistration(r, latest[i])))
         fail(409, "조회 중 문서 등록 상태가 바뀌었습니다. 잠시 뒤 다시 조회해 주세요.");
+      // 참조 계산이 실패해도 문단 조회는 그대로 보여 준다.
+      const refs = await chatReferences(workspace.id).catch(() => null);
       return {
-        ...page(items, cursor, hasMore),
-        document,
+        ...page(
+          refs ? items.map((item) => ({ ...item, references: referencesFor(refs, item) })) : items,
+          cursor,
+          hasMore
+        ),
+        document: refs
+          ? { ...document, referenceCount: documentReferenceCount(refs, document.name) }
+          : document,
+        referenceScan: REFERENCE_SCAN,
         scanned,
         scanLimited: hasMore && scanned >= MAX_SCAN,
       };
@@ -433,6 +577,8 @@ function createChunkViewer({
               : chunk
                 ? "current"
                 : "unavailable",
+          similarity: similarityOf(source),
+          score: scoreOf(source),
           excerpt: text(source.excerpt || source.text, MAX_TEXT),
           excerptTruncated:
             typeof (source.excerpt || source.text) === "string" &&
@@ -443,6 +589,7 @@ function createChunkViewer({
       return {
         ...chatSummary(row),
         sources,
+        answer: storedAnswer(response),
         sourcesTruncated: allSources.length > PAGE_SIZE,
         notice: lookupFailed
           ? "근거 문단을 불러오지 못했습니다. 답할 때 참고한 내용을 표시합니다."

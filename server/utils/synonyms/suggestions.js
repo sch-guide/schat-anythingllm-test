@@ -517,7 +517,8 @@ async function storePlan(
 
 function defaultLlm() {
   const { GeminiLLM } = require("../AiProviders/gemini");
-  return new GeminiLLM(null, process.env.GEMINI_LLM_MODEL_PREF || null);
+  // 동의어 모델(SCHAT_SYNONYM_MODEL)을 따로 정하지 않으면 답변 모델을 쓴다.
+  return new GeminiLLM(null, require("../schatModels").modelFor("synonym"));
 }
 
 async function defaultLoadDocument(document = {}) {

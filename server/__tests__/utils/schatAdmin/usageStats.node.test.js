@@ -118,10 +118,10 @@ test("seven usage items, without any author information", () => {
   assert.deepEqual(stats.notFoundAnswers.items, [
     { question: "치아 미백 ***", date: "2026-09-27" },
   ]);
-  // (6) alphabetical, departments with fewer than 5 users hidden
+  // (6) alphabetical, every department counted regardless of size
   assert.deepEqual(stats.departments, [
-    { name: "가병동", hidden: true },
-    { name: "하병동", hidden: false, questions: 5 },
+    { name: "가병동", hidden: false, users: 2, questions: 2 },
+    { name: "하병동", hidden: false, users: 5, questions: 5 },
   ]);
   // (7) stored tokens only
   // 예상 요금은 시스템 상태(Gemini AI)로 옮겨 사용 통계에는 없음

@@ -128,88 +128,6 @@ function load(relative, deps = {}, globals = {}) {
   );
   return module.exports;
 }
-test("근거 화면은 저장 발췌·실제 청크·버전 상태를 구분하고 HTML을 실행하지 않음", () => {
-  const ui = load("./ui.jsx");
-  const view = load("./sections/Chunks.jsx", {
-    "../ui": ui, "../CurrentUsageCard": { __esModule: true, default: () => null },
-    "@/models/chunkViewer": { default: {} },
-    "../chunkViewerController": { createChunkViewerController },
-  });
-  const html = renderToStaticMarkup(
-    React.createElement(view.ChatEvidence, {
-      detail: {
-        question: "시험",
-        sources: [
-          {
-            name: "문서",
-            excerpt: "<script>시험</script>",
-            status: "previous",
-            chunk: { text: "실제 본문", page: 2, version: null },
-          },
-          {
-            name: "삭제됨",
-            excerpt: "과거",
-            status: "unavailable",
-            chunk: null,
-          },
-        ],
-      },
-    })
-  );
-  for (const label of [
-    "답할 때 참고한 내용",
-    "근거 문단",
-    "이전 버전",
-    "원본 확인 불가",
-    "&lt;script&gt;",
-  ])
-    assert.ok(html.includes(label), label);
-  assert.equal(html.includes("<script>"), false);
-  assert.doesNotMatch(html, /버전 확인 불가|등록 시각 확인 불가|페이지 확인 불가/);
-});
-
-test("긴 내부 번호 대신 쪽과 목록 순서를 표시하고 없는 정보는 숨김", () => {
-  const ui = load("./ui.jsx");
-  const view = load("./sections/Chunks.jsx", {
-    "../ui": ui, "../CurrentUsageCard": { __esModule: true, default: () => null },
-    "@/models/chunkViewer": { default: {} },
-    "../chunkViewerController": { createChunkViewerController },
-  });
-  const html = renderToStaticMarkup(React.createElement(view.ChunksView, {
-    controller: {}, workspace: { name: "시험" }, mode: "documents",
-    setMode() {}, keyword: "", setKeyword() {},
-    state: {
-      loading: {}, errors: {}, selectedDocument: "doc", chunkHistory: [],
-      chunkOffset: 0, documentOffset: 0,
-      documents: { ...empty, items: [{ documentId: "doc", name: "합성 지침" }] },
-      chunks: { ...empty, document: {}, items: [
-        { id: "internal-long-uuid-12345", text: "첫 문단", page: 31 },
-        { id: "internal-long-uuid-67890", text: "둘째 문단", page: null },
-      ] },
-    },
-  }));
-  assert.match(html, /31쪽 1번째/);
-  assert.match(html, /근거 문단 2번째/);
-  assert.match(html, /지침별로 보기/);
-  assert.match(html, /질문별로 보기/);
-  assert.doesNotMatch(html, /internal-long-uuid|확인 불가|Invalid Date/);
-});
-
-test("여러 미확인 출처의 공통 주의는 한 번만 표시함", () => {
-  const ui = load("./ui.jsx");
-  const view = load("./sections/Chunks.jsx", {
-    "../ui": ui, "../CurrentUsageCard": { __esModule: true, default: () => null }, "@/models/chunkViewer": { default: {} },
-    "../chunkViewerController": { createChunkViewerController },
-  });
-  const html = renderToStaticMarkup(React.createElement(view.ChatEvidence, {
-    detail: { question: "시험", sources: [1, 2, 3].map(n => ({
-      name: `지침 ${n}`, status: "unavailable", excerpt: `근거 ${n}`,
-    })) },
-  }));
-  assert.equal((html.match(/일부 원본의 현재 상태는 확인할 수 없습니다/g) || []).length, 1);
-  assert.doesNotMatch(html, /삭제 여부나 이전 버전 여부를/);
-  assert.match(html, /근거 3/);
-});
 test("API는 인증·작업 공간·검색조건을 GET으로 보내고 실패를 드러냄", async () => {
   const deps = {
     "@/utils/constants": { API_BASE: "/api" },
@@ -257,39 +175,40 @@ test("API는 인증·작업 공간·검색조건을 GET으로 보내고 실패�
   }).default;
   await assert.rejects(malformed.chats(1));
 });
-test("문서 화면의 선택·검색·다음 목록 버튼이 조회 처리에 연결됨", async () => {
-  const calls = [];
-  const controller = make({
-    documents: async () => docs,
-    chats: async () => empty,
-    chunks: async (_, query) => {
-      calls.push(query);
-      return {
-        ...empty,
-        document: {},
-        items: [],
-        hasMore: true,
-        nextOffset: 50,
-      };
+const viewDeps = () => ({
+  "../ui": load("./ui.jsx"),
+  "../CurrentUsageCard": { __esModule: true, default: () => null },
+  "./ChatReplay": { __esModule: true, default: () => null },
+  "@/models/chunkViewer": { default: {} },
+  "../chunkViewerController": { createChunkViewerController },
+});
+test("답변 근거 보기는 질문 목록과 답변 원문만 보여 주고 지침별·근거 상세 탭은 없음", () => {
+  const view = load("./sections/Chunks.jsx", viewDeps());
+  const html = renderToStaticMarkup(React.createElement(view.ChunksView, {
+    controller: {}, workspace: { name: "시험", slug: "ws" },
+    state: {
+      loading: {}, errors: {}, chatOffset: 0, selectedChat: 7,
+      chats: { ...empty, items: [{ id: 7, question: "중심정맥관 관리", createdAt: "2026-10-14T00:00:00Z" }] },
+      detail: { id: 7, question: "중심정맥관 관리", sources: [], answer: { available: true, text: "답", sources: [], missing: [] } },
     },
+  }));
+  assert.match(html, /질문 기록/);
+  assert.match(html, /중심정맥관 관리/);
+  assert.match(html, /직원이 본 답변/);
+  assert.doesNotMatch(html, /지침별로 보기|질문별로 보기|검색 근거 상세 보기|답할 때 참고한 내용|근거 문단/);
+});
+test("질문을 누르면 그 답변을 불러오고, 화면 시작 때 지침 목록은 부르지 않음", async () => {
+  let documentCalls = 0;
+  const opened = [];
+  const controller = make({
+    documents: async () => { documentCalls += 1; return docs; },
+    chats: async () => ({ ...empty, items: [{ id: 3, question: "진정절차" }] }),
+    chat: async (_, id) => { opened.push(id); return { id, question: "진정절차", sources: [] }; },
   });
-  await controller.start();
-  const ui = load("./ui.jsx");
-  const view = load("./sections/Chunks.jsx", {
-    "../ui": ui, "../CurrentUsageCard": { __esModule: true, default: () => null },
-    "@/models/chunkViewer": { default: {} },
-    "../chunkViewerController": { createChunkViewerController },
-  });
-  const tree = () =>
-    view.ChunksView({
-      controller,
-      state: controller.getSnapshot(),
-      workspace: { name: "시험" },
-      mode: "documents",
-      setMode() {},
-      keyword: "바늘",
-      setKeyword() {},
-    });
+  await controller.start({ documents: false });
+  assert.equal(documentCalls, 0);
+  const view = load("./sections/Chunks.jsx", viewDeps());
+  const tree = view.ChunksView({ controller, state: controller.getSnapshot(), workspace: { slug: "ws" } });
   function find(element, predicate) {
     if (!React.isValidElement(element)) return null;
     if (predicate(element)) return element;
@@ -299,18 +218,6 @@ test("문서 화면의 선택·검색·다음 목록 버튼이 조회 처리에 
     }
     return null;
   }
-  await find(tree(), (el) => el.type === "form").props.onSubmit({
-    preventDefault() {},
-  });
-  assert.equal(calls.at(-1).q, "바늘");
-  const paging = find(
-    tree(),
-    (el) => el.type.name === "Paging" && el.props.hasNext
-  );
-  await paging.props.next();
-  assert.equal(calls.at(-1).offset, 50);
-  await find(tree(), (el) => el.type === "select").props.onChange({
-    target: { value: "doc-b" },
-  });
-  assert.equal(calls.at(-1).documentId, "doc-b");
+  await find(tree, (el) => el.type === "button" && el.props["aria-pressed"] !== undefined).props.onClick();
+  assert.deepEqual(opened, [3]);
 });

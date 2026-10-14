@@ -3,6 +3,7 @@ const { EventEmitter, setMaxListeners } = require("events");
 const { APIError } = require("./error.js");
 const Providers = require("./providers/index.js");
 const { completeWithEvidence } = require("./utils/evidenceQuotes.js");
+const { startTimer } = require("../../schatTiming");
 const { Telemetry } = require("../../../models/telemetry.js");
 const { v4 } = require("uuid");
 const { ToolReranker } = require("./utils/toolReranker.js");
@@ -336,10 +337,13 @@ class AIbitat {
       return null;
 
     this._forcedRagSearchQueries.add(question);
-    return ragMemory.handler({
+    const timer = startTimer("forcedSearch");
+    const context = await ragMemory.handler({
       action: "search",
       content: question,
     });
+    timer.done({ sources: (this.getRagMemorySources?.() || []).length });
+    return context;
   }
 
   /**

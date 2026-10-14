@@ -27,11 +27,15 @@ test('invalid dates, reversed range and invalid department selection are rejecte
   for(const change of [{startDate:'2026-02-30'},{endDate:'2026-09-01'},{startDate:''},{departmentIds:['bad']},{departmentIds:[999]}])
     assert.throws(()=>computeUsageStats({...base,...change}), /./);
 });
-test('a selected department with fewer than five users exposes no aggregate or question details',()=>{
+test('a selected department with one user is counted without exposing who asked',()=>{
   const result=computeUsageStats({...base,chats:[row(1,'2026-10-01T01:00:00Z')]});
-  assert.equal(result.suppressed,true);
-  assert.equal(result.questions,undefined);
-  assert.equal(result.aiUsage,undefined);
+  assert.equal(result.suppressed,undefined);
+  assert.equal(result.questions.total,1);
+  assert.equal(result.aiUsage.questions,1);
+  assert.equal(result.departments.length,1);
+  assert.equal(result.departments[0].users,1);
+  assert.equal(result.departments[0].questions,1);
+  assert.doesNotMatch(JSON.stringify(result),/user_id|username|employee|display_name/);
 });
 test('old custom periods retain counts but never expose question text older than 90 days',()=>{
   const result=computeUsageStats({...base,startDate:'2026-01-01',endDate:'2026-01-01',departmentIds:[],chats:[row(1,'2026-01-01T01:00:00Z')]});

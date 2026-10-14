@@ -331,3 +331,42 @@ test("new automatic checklists always wait for review; unchanged re-runs keep th
   repository.saveAutoChecklist({ ...changed, status: "active" });
   assert.equal(repository.findByDocumentIds(docs).length, 0);
 });
+
+test("관리자가 지운 체크리스트는 어디에도 나오지 않고 같은 문서를 다시 읽어도 되살아나지 않음", () => {
+  const storageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "schat-checklist-"));
+  const repository = createChecklistRepository({ storageRoot });
+  const checklist = sampleChecklist();
+  repository.saveAutoChecklist(checklist);
+  const id = repository.listAll()[0].id;
+
+  assert.equal(repository.deleteChecklist(id).id, id);
+  assert.equal(repository.getById(id), null);
+  assert.equal(repository.listAll().length, 0);
+  assert.equal(repository.findByDocumentIds(["internal-document-id"], { includeReview: true }).length, 0);
+  // 파일에는 "삭제됨" 표시만 남고 내용(제목·항목)은 없음
+  const [entry] = repository.listEntries();
+  assert.equal(entry.checklist.deleted, true);
+  assert.equal(entry.checklist.title, undefined);
+  assert.equal(entry.checklist.sections, undefined);
+  // 같은 문서 같은 쪽을 다시 자동으로 읽어도 다시 생기지 않음
+  const again = repository.saveAutoChecklist({ ...checklist, updatedAt: "2026-10-14T00:00:00.000Z" });
+  assert.equal(again.created, false);
+  assert.equal(repository.listAll().length, 0);
+  // 없는 체크리스트 삭제는 null
+  assert.equal(repository.deleteChecklist("없는-id"), null);
+});
+
+test("체크리스트 삭제 주소는 관리자만, 같은 작업공간 문서만 지움", () => {
+  const endpointSource = fs.readFileSync(
+    path.join(__dirname, "../../../endpoints/workspaces.js"),
+    "utf8"
+  );
+  const start = endpointSource.search(
+    /app\.delete\(\s*"\/workspace\/:slug\/checklists\/:checklistId"/
+  );
+  assert.ok(start > 0);
+  const block = endpointSource.slice(start, start + 1600);
+  assert.match(block, /flexUserRoleValid\(\[ROLES\.admin, ROLES\.manager\]\)/);
+  assert.match(block, /allowedDocumentIds\.has\(checklist\.documentId\)/);
+  assert.match(block, /ChecklistRepository\.deleteChecklist\(checklistId\)/);
+});

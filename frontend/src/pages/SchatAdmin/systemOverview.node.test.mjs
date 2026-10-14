@@ -179,3 +179,11 @@ test("status keeps details closed and tests both connections only on button acti
   );
   assert.equal(values[0].connections.llm.keySet, true);
 });
+
+test("시스템 상태는 용도별 AI 모델을 읽기 전용으로 보여 주고 열쇠는 표시하지 않음", () => {
+  const status = readFileSync(new URL("./sections/Status.jsx", import.meta.url), "utf8");
+  assert.match(status, /<ModelPurposes models=\{models\} \/>/);
+  assert.match(status, /용도별 AI 모델/);
+  assert.match(status, /답변 모델과 같음/);
+  assert.doesNotMatch(status.slice(status.indexOf("function ModelPurposes")), /apiKey|열쇠 입력/);
+});

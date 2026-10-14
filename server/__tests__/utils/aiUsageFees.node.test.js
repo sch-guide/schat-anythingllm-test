@@ -94,7 +94,7 @@ test("invalid, missing, historical and unknown charged usage cannot silently bec
     fees.estimateChatCost([
       {
         response: JSON.stringify({
-          metrics: { ...measured, model: "gemini-3.5-flash-lite" },
+          metrics: { ...measured, model: "gemini-3.7-flash" },
         }),
       },
     ]).reason,
@@ -194,7 +194,7 @@ test("forecast needs ten charged questions over three active KST days and avoids
     null
   );
 });
-test("usage statistics no longer carry the cost (moved to 시스템 상태) and retain small department suppression", () => {
+test("usage statistics no longer carry the cost (moved to 시스템 상태) and count small departments", () => {
   const { computeUsageStats } = require("../../utils/schatAdmin/usageStats");
   const chats = [row(measured)];
   chats[0].user_id = 1;
@@ -208,11 +208,13 @@ test("usage statistics no longer carry the cost (moved to 시스템 상태) and 
     departments: [{ id: 1, name: "테스트" }],
     departmentIds: [1],
   });
-  assert.equal(filtered.suppressed, true);
-  assert.equal(filtered.aiUsage, undefined);
+  assert.equal(filtered.suppressed, undefined);
+  assert.equal(filtered.aiUsage.questions, 1);
 });
 test("단가는 한 곳(MODEL_PRICING)에서 관리하고 확인 안 된 모델은 넣지 않음", () => {
-  assert.deepEqual(Object.keys(fees.MODEL_PRICING), ["gemini-3.8-flash"]);
+  assert.deepEqual(Object.keys(fees.MODEL_PRICING), ["gemini-3.8-flash", "gemini-3.5-flash-lite"]);
+  const lite = fees.MODEL_PRICING["gemini-3.5-flash-lite"].periods;
+  assert.deepEqual(lite, [{ fromKst: "0000-01-01", inputUsd: 0.3, outputUsd: 2.5 }]);
   assert.equal(fees.priceFor("gemini-3.1-flash", at), null);
   assert.equal(fees.priceFor("gemini-3.8-flash", at).inputUsd, 0.75);
 });

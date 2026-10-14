@@ -149,7 +149,9 @@ function createQuestionAsker({
     try {
       if (!env.GEMINI_API_KEY) throw new Error("NO_KEY");
       // GeminiLLM의 생성자/모델목록/오류 로그 경로를 거치지 않는다.
-      const model = env.GEMINI_LLM_MODEL_PREF;
+      // 동의어 모델(SCHAT_SYNONYM_MODEL)이 없으면 답변 모델을 쓴다.
+      const model =
+        env.SCHAT_SYNONYM_MODEL || env.GEMINI_LLM_MODEL_PREF;
       if (typeof model !== "string" || !/^gemini-[A-Za-z0-9._-]+$/.test(model))
         throw new Error("NO_MODEL");
       if (!client) {

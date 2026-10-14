@@ -146,6 +146,8 @@ function schatAdminEndpoints(app) {
           workspaces: details,
           checklists,
           connections: publicConnectionState(),
+          // 용도별 모델 이름만(키 없음). 관리자에게 어디에 어떤 모델이 쓰이는지 보여 준다.
+          models: require("../utils/schatModels").modelSummary(),
         });
       } catch (e) {
         console.error("[schat-admin] status failed:", e.message);

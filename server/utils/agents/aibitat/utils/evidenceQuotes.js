@@ -1,4 +1,5 @@
 const { createHash } = require("node:crypto");
+const { startTimer } = require("../../../schatTiming");
 const OPEN = "<schat_evidence>";
 const CLOSE = "</schat_evidence>";
 const compact = (value) => String(value || "").replace(/\s/gu, "");
@@ -113,10 +114,35 @@ async function completeWithEvidence({
       return {uuid,textResponse:answer.text,functionCall:null};
     }
   }
+  // Gemini 첫 글자·완료 시간만 기록한다(내용은 남기지 않음).
+  const timer = startTimer("llm");
+  let firstText = false;
+  const timedHandler = eventHandler
+    ? (type, data) => {
+        if (
+          !firstText &&
+          data?.type === "textResponseChunk" &&
+          String(data.content || "").trim()
+        ) {
+          firstText = true;
+          timer.set("firstText", timer.elapsed());
+        }
+        return eventHandler(type, data);
+      }
+    : null;
+  const finishTiming = (completion) => {
+    timer.done({
+      sources: sources.length,
+      toolCall: completion?.functionCall ? 1 : 0,
+    });
+    return completion;
+  };
   if (!sources.length)
-    return eventHandler
-      ? provider.stream(messages, functions, eventHandler)
-      : provider.complete(messages, functions);
+    return (
+      timedHandler
+        ? provider.stream(messages, functions, timedHandler)
+        : provider.complete(messages, functions)
+    ).then(finishTiming);
   const { directoryAnswer } = require("./directoryEvidence");
   const question = messages.findLast(message => message.role === "user")?.content;
   const directory = typeof question === "string" ? directoryAnswer(sources, question) : null;
@@ -150,7 +176,7 @@ async function completeWithEvidence({
       "머리글과 해당 사람의 행 연결이 확인되지 않으면 번호 종류를 확인할 수 없다고 안내하세요. " +
       "옆 사람이나 다른 부서의 번호를 섞지 마세요.";
   }
-  const stream = eventHandler ? evidenceStream(eventHandler) : null;
+  const stream = timedHandler ? evidenceStream(timedHandler) : null;
   let completion;
   try {
     completion = stream
@@ -159,6 +185,7 @@ async function completeWithEvidence({
   } finally {
     stream?.finish();
   }
+  finishTiming(completion);
   if (
     !completion ||
     completion.functionCall ||

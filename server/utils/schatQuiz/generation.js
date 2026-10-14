@@ -135,7 +135,12 @@ async function collectEvidence(
         d.metadata.content_type !== "image_description" &&
         Number.isInteger(Number(d.metadata.page))
     );
-  let ranked = rankByBm25(topic, corpus);
+  // 퀴즈는 주제의 핵심 단어가 모두 들어 있는 조각만 근거로 씀. 채팅 검색과
+  // 달리 일부 단어만 맞는 조각(예: "낙상 예방"에서 "예방"만 있는 쪽)은 빼서
+  // 주제와 관계없는 문제를 만들지 않음.
+  let ranked = rankByBm25(topic, corpus).filter(
+    (hit) => (hit.bm25Coverage ?? 1) >= 1
+  );
   // 퀴즈 전용 보조 검색: BM25는 띄어쓴 단어만 맞춰서, 주제 "수혈"이 문서의
   // "수혈간호는"처럼 붙여 쓴 말 안에만 있으면 0건이 됨. 그때만 주제 단어가
   // 글자 그대로 들어 있는 본문 조각을 씀(근거 없는 쪽은 여전히 제외).
@@ -274,7 +279,8 @@ function evidencePrompt(evidence, { topic, count, type, difficulty }) {
 
 function defaultLlm() {
   const { GeminiLLM } = require("../AiProviders/gemini");
-  return new GeminiLLM(null, process.env.GEMINI_LLM_MODEL_PREF || null);
+  // 퀴즈 모델(SCHAT_QUIZ_MODEL)을 따로 정하지 않으면 답변 모델을 쓴다.
+  return new GeminiLLM(null, require("../schatModels").modelFor("quiz"));
 }
 
 async function askGemini(llm, messages) {

@@ -150,7 +150,7 @@ export default function StatusSection() {
   if (status.error)
     return <Notice tone="warning">시스템 상태를 불러오지 못했습니다.</Notice>;
 
-  const { workspaces = [], checklists, connections } = status;
+  const { workspaces = [], checklists, connections, models = [] } = status;
   return (
     <div className="flex flex-col gap-y-5">
       <SystemLights ai={availability?.state} aiError={availabilityError} daily={admission?.dailyUsage}
@@ -203,9 +203,33 @@ export default function StatusSection() {
           ]}>
             <ConnectionsSection onSaved={connectionSaved} />
           </Card>
+          <ModelPurposes models={models} />
         </div>}
       </details>
     </div>
+  );
+}
+
+// 용도별 AI 모델(읽기 전용). 답변 모델은 위 "AI 설정"에서 바꾸고,
+// 나머지는 기술 담당자가 .env에서 따로 정한다.
+export function ModelPurposes({ models = [] }) {
+  if (!models.length) return null;
+  return (
+    <Card
+      title="용도별 AI 모델"
+      help={[
+        "퀴즈·동의어·PDF 그림 설명은 따로 정하지 않으면 답변 모델을 따라요.",
+        "따로 정한 모델은 기술 담당자가 서버 설정에서 바꿔요.",
+        "검색 Embedding을 바꾸면 문서 검색 자료를 다시 만들어야 해요.",
+      ]}
+    >
+      {models.map((row) => (
+        <InfoRow key={row.purpose} label={row.label}>
+          {row.model}
+          {row.followsAnswer ? " (답변 모델과 같음)" : ""}
+        </InfoRow>
+      ))}
+    </Card>
   );
 }
 

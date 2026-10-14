@@ -48,8 +48,17 @@ export default forwardRef(function (
   },
   ref
 ) {
+  // A chain stays animated while the run feeding it is still live: an open
+  // agent websocket session, or an HTTP reply still streaming (animate flag).
+  // Gating on liveness keeps a chain that ends up last (aborted/errored run,
+  // stopped agent, reloaded history) from showing a working state forever,
+  // while covering the gaps between activities (thought closed, tool still
+  // running, next status not yet arrived).
+  const isLastMessageAnimating = !!history?.[history.length - 1]?.animate;
+  const generationComplete = history.findLast(item => item.role === "user")?.generationComplete === true;
+  const runIsLive = (!!websocket && !generationComplete) || isLastMessageAnimating;
   const { chatHistoryRef, isAtBottom, scrollToBottom, scrollHandlers } =
-    useAutoScroll(history, ref);
+    useAutoScroll(history, ref, runIsLive);
   const navigate = useNavigate();
   const { user } = useUser();
   const { threadSlug = null } = useParams();
@@ -199,6 +208,7 @@ export default forwardRef(function (
         websocket,
         checklists,
         onOpenChecklist: openChecklist,
+        runIsLive,
       }),
     [
       workspace,
@@ -209,17 +219,9 @@ export default forwardRef(function (
       websocket,
       checklists,
       openChecklist,
+      runIsLive,
     ]
   );
-  // A chain stays animated while the run feeding it is still live: an open
-  // agent websocket session, or an HTTP reply still streaming (animate flag).
-  // Gating on liveness keeps a chain that ends up last (aborted/errored run,
-  // stopped agent, reloaded history) from showing a working state forever,
-  // while covering the gaps between activities (thought closed, tool still
-  // running, next status not yet arrived).
-  const isLastMessageAnimating = !!history?.[history.length - 1]?.animate;
-  const generationComplete = history.findLast(item => item.role === "user")?.generationComplete === true;
-  const runIsLive = (!!websocket && !generationComplete) || isLastMessageAnimating;
   const answerHasStarted = hasVisibleAssistantAnswer(history);
   const isWaitingForAnswer = runIsLive && !answerHasStarted;
   const phase = waitingPhase(history);
@@ -384,13 +386,16 @@ function buildMessages({
   websocket,
   checklists = [],
   onOpenChecklist,
+  runIsLive = false,
 }) {
   return history.reduce((acc, props, index) => {
     const isLastBotReply =
       index === history.length - 1 && props.role === "assistant";
+    // 글자가 아직 도착하는 중인 마지막 답변만 자연스럽게 이어서 표시한다.
+    const isStreamingReply = isLastBotReply && runIsLive;
     const matchedChecklists =
       props.role === "assistant"
-        ? matchChecklists(questionForAssistant(history, index), checklists)
+        ? matchChecklists(questionForAssistant(history, index), checklists, props)
         : [];
     const citationQuestion =
       props.role === "assistant" ? questionForAssistant(history, index) : "";
@@ -498,6 +503,7 @@ function buildMessages({
             workspaceSlug={workspace?.slug}
             error={props.error}
             closed={props.closed}
+            isStreaming={isStreamingReply}
           />
         );
       } else {
@@ -521,6 +527,7 @@ function buildMessages({
             attachments={props.attachments}
             regenerateMessage={regenerateAssistantMessage}
             isLastMessage={isLastBotReply}
+            isStreaming={isStreamingReply}
             saveEditedMessage={saveEditedMessage}
             forkThread={forkThread}
             metrics={props.metrics}

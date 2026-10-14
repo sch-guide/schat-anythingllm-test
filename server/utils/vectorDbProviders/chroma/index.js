@@ -20,6 +20,7 @@ const {
 const { buildImageDescriptionChunks } = require("./imageDescriptionChunks");
 const { attachVectorIdentity } = require("./sourceIdentity");
 const searchCache = require("./searchCache");
+const { startTimer } = require("../../schatTiming");
 const {
   getActiveGroups: getActiveSynonymGroups,
   synonymsVersion,
@@ -695,6 +696,8 @@ class Chroma extends VectorDatabase {
     if (!namespace || !input || !LLMConnector)
       throw new Error("Invalid request to performSimilaritySearch.");
 
+    // 단계별 시간만 기록한다(질문 원문은 로그에 남기지 않음).
+    const timer = startTimer("search");
     const { client } = await this.connect();
     if (!(await this.namespaceExists(client, this.normalize(namespace)))) {
       return {
@@ -717,12 +720,19 @@ class Chroma extends VectorDatabase {
     }
     // Start the query embedding (Gemini) and the corpus load + BM25 ranking
     // at the same time; they don't depend on each other.
+    timer.mark("connect");
+    const embedStartedAt = timer.now();
     const queryVectorPromise = searchCache.embedWithCache(LLMConnector, input);
-    queryVectorPromise.catch(() => null);
+    queryVectorPromise.then(
+      () => timer.since("embed", embedStartedAt),
+      () => null
+    );
     const corpus = collection
       ? await searchCache.loadCorpus(collection, namespace).catch(() => null)
       : null;
+    timer.mark("corpus");
     const synonymGroups = await getActiveSynonymGroups();
+    timer.mark("synonyms");
     const cacheKey = corpus?.version
       ? searchCache.searchKey([
           namespace,
@@ -737,19 +747,28 @@ class Chroma extends VectorDatabase {
         ])
       : null;
     const cached = cacheKey ? searchCache.getSearch(cacheKey) : null;
-    if (cached) return cached;
+    if (cached) {
+      timer.done({ cache: "hit" });
+      return cached;
+    }
 
     const candidateLimit = Math.max(topN * 4, 20);
     // setImmediate lets the embedding request go out before BM25 uses the CPU.
     const bm25RankedPromise = corpus
-      ? new Promise((resolve) => setImmediate(resolve)).then(() =>
-          rankByBm25(input, this.corpusDocuments(corpus, filterIdentifiers), {
-            synonymGroups,
-          }).slice(0, candidateLimit)
-        )
+      ? new Promise((resolve) => setImmediate(resolve)).then(() => {
+          const bm25StartedAt = timer.now();
+          const ranked = rankByBm25(
+            input,
+            this.corpusDocuments(corpus, filterIdentifiers),
+            { synonymGroups }
+          ).slice(0, candidateLimit);
+          timer.since("bm25", bm25StartedAt);
+          return ranked;
+        })
       : null;
     bm25RankedPromise?.catch(() => null);
     const queryVector = await queryVectorPromise;
+    timer.mark("waitEmbed");
     const relatedImageQueryVector = includeRelatedImages
       ? relatedImageQueryText === input
         ? queryVector
@@ -772,6 +791,7 @@ class Chroma extends VectorDatabase {
         bm25RankedPromise,
         synonymGroups,
       });
+    timer.mark("vectorFusion");
 
     const { DocumentVectors } = require("../../../models/vectors");
     const vectorIds = sourceDocuments
@@ -799,6 +819,8 @@ class Chroma extends VectorDatabase {
       message: false,
     };
     if (cacheKey) searchCache.setSearch(cacheKey, result);
+    timer.mark("identify");
+    timer.done({ cache: cacheKey ? "miss" : "off", results: result.sources.length });
     return result;
   }
 

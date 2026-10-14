@@ -7,7 +7,6 @@
 const { readSearchOutcome } = require('../chatSearchOutcome');
 const PERIODS = Object.freeze({ today: 1, "7d": 7, "30d": 30, "90d": 90 });
 const QUESTION_TEXT_MAX_DAYS = 90;
-const MIN_DEPARTMENT_USERS = 5;
 const LIST_LIMIT = 100;
 const TOPIC_LIMIT = 10;
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -127,13 +126,9 @@ function computeUsageStats({
       (!selected.size || selected.has(userDepartment.get(chat.user_id)))
   );
 
-  // A department filter must not bypass the existing small-group protection
-  // through totals, tokens or question lists in the other cards.
-  if (selected.size && filters.departmentIds.some(id => {
-    const people = new Set(inPeriod.filter(c => userDepartment.get(c.user_id) === id).map(c => c.user_id));
-    return people.size > 0 && people.size < MIN_DEPARTMENT_USERS;
-  })) return { period, since: since.toISOString(), suppressed: true,
-    message: '선택한 부서 중 조회 기간 사용자가 5명 미만인 부서가 있어 통계를 표시하지 않습니다.' };
+  // 사용자 수와 관계없이 모든 부서를 집계한다(2026-10-14 요청).
+  // 개인 보호는 집계 범위가 아니라 응답 내용으로 지킨다: 응답에는 계정·이름·
+  // 사번·개인별 기록이 없고, 부서별로는 인원 수와 질문 수 합계만 준다.
 
   // (1) 질문 수
   const daily = [];
@@ -186,7 +181,7 @@ function computeUsageStats({
       if (entry) notFoundAnswers.push(entry);
     }
 
-    // (6) 부서별: 질문 수와 사용자 수 (사용자 수는 5명 미만 판정에만 사용)
+    // (6) 부서별: 질문 수와 질문한 사용자 수(인원 합계만, 누구인지는 없음)
     const departmentId = userDepartment.get(chat.user_id) ?? null;
     const key = departmentId ?? "none";
     const usage = departmentUsage.get(key) || {
@@ -241,11 +236,13 @@ function computeUsageStats({
       items: notFoundAnswers.sort(newestFirst).slice(0, LIST_LIMIT),
     },
     departments: [...departmentUsage.values()]
-      .map((usage) =>
-        usage.users.size < MIN_DEPARTMENT_USERS
-          ? { name: usage.name, hidden: true }
-          : { name: usage.name, hidden: false, questions: usage.questions }
-      )
+      // hidden은 이전 화면과의 호환을 위해 항상 false로 둔다.
+      .map((usage) => ({
+        name: usage.name,
+        hidden: false,
+        users: usage.users.size,
+        questions: usage.questions,
+      }))
       .sort((a, b) => a.name.localeCompare(b.name, "ko")),
     aiUsage: {
       questions: inPeriod.length,
@@ -312,7 +309,6 @@ function clearUsageStatsCache() {
 
 module.exports = {
   PERIODS,
-  MIN_DEPARTMENT_USERS,
   maskSensitive,
   periodStart,
   computeUsageStats,

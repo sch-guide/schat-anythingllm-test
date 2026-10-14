@@ -1105,6 +1105,8 @@ async function loadStorageCleanupInputs() {
       ...(checklistFilesByDocument.get(checklist.documentId) || []),
       name,
     ]);
+    // 관리자가 지운 체크리스트("삭제됨" 표시)는 사용 중인 체크리스트로 세지 않음.
+    if (checklist.deleted === true) continue;
     referenceIdentities.checklists.push({document_id:checklist.documentId,id:checklist.id});
     checklistDocumentIds.set(
       checklist.documentId,

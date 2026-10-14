@@ -166,6 +166,26 @@ export default function ChecklistsSection({ slug }) {
     );
   }
 
+  async function removeChecklist(checklist) {
+    if (
+      !window.confirm(
+        `"${checklist.title}" (p.${checklist.source?.page || "-"}) 체크리스트를 삭제할까요?\n\n직원·관리자 화면에서 모두 사라지고, 같은 문서를 다시 읽어도 되살아나지 않습니다. 삭제 후 되돌릴 수 없습니다.\n잠시 안 보이게만 하려면 상태를 '숨김'으로 바꿔 주세요.`
+      )
+    )
+      return;
+    setChanging(checklist.id);
+    const { response, data } = await Checklist.remove(slug, checklist.id);
+    setChanging(null);
+    if (!response.ok || !data.success) {
+      showToast("체크리스트를 삭제하지 못했습니다.", "error");
+      return;
+    }
+    showToast(`"${checklist.title}" 체크리스트를 삭제했습니다.`, "success");
+    setChecklists((current) =>
+      current.filter((item) => item.id !== checklist.id)
+    );
+  }
+
   if (!slug) return <Loading />;
   if (checklists === null) return <Loading />;
   const shown = filterChecklists(checklists, { status, documentKind, query });
@@ -300,6 +320,15 @@ export default function ChecklistsSection({ slug }) {
                         )}
                       </select>
                     </label>
+                    <button
+                      type="button"
+                      aria-label={`${checklist.title} 체크리스트 삭제`}
+                      disabled={changing === checklist.id}
+                      onClick={() => removeChecklist(checklist)}
+                      className="rounded-lg border border-red-400/60 px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-500/10 disabled:opacity-50"
+                    >
+                      삭제
+                    </button>
                   </div>
                   <ChecklistControls
                     checklist={checklist}

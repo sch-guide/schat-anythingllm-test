@@ -33,6 +33,29 @@ const HOSPITAL_DOCUMENT_ROOTS = [
   "용량",
   "부작용",
   "모니터링",
+  // 2026-10-14: 이 단어들이 없어서 "중심정맥관 관리", "국소마취하 절개 및 배농"이
+  // 문서 검색 없이 답변되던 문제 보완.
+  "마취",
+  "외과",
+  "내과",
+  "정맥",
+  "동맥",
+  "절개",
+  "배농",
+  "배액",
+  "천자",
+  "도뇨",
+  "드레싱",
+  "소독",
+  "주사",
+  "수액",
+  "산소",
+  "흡인",
+  "상처",
+  "욕창",
+  "낙상",
+  "혈압",
+  "혈당",
 ];
 
 // 전화번호부 질문("시설팀 전화번호 알려줘", "○○ 내선 번호")도 등록 문서에서
@@ -62,16 +85,36 @@ function hasHospitalDocumentTerm(question = "") {
 }
 
 function hasClinicalAbbreviation(question = "") {
-  const identifiers = String(question)
-    .normalize("NFKC")
-    .match(/\b[A-Z][A-Z0-9-]{2,9}\b/g);
-  return Array.isArray(identifiers) && identifiers.length > 0;
+  const normalized = String(question).normalize("NFKC");
+  const identifiers = normalized.match(/\b[A-Z][A-Z0-9-]{2,9}\b/g);
+  if (Array.isArray(identifiers) && identifiers.length > 0) return true;
+  // I&D, D&C처럼 &로 이은 약어
+  return /(?<![A-Za-z0-9])[A-Za-z]\s*&\s*[A-Za-z](?![A-Za-z0-9])/.test(normalized);
+}
+
+// 한글 질문 안의 영어 의학 용어(local block, Foley 등). 간호사 질문의 영어 단어는
+// 대부분 의학 용어라 먼저 문서를 찾는다. 인사말 같은 영어만 있으면 제외한다.
+const NON_CLINICAL_LATIN = new Set([
+  "hi",
+  "hello",
+  "hey",
+  "okay",
+  "thanks",
+  "thank",
+  "you",
+  "test",
+]);
+function hasClinicalLatinTerm(question = "") {
+  const words =
+    String(question).normalize("NFKC").toLowerCase().match(/[a-z]{3,}/g) || [];
+  return words.some((word) => !NON_CLINICAL_LATIN.has(word));
 }
 
 function shouldForceHospitalRagSearch(question = "") {
   if (typeof question !== "string" || !question.trim()) return false;
   const normalizedQuestion = applyHospitalQueryAliases(question);
   if (hasClinicalAbbreviation(normalizedQuestion)) return true;
+  if (hasClinicalLatinTerm(normalizedQuestion)) return true;
   if (!hasHospitalDocumentTerm(normalizedQuestion)) return false;
   return Boolean(
     detectQuestionIntent(normalizedQuestion) || queryTokens(normalizedQuestion).length

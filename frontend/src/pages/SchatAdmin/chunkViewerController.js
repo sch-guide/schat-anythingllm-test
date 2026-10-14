@@ -55,10 +55,13 @@ export function createChunkViewerController(api, workspaceId) {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
-    async start() {
+    async start({ documents = true } = {}) {
       alive = true;
       if (!workspaceId) return;
-      await Promise.all([controller.documentPage(0), controller.chatPage(0)]);
+      await Promise.all([
+        documents ? controller.documentPage(0) : null,
+        controller.chatPage(0),
+      ]);
     },
     stop() {
       alive = false;

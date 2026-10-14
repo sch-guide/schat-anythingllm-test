@@ -26,6 +26,7 @@ import RelatedImages from "../RelatedImages";
 import ChecklistLauncher from "../Checklist/ChecklistLauncher";
 import { hideEmployeeSourcePages } from "@/utils/schatSourceDisplay";
 import { geminiErrorDisplay } from "@/utils/geminiErrorDisplay";
+import useSmoothText from "@/hooks/useSmoothText";
 
 function hasVisibleContent(message) {
   if (!message) return false;
@@ -52,6 +53,8 @@ const HistoricalMessage = ({
   feedbackScore = null,
   chatId = null,
   isLastMessage = false,
+  // 지금 글자가 도착하고 있는 마지막 답변이면 true(자연스럽게 이어서 표시).
+  isStreaming = false,
   regenerateMessage,
   saveEditedMessage,
   forkThread,
@@ -180,7 +183,11 @@ const HistoricalMessage = ({
                 sources={sources}
               />
             ) : (
-              <RenderChatContent role={role} message={message} />
+              <RenderChatContent
+                role={role}
+                message={message}
+                streaming={isStreaming}
+              />
             )}
             {isRefusalMessage && (
               <Link
@@ -263,6 +270,7 @@ export default memo(
     return (
       prevProps.message === nextProps.message &&
       prevProps.isLastMessage === nextProps.isLastMessage &&
+      prevProps.isStreaming === nextProps.isStreaming &&
       prevProps.chatId === nextProps.chatId &&
       JSON.stringify(prevProps.metrics) === JSON.stringify(nextProps.metrics) &&
       JSON.stringify(prevProps.sources) === JSON.stringify(nextProps.sources) &&
@@ -364,7 +372,12 @@ function TruncatableContent({ children }) {
 }
 
 const RenderChatContent = memo(
-  ({ role, message }) => {
+  ({ role, message, streaming = false }) => {
+    // 스트리밍 중에는 받은 글자를 몇 프레임에 나눠 이어서 보여 준다(완료되면 전체 즉시).
+    const visibleMessage = useSmoothText(
+      message || "",
+      role === "assistant" && streaming
+    );
     // If the message is not from the assistant, we can render it directly
     // as normal since the user cannot think (lol)
     if (role !== "assistant")
@@ -386,7 +399,7 @@ const RenderChatContent = memo(
     )
       return null;
     const msgToRender = hideEmployeeSourcePages(
-      message.replace(THOUGHT_REGEX_COMPLETE, "")
+      visibleMessage.replace(THOUGHT_REGEX_COMPLETE, "")
     );
     if (!msgToRender.trim().length) return null;
 
@@ -402,7 +415,8 @@ const RenderChatContent = memo(
   (prevProps, nextProps) => {
     return (
       prevProps.role === nextProps.role &&
-      prevProps.message === nextProps.message
+      prevProps.message === nextProps.message &&
+      prevProps.streaming === nextProps.streaming
     );
   }
 );

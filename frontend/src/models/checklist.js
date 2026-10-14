@@ -51,6 +51,16 @@ const Checklist = {
     return { response, data };
   },
 
+  // 관리자 삭제: 직원·관리자 화면에서 사라지고 문서를 다시 읽어도 되살아나지 않음.
+  remove: async function (workspaceSlug, checklistId) {
+    const response = await fetch(
+      `${API_BASE}/workspace/${encodeURIComponent(workspaceSlug)}/checklists/${encodeURIComponent(checklistId)}`,
+      { method: "DELETE", headers: baseHeaders() }
+    );
+    const data = await response.json().catch(() => ({ success: false }));
+    return { response, data };
+  },
+
   // status: "needs_review" | "active" (shown to employees) | "hidden"
   setStatus: async function (workspaceSlug, checklistId, status) {
     const response = await fetch(

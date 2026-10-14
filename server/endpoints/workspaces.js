@@ -816,6 +816,43 @@ function workspaceEndpoints(app) {
     }
   );
 
+  // 관리자 체크리스트 삭제. 직원·관리자 화면 어디에도 나오지 않게 되고,
+  // 같은 문서를 다시 읽어도 되살아나지 않음. 문서·검색 데이터는 그대로.
+  app.delete(
+    "/workspace/:slug/checklists/:checklistId",
+    [validatedRequest, flexUserRoleValid([ROLES.admin, ROLES.manager])],
+    async (request, response) => {
+      try {
+        const { slug, checklistId } = request.params;
+        const user = await userFromSession(request, response);
+        const workspace = multiUserMode(response)
+          ? await Workspace.getWithUser(user, { slug })
+          : await Workspace.get({ slug });
+        if (!workspace) return response.sendStatus(404);
+
+        const checklist = ChecklistRepository.getById(checklistId);
+        if (!checklist) return response.sendStatus(404);
+        const documents = await Document.forWorkspace(workspace.id);
+        const allowedDocumentIds = new Set(workspaceDocumentIds(documents));
+        if (!allowedDocumentIds.has(checklist.documentId))
+          return response.sendStatus(404);
+
+        ChecklistRepository.deleteChecklist(checklistId);
+        await EventLogs.logEvent(
+          "schat_checklist_deleted",
+          { checklistId, page: checklist.source?.page ?? null },
+          user?.id
+        ).catch(() => null);
+        return response.status(200).json({ success: true });
+      } catch (error) {
+        console.error("Checklist delete error:", error.message);
+        return response
+          .status(500)
+          .json({ success: false, error: "Could not delete the checklist." });
+      }
+    }
+  );
+
   // Administrator 자료 분류 override: "procedure" (검사 및 시술) / "surgery"
   // (수술) / "other" (기타), or "auto" to use the automatic classification.
   // Only the classification changes; content, aliases and status stay.

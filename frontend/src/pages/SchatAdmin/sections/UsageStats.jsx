@@ -135,7 +135,7 @@ export default function UsageStatsSection() {
       <Help label="대상 부서 도움말" heading={<span>대상 부서</span>}>{[
         "현재 계정의 부서 기준으로 여러 부서를 골라요.",
         "질문 목록은 최근 90일 이내 최대 100건까지 보여요.",
-        "5명 미만 부서의 통계는 숨기고, 기존 기록은 유지해요.",
+        "인원이 적은 부서도 모두 집계해요. 누가 질문했는지는 보이지 않아요.",
       ]}</Help>
       <DepartmentPicker departments={departments} selected={departmentIds} onChange={setDepartmentIds} />
       {validation && <p role="alert" className="text-red-500">{validation}</p>}
@@ -282,16 +282,16 @@ export default function UsageStatsSection() {
           <Card
             title="부서별 사용량"
             help={[
-              "부서별 질문 수를 가나다순으로 보여요.",
-              "이 기간 사용자가 5명 미만인 부서는 숨겨요.",
+              "부서별 질문한 사용자 수와 질문 수를 가나다순으로 보여요.",
+              "인원이 적은 부서도 포함하며, 개인별 기록은 보이지 않아요.",
             ]}
           >
             {stats.departments.length ? (
               <div>
                 {stats.departments.map((dept) => (
                   <InfoRow key={dept.name} label={dept.name}>
-                    {dept.hidden
-                      ? "인원이 적어 표시하지 않음"
+                    {Number.isFinite(dept.users)
+                      ? `사용자 ${n(dept.users)}명 · 질문 ${n(dept.questions)}건`
                       : `${n(dept.questions)}건`}
                   </InfoRow>
                 ))}

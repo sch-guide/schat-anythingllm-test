@@ -1,3 +1,5 @@
+import { isNoEvidenceAnswer } from "./citationFilter.js";
+
 export function normalizeChecklistQuestion(value = "") {
   return String(value)
     .normalize("NFKC")
@@ -125,7 +127,14 @@ export function asksDeviceUseOnly(question = "") {
   return !/(^| )(전|후)(에|에는|부터|까지)?( |$)/u.test(normalized);
 }
 
-export function matchChecklists(question = "", checklists = []) {
+export function matchChecklists(question = "", checklists = [], response) {
+  // Use the same no-evidence decision as the citation display, including old chats.
+  if (response && (
+    !String(response.content || "").trim() || response.error || response.pending ||
+    (response.animate && !response.closed) ||
+    (response.searchOutcome?.version === 2 && response.searchOutcome.status === "not_found") ||
+    isNoEvidenceAnswer(response.content)
+  )) return [];
   const normalizedQuestion = normalizeChecklistQuestion(question);
   if (!normalizedQuestion || asksDeviceUseOnly(question)) return [];
 

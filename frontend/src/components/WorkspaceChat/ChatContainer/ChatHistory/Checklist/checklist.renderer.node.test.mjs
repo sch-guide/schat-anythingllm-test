@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { matchChecklists } from "../../../../../utils/checklistMatcher.js";
 
 function source(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
@@ -84,10 +85,12 @@ test("chat history associates assistant replies with the preceding user question
   const history = source("../index.jsx");
   assert.match(history, /questionForAssistant/);
   assert.match(history, /matchChecklists/);
-  assert.match(
-    history,
-    /matchChecklists\(questionForAssistant\(history, index\), checklists\)/
-  );
+  const expression = history.match(/const matchedChecklists =\s*([\s\S]*?);/)[1];
+  const evaluate = new Function("props", "history", "index", "checklists", "questionForAssistant", "matchChecklists", `return ${expression}`);
+  const checklist = { id: "fake", aliases: ["정형외과"] };
+  const run = (content) => evaluate({ role: "assistant", content }, [], 1, [checklist], () => "정형외과 local block 하 I&D", matchChecklists);
+  assert.deepEqual(run("등록된 문서에서 확인되지 않습니다."), []);
+  assert.deepEqual(run("준비 사항입니다."), [checklist]);
   assert.match(history, /Checklist\.list/);
 });
 

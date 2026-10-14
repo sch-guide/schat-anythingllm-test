@@ -15,6 +15,12 @@ const {
   buildRagContext,
 } = require("../utils/ragSources");
 
+// 문서 검색 자체가 실패했을 때 AI에게 주는 안내. "문서에 없음"으로 답하지 않게 한다.
+const SEARCH_ERROR_CONTEXT =
+  "문서 검색 중 일시적인 시스템 오류가 발생해 근거를 확인하지 못했습니다. " +
+  "등록된 문서에 내용이 없다고 답하지 말고 일반 지식으로 답하지도 말 것. " +
+  "'문서 검색 중 일시적인 오류가 발생했습니다. 잠시 후 다시 질문해 주세요.'라고만 답할 것.";
+
 function sourceDocumentIdentity(source = {}) {
   return String(
     source.document_id ||
@@ -310,7 +316,9 @@ const memory = {
               this.super.handlerProps.log(
                 `memory.search raised an error. ${error.message}`
               );
-              return `An error was raised while searching the vector database. ${error.message}`;
+              // 검색 실패(시스템 오류)를 "문서에 없음"과 구분한다. 내부 오류 내용은
+              // AI에게 넘기지 않고 서버 로그에만 남긴다.
+              return SEARCH_ERROR_CONTEXT;
             }
           },
           store: async function (content = "") {
@@ -356,6 +364,7 @@ const memory = {
 };
 
 module.exports = {
+  SEARCH_ERROR_CONTEXT,
   attachRelatedImageSources,
   imageRequestContextSources,
   memory,

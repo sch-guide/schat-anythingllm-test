@@ -20,6 +20,11 @@ const MODEL_PRICING = {
       { fromKst: "2027-01-01", inputUsd: 1.5, outputUsd: 7.5 },
     ],
   },
+  // 2026-10-14 같은 공식 요금표에서 확인. 인상 예고 없음.
+  "gemini-3.5-flash-lite": {
+    verified: "2026-10-14",
+    periods: [{ fromKst: "0000-01-01", inputUsd: 0.3, outputUsd: 2.5 }],
+  },
 };
 function priceFor(model, timestamp) {
   const table = MODEL_PRICING[model];

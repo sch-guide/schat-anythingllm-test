@@ -149,7 +149,8 @@ function createChecklistRepository({
       .readdirSync(root, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
       .map((entry) => readFile(path.join(root, entry.name)))
-      .filter(Boolean);
+      // 관리자가 지운 체크리스트는 "삭제됨" 표시만 남아 어디에도 나오지 않음.
+      .filter((checklist) => checklist && checklist.deleted !== true);
   }
 
   function filePathFor(checklist) {
@@ -341,8 +342,32 @@ function createChecklistRepository({
     return updated;
   }
 
+  // 관리자 삭제: 파일 자리에 "삭제됨" 표시만 남김. 같은 문서를 다시 읽어도
+  // 자동 생성이 이 자리를 덮어쓰지 않아(statusSetByAdmin) 되살아나지 않음.
+  // 내용(제목·항목)은 남기지 않음.
+  function deleteChecklist(id) {
+    const existing = getById(id);
+    if (!existing) return null;
+    const now = new Date().toISOString();
+    const page = existing.source?.page ?? existing.page ?? null;
+    writeAtomic(filePathFor(existing), {
+      id: existing.id,
+      documentId: existing.documentId,
+      page,
+      source: { page },
+      deleted: true,
+      status: "hidden",
+      active: false,
+      statusSetByAdmin: true,
+      deletedAt: now,
+      updatedAt: now,
+    });
+    return existing;
+  }
+
   return {
     storageRoot: root,
+    deleteChecklist,
     setStatus,
     setKind,
     saveAutoChecklist,

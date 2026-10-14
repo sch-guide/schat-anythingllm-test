@@ -1,6 +1,12 @@
 process.env.NODE_ENV === "development"
   ? require("dotenv").config({ path: `.env.${process.env.NODE_ENV}` })
   : require("dotenv").config();
+// 관리자 화면에서 바꾼 답변 모델·API 키는 재시작 후에도 .env 값을 따른다.
+{
+  const changed = require("./utils/boot/adminManagedEnv").applyAdminManagedEnv();
+  if (changed.length)
+    console.log(`[SCHAT] 관리자 설정 적용: ${changed.join(", ")}`);
+}
 
 require("./utils/logger")();
 require("./utils/boot/patchSdkTimeouts")();

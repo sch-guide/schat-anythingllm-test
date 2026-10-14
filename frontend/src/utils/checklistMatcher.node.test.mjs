@@ -8,6 +8,29 @@ const renalChecklist = {
   aliases: ["renal biopsy", "renal bx", "신장 조직검사", "신생검"],
 };
 
+test("근거 없는 답변은 질문의 진료과가 일치해도 체크리스트를 표시하지 않음", () => {
+  const os = { id: "fake-os", aliases: ["정형외과"] };
+  for (const content of [
+    "등록된 문서에서 확인되지 않습니다.",
+    "등록된 병원 문서에서 관련 근거를 찾지 못했습니다.",
+    "**등록된 문서에서 확인되지 않습니다.**",
+  ]) assert.deepEqual(matchChecklists("정형외과 local block 하 I&D", [os], { content }), []);
+});
+
+test("대기·진행·오류 답변은 숨기고 정상 완료 답변은 기존 연결 유지", () => {
+  for (const response of [
+    { content: "" },
+    { content: "준비", pending: true },
+    { content: "준비", animate: true },
+    { content: "준비", error: true },
+    { content: "안내", searchOutcome: { version: 2, status: "not_found" } },
+  ]) assert.deepEqual(matchChecklists("신생검 준비", [renalChecklist], response), []);
+  for (const response of [
+    { content: "준비 사항을 확인하세요." },
+    { content: "준비 사항을 확인하세요.", animate: true, closed: true },
+  ]) assert.deepEqual(matchChecklists("신생검 준비", [renalChecklist], response), [renalChecklist]);
+});
+
 test("approved Renal biopsy aliases match case-insensitively", () => {
   for (const question of [
     "Renal biopsy 준비 알려줘",

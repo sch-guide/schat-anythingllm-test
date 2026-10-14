@@ -132,7 +132,7 @@ function supportsTopic(source, topic, question) {
   return true;
 }
 
-function isNoEvidenceAnswer(answer = "") {
+export function isNoEvidenceAnswer(answer = "") {
   return /^등록된\s*(?:병원\s*)?문서에서\s*(?:확인되지\s*않습니다|(?:관련\s*)?근거를\s*찾지\s*못)/u.test(
     String(answer).trim().replace(/^[#*>\s]+/u, "")
   );

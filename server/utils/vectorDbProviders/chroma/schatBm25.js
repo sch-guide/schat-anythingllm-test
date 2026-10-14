@@ -8,12 +8,17 @@
 
 function tokenize(text = "") {
   if (typeof text !== "string") return [];
+  // "I&D", "I & D"처럼 한 글자씩 &로 이은 약어는 한 단어("i&d")로 본다.
+  // 예전에는 i, d로 쪼개진 뒤 짧아서 버려져 검색어에서 사라졌다.
+  // "PFTII&DLCO"처럼 긴 영문 사이의 &는 대상이 아니다.
   return (
     text
       .normalize("NFKC")
       .toLowerCase()
-      .match(/[가-힣]+|[a-z0-9]+(?:\.[0-9]+)?/giu) || []
-  );
+      .match(
+        /[가-힣]+|(?<![a-z0-9&])[a-z]\s*&\s*[a-z](?![a-z0-9&])|[a-z0-9]+(?:\.[0-9]+)?/giu
+      ) || []
+  ).map((token) => (token.includes("&") ? token.replace(/\s+/g, "") : token));
 }
 
 const QUERY_STOPWORDS = new Set([

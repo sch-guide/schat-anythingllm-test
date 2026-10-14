@@ -18,8 +18,9 @@ import Appearance from "@/models/appearance";
  *
  * @param {Array} history - The chat history (drives follow re-engage on send)
  * @param {React.Ref} imperativeRef - Forwarded ref exposing scrollToTop/scrollToBottom
+ * @param {boolean} live - An agent answer is still arriving (websocket run).
  */
-export default function useAutoScroll(history, imperativeRef) {
+export default function useAutoScroll(history, imperativeRef, live = false) {
   const disabled = Appearance.get("disableAutoScroll");
   const chatHistoryRef = useRef(null);
   const followRef = useRef(true);
@@ -87,7 +88,9 @@ export default function useAutoScroll(history, imperativeRef) {
   // long ones) pay nothing — reading scrollHeight each frame on a huge DOM
   // can force reflows if layout is dirty.
   const lastMsg = history[history.length - 1];
-  const isStreaming = !!(lastMsg?.animate || lastMsg?.pending);
+  // Agent(websocket) answers have no animate flag, and their text now grows
+  // every frame inside the message, so follow while the run is live too.
+  const isStreaming = !!(lastMsg?.animate || lastMsg?.pending || live);
   useEffect(() => {
     if (!isStreaming || disabled) return;
     let frame;

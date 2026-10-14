@@ -14,6 +14,7 @@ import { buildProcedurePresentationModel } from "@/utils/schatPresentation";
 import RelatedImages from "../RelatedImages";
 import ChecklistLauncher from "../Checklist/ChecklistLauncher";
 import { hideEmployeeSourcePages } from "@/utils/schatSourceDisplay";
+import useSmoothText from "@/hooks/useSmoothText";
 
 const PromptReply = ({
   uuid,
@@ -28,6 +29,7 @@ const PromptReply = ({
   citationQuestion = "",
   citationAliases = [],
   workspaceSlug,
+  isStreaming = false,
 }) => {
   const { t } = useTranslation();
   if (!reply && sources.length === 0 && !pending && !error) return null;
@@ -75,6 +77,7 @@ const PromptReply = ({
             <RenderAssistantChatContent
               key={`${uuid}-prompt-reply-content`}
               message={reply}
+              streaming={isStreaming}
             />
           </div>
         )}
@@ -95,13 +98,15 @@ const PromptReply = ({
   );
 };
 
-function RenderAssistantChatContent({ message }) {
+function RenderAssistantChatContent({ message = "", streaming = false }) {
+  // 스트리밍 중에는 받은 글자를 몇 프레임에 나눠 이어서 보여 준다(완료되면 전체 즉시).
+  const visibleMessage = useSmoothText(message || "", streaming);
   // Thought segments are rendered by the activity chain (buildMessages splits
   // them out) - this only renders the visible remainder of the reply.
   if (message.match(THOUGHT_REGEX_OPEN) && !message.match(THOUGHT_REGEX_CLOSE))
     return null;
   const msgToRender = hideEmployeeSourcePages(
-    message.replace(THOUGHT_REGEX_COMPLETE, "")
+    visibleMessage.replace(THOUGHT_REGEX_COMPLETE, "")
   );
   if (!msgToRender.trim().length) return null;
 
