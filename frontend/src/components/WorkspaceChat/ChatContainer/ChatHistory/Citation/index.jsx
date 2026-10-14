@@ -140,7 +140,7 @@ export function SourceEvidenceRow({
             <SpreadsheetViewer source={source} workspaceSlug={workspaceSlug} answerText={answerText} />
           ) : (
             <div className="mx-auto w-full max-w-[720px]">
-              {pdfDeleted && <p role="status" className="mb-3 text-xs text-zinc-400 light:text-slate-500">원본이 삭제되었습니다</p>}
+              {pdfDeleted && <p role="status" className="mb-3 text-xs text-zinc-400 light:text-slate-500">이 출처는 이전 버전 문서로 현재 원문을 확인할 수 없습니다.</p>}
               {!source?.pdfRef && (
                 <p role="status" className="mb-3 text-xs text-zinc-400 light:text-slate-500">
                   아래는 문서에서 읽은 근거 텍스트입니다. 연두색은 답변에 사용된 부분입니다.

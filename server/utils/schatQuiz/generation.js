@@ -88,7 +88,7 @@ function systemPrompt({ type, difficulty }) {
  * collection and the existing BM25 ranking. No embedding/LLM call.
  */
 async function collectEvidence(
-  { documentId, workspaceSlug, topic, docIds },
+  { documentId, workspaceSlug, topic, docIds, title = "" },
   { vectorDb = null, db = prisma } = {}
 ) {
   const { getVectorDbClass } = require("../helpers");
@@ -140,6 +140,23 @@ async function collectEvidence(
   // "수혈간호는"처럼 붙여 쓴 말 안에만 있으면 0건이 됨. 그때만 주제 단어가
   // 글자 그대로 들어 있는 본문 조각을 씀(근거 없는 쪽은 여전히 제외).
   if (!ranked.length) ranked = literalTopicMatches(topic, corpus, queryTokens);
+  // 주제가 문서 제목 자체(예: 「실무지침서_중심정맥관」의 중심정맥관)이면
+  // 문서 전체가 그 주제임. 본문에는 주제 단어가 첫 쪽에만 적히는 경우가 많아
+  // 첫 쪽만 근거가 되던 문제를 막으려고, 찾은 쪽 다음에 나머지 본문을 쪽
+  // 순서로 이어 붙임. 제목은 찾는 데만 쓰고 문제는 본문 근거로만 만듦.
+  if (topicInTitle(topic, title)) {
+    const found = new Set(ranked.map((hit) => hit.id));
+    ranked = [
+      ...ranked,
+      ...corpus
+        .filter((d) => !found.has(d.id))
+        .sort(
+          (a, b) =>
+            Number(a.metadata.page) - Number(b.metadata.page) ||
+            a.corpusPosition - b.corpusPosition
+        ),
+    ];
+  }
   const pages = new Map();
   let chars = 0;
   for (const hit of ranked) {
@@ -170,14 +187,15 @@ async function collectEvidence(
 }
 
 // 주제의 모든 단어가 본문에 글자 그대로 있는 조각만 씀. 한글 단어는 붙여 쓴
-// 말 안에서도 찾고(수혈 → 수혈간호는), 영문·숫자 단어는 단어 전체가 같아야 함.
+// 말 안에서도 찾고(수혈 → 수혈간호는) 띄어쓰기가 달라도 찾음(중심정맥관 →
+// 중심 정맥관). 영문·숫자 단어는 단어 전체가 같아야 함.
 function literalTopicMatches(topic, corpus, queryTokens) {
   const terms = queryTokens(topic).map((t) => t.toLowerCase());
   if (!terms.length) return [];
   const escape = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const matchers = terms.map((t) =>
     /[가-힣]/.test(t)
-      ? (text) => text.split(t).length - 1
+      ? (text) => text.replace(/\s+/g, "").split(t).length - 1
       : (text) =>
           (
             text.match(
@@ -200,6 +218,19 @@ function literalTopicMatches(topic, corpus, queryTokens) {
       (a, b) => b.count - a.count || a.doc.corpusPosition - b.doc.corpusPosition
     )
     .map((row) => row.doc);
+}
+
+// 주제의 모든 단어가 문서 제목에 들어 있는지(띄어쓰기·밑줄·확장자 무시).
+function topicInTitle(topic, title) {
+  const compact = (value) =>
+    String(value || "")
+      .normalize("NFC")
+      .toLowerCase()
+      .replace(/\.pdf$/i, "")
+      .replace(/[\s_\-.()[\]]+/g, "");
+  const name = compact(String(title || "").split(/[\\/]/).pop());
+  const terms = String(topic || "").split(/\s+/).map(compact).filter(Boolean);
+  return Boolean(name && terms.length && terms.every((t) => name.includes(t)));
 }
 
 function noEvidenceMessage(doc, topic) {
@@ -301,6 +332,7 @@ async function generate(
       workspaceSlug: doc.workspaceSlug,
       topic: request.topic,
       docIds: doc.docIds,
+      title: doc.title,
     },
     { vectorDb }
   );
@@ -450,6 +482,7 @@ async function regenerate(
       workspaceSlug: doc.workspaceSlug,
       topic: q.topic,
       docIds: doc.docIds,
+      title: doc.title,
     },
     { vectorDb }
   );

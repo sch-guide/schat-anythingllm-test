@@ -195,7 +195,7 @@ export default function MobileSourceScreen({
       >
         {pdfFailed && hasPdf && (
           <p className="mb-3 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200 light:text-amber-800">
-            {pdfDeleted ? '원본이 삭제되었습니다' : '원본 PDF를 불러올 수 없어 텍스트 근거를 표시합니다.'}
+            {pdfDeleted ? '이 출처는 이전 버전 문서로 현재 원문을 확인할 수 없습니다.' : '원본 PDF를 불러올 수 없어 텍스트 근거를 표시합니다.'}
           </p>
         )}
         <div className="space-y-3 break-words text-[15px] leading-[1.75] text-zinc-100 light:text-slate-900">

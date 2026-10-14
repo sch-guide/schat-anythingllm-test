@@ -548,3 +548,38 @@ test("보조 검색은 주제의 모든 단어가 있어야 하고 영문은 단
   assert.deepEqual(await pages("zz"), []);
   assert.deepEqual(await pages("수혈 낙상"), [2]);
 });
+
+test("띄어 쓴 주제와 제목이 곧 주제인 문서도 본문 근거로 찾고, 관계없는 문서는 그대로 근거 없음", async () => {
+  const generation = require("../../../utils/schatQuiz/generation");
+  const docs = [
+    ["가상 중심 정맥관 드레싱은 7일마다 교환한다", { document_id: "D1", page: 4 }],
+    ["가상 CVC 삽입 부위를 매일 관찰한다", { document_id: "D1", page: 2 }],
+    ["가상 CVC 그림", { document_id: "D1", page: 3, content_type: "image_description" }],
+  ];
+  const pages = async (topic, title) =>
+    (
+      await generation.collectEvidence(
+        { documentId: "D1", workspaceSlug: "ws", topic, title },
+        { vectorDb: fakeVectorDb(docs) }
+      )
+    ).map((e) => e.page);
+  // 본문에 "중심 정맥관"(띄어 씀)만 있어도 그 쪽을 찾음
+  assert.deepEqual(await pages("중심정맥관", ""), [4]);
+  // 본문에 주제 단어가 전혀 없어도, 제목이 그 주제면 본문(그림 설명 제외)을 씀
+  const titleOnly = [docs[1], docs[2]];
+  const byTitle = async (topic, title) =>
+    (
+      await generation.collectEvidence(
+        { documentId: "D1", workspaceSlug: "ws", topic, title },
+        { vectorDb: fakeVectorDb(titleOnly) }
+      )
+    ).map((e) => e.page);
+  assert.deepEqual(await byTitle("중심정맥관", "3-3. 실무지침서_중심정맥관.pdf"), [2]);
+  // 주제 단어가 한 쪽에만 있어도, 제목이 그 주제면 다른 본문 쪽도 함께 근거로 씀
+  assert.deepEqual(await pages("중심정맥관", "3-3. 실무지침서_중심정맥관.pdf"), [2, 4]);
+  // 제목과 다른 주제는 예전처럼 찾은 쪽만
+  assert.deepEqual(await pages("중심정맥관", "가상지침.pdf"), [4]);
+  // 제목과 무관한 주제는 여전히 근거 없음
+  assert.deepEqual(await byTitle("수혈", "3-3. 실무지침서_중심정맥관.pdf"), []);
+  assert.deepEqual(await byTitle("중심정맥관", "가상지침.pdf"), []);
+});

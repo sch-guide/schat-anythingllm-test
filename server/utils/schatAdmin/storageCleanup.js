@@ -155,11 +155,11 @@ function classifyStorage(input) {
   const groups = [];
   for (const [documentId, records] of byDocument) {
     const livePages = records.filter((r) =>
-      workspaceByDocpath.has(`custom-documents/${r.fileName}`)
+      workspaceByDocpath.has(r.docpath || `custom-documents/${r.fileName}`)
     );
     const vectorPages = livePages.filter((r) =>
       vectorDocIds.has(
-        workspaceByDocpath.get(`custom-documents/${r.fileName}`).docId
+        workspaceByDocpath.get(r.docpath || `custom-documents/${r.fileName}`).docId
       )
     ).length;
     const image = imageFolderByName.get(documentId) || null;
@@ -208,8 +208,11 @@ function classifyStorage(input) {
       status = STATUS.REVIEW;
       reasons.push("한 업로드에 문서 이름이 여러 개입니다.");
     }
-    // 과거 답변 출처(Citation)·퀴즈가 이 문서를 가리키면 지우지 않음.
-    // 연결 확인 결과(originalReferences)를 받았는데 확인에 실패했으면 역시 지우지 않음.
+    // 현재 퀴즈 문제가 이 문서를 근거로 하면 지우지 않음(문제를 지운 뒤 남는
+    // 생성 기록·빈 퀴즈 세트는 막지 않음). 과거 답변의 출처로만 쓰였으면
+    // 지울 수 있지만, 관리자에게 몇 건인지 알려 주고 한 번 더 확인받음.
+    // 연결 확인 결과(originalReferences)를 받았는데 확인에 실패했으면 지우지 않음.
+    let pastAnswerRefs = 0;
     if (!inUse && status === STATUS.OLD_UPLOAD && checksReferences) {
       const refs =
         originalReferences instanceof Map
@@ -218,18 +221,13 @@ function classifyStorage(input) {
       if (!(originalReferences instanceof Map)) {
         status = STATUS.REVIEW;
         reasons.push("다른 자료와의 연결을 확인하지 못해 삭제하지 않습니다.");
-      } else if (
-        refs &&
-        refs.counts.chats +
-          refs.counts.quizSets +
-          refs.counts.quizQuestions +
-          refs.counts.quizRuns >
-          0
-      ) {
+      } else if (refs?.counts.quizQuestions > 0) {
         status = STATUS.REVIEW;
         reasons.push(
-          "과거 답변 출처나 퀴즈가 이 문서를 가리키고 있어 삭제하지 않습니다."
+          `현재 퀴즈 ${refs.counts.quizQuestions}문항이 이 문서를 근거로 하고 있어 삭제하지 않습니다. 퀴즈를 먼저 정리해 주세요.`
         );
+      } else if (refs?.counts.chats > 0) {
+        pastAnswerRefs = refs.counts.chats;
       }
     }
 
@@ -244,7 +242,8 @@ function classifyStorage(input) {
       pages: new Set(records.map((r) => r.page)).size,
       pageRecords: records.length,
       pageRecordBytes: records.reduce((sum, r) => sum + (r.bytes || 0), 0),
-      pageFiles: records.map((r) => r.fileName), // internal only
+      pageFiles: records.filter((r) => !r.docpath).map((r) => r.fileName), // legacy fixtures
+      pagePaths: records.filter((r) => r.docpath).map((r) => r.docpath), // internal only
       auxiliaryFiles: cacheFiles.length,
       auxiliaryBytes: cacheFiles.reduce((sum, c) => sum + (c.bytes || 0), 0),
       cacheFileNames: cacheFiles.map((c) => c.name), // internal only
@@ -254,6 +253,7 @@ function classifyStorage(input) {
         ? { exists: true, bytes: original.bytes, inUse: inUse }
         : { exists: false, bytes: 0, inUse: false },
       usage,
+      pastAnswerRefs,
       orphanChecklists,
       checklistFiles, // internal only
       status,
@@ -569,6 +569,17 @@ function deletionTargets(groups, root, { checklistsDir = null } = {}) {
       if (!SAFE_PAGE_FILE.test(name)) throw new Error("unsafe page file");
       add(files, dirs.pages, name);
     }
+    for (const relative of group.pagePaths || []) {
+      const parts = String(relative).split("/");
+      if (parts.length < 2 || parts.some(p => !p || p === "." || p === ".." || p.includes("\\") || p.includes(":")) || !SAFE_PAGE_FILE.test(parts.at(-1)))
+        throw new Error("unsafe page path");
+      let target = path.join(root, "documents");
+      for (const part of parts) {
+        target = path.join(target, part);
+        if (fs.lstatSync(target, {throwIfNoEntry:false})?.isSymbolicLink()) throw new Error("unsafe page symlink");
+      }
+      files.push(target);
+    }
     for (const name of group.cacheFileNames || []) {
       if (!SAFE_CACHE_FILE.test(name)) throw new Error("unsafe cache file");
       add(files, dirs.cache, name);
@@ -667,6 +678,16 @@ async function executeStorageCleanup(
     adminUsername: actorId ? `user:${actorId}` : null,
     at,
   });
+  // 원본 PDF를 지우기 전에 "삭제됨" 표시를 남겨, 과거 답변에서 출처를 열면
+  // 오류 대신 "이전 버전 문서라 원문을 확인할 수 없습니다" 안내가 나오게 함.
+  const { markOriginalPdfDeletion } = require("../originalDocuments");
+  for (const group of selected.filter(
+    (g) => g.original?.exists && g.documentId
+  ))
+    markOriginalPdfDeletion(group.documentId, {
+      storageRoot:
+        root === storageRoot() ? undefined : path.join(root, "original-documents"),
+    });
   const result = removeTargets(targets);
 
   const after = classifyStorage(await loadInputs());
@@ -812,6 +833,7 @@ function publicGroup(group) {
     originalKey: _originalKey,
     originalName: _originalName,
     pageFiles: _pages,
+    pagePaths: _pagePaths,
     cacheFileNames: _cache,
     checklistFiles: _checklistFiles,
     references,
@@ -859,20 +881,27 @@ function vectorCacheNames(docpath) {
 }
 
 function readPageRecords(documentsDir, cacheDir = null) {
-  const dir = path.join(documentsDir, "custom-documents");
-  if (!fs.existsSync(dir)) return [];
+  if (!fs.existsSync(documentsDir)) return [];
+  const paths = [];
+  function visit(dir, prefix = "") {
+    for (const entry of fs.readdirSync(dir, {withFileTypes:true})) {
+      if (entry.isSymbolicLink()) continue;
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) visit(path.join(dir, entry.name), relative);
+      else if (entry.isFile() && prefix && entry.name.endsWith(".json")) paths.push(relative);
+    }
+  }
+  visit(documentsDir);
   const cached = new Set(
     cacheDir && fs.existsSync(cacheDir) ? fs.readdirSync(cacheDir) : []
   );
-  return fs
-    .readdirSync(dir)
-    .filter((name) => name.endsWith(".json"))
-    .map((fileName) => {
-      const full = path.join(dir, fileName);
+  return paths.map((docpath) => {
+      const fileName = path.basename(docpath);
+      const full = path.join(documentsDir, docpath);
       const stat = fs.statSync(full);
       const bytes = stat.size;
       const modifiedAt = stat.mtime.toISOString();
-      const cacheFiles = vectorCacheNames(`custom-documents/${fileName}`)
+      const cacheFiles = vectorCacheNames(docpath)
         .filter((name) => cached.has(name))
         .map((name) => ({
           name,
@@ -882,6 +911,7 @@ function readPageRecords(documentsDir, cacheDir = null) {
         const data = JSON.parse(fs.readFileSync(full, "utf8"));
         return {
           fileName,
+          docpath,
           documentId: data.document_id || null,
           title: data.title || null,
           page: data.page ?? null,
@@ -891,7 +921,7 @@ function readPageRecords(documentsDir, cacheDir = null) {
           cacheFiles,
         };
       } catch {
-        return { fileName, documentId: null, bytes, modifiedAt };
+        return { fileName, docpath, documentId: null, bytes, modifiedAt };
       }
     });
 }
@@ -1071,6 +1101,10 @@ async function loadStorageCleanupInputs() {
   // original is then judged unused).
   let knownDocumentIds = null;
   let originalReferences = null;
+  const pageRecords = readPageRecords(
+    path.join(root, "documents"),
+    path.join(root, "vector-cache")
+  );
   if (!chromaIncomplete) {
     try {
       const ids = new Set([
@@ -1086,9 +1120,11 @@ async function loadStorageCleanupInputs() {
         "schat_quiz_generation_logs",
       ]) {
         const rows = await prisma[table].findMany({
-          select: { id:true, document_id: true },
+          select: { id:true, document_id: true,
+            ...(table === "schat_quiz_questions" ? { status: true } : {}) },
         });
-        quizRows.push(rows);
+        // 지운 문제(deleted)는 현재 퀴즈로 세지 않음
+        quizRows.push(rows.filter((row) => row.status !== "deleted"));
         for (const row of rows)
           if (row.document_id) ids.add(String(row.document_id).trim());
       }
@@ -1100,8 +1136,40 @@ async function loadStorageCleanupInputs() {
           /"document_id"\s*:\s*"([^"]{1,200})"/g
         ))
           ids.add(match[1].trim());
+      // 요즘 답변의 출처는 문서 번호 대신 pdfRef(문서 번호로 계산한 값)만
+      // 저장함. 알고 있는 문서 번호와 남은 쪽 파일의 문서 번호로 pdfRef를
+      // 다시 계산해, 그 출처를 쓴 과거 답변도 그 문서의 과거 답변으로 셈.
+      const { pdfRefForDocumentId } = require("../originalDocuments");
+      const refOptions =
+        root === storageRoot()
+          ? {}
+          : { storageRoot: path.join(root, "original-documents") };
+      const documentByRef = new Map();
+      for (const id of [
+        ...ids,
+        ...pageRecords.map((record) => record.documentId),
+      ]) {
+        const ref = id ? pdfRefForDocumentId(String(id), refOptions) : null;
+        if (ref) documentByRef.set(ref, String(id).trim());
+      }
+      const chatsWithRefs = chats.map((chat) => {
+        const linked = new Set();
+        for (const match of String(chat.response || "").matchAll(
+          /"(?:pdfRef|spreadsheetRef)"\s*:\s*"([A-Za-z0-9_-]{16,128})"/g
+        ))
+          if (documentByRef.has(match[1])) linked.add(documentByRef.get(match[1]));
+        if (!linked.size) return chat;
+        for (const id of linked) ids.add(id);
+        return {
+          id: chat.id,
+          response: JSON.stringify({
+            saved: JSON.parse(chat.response),
+            pdfRefDocuments: [...linked].map((document_id) => ({ document_id })),
+          }),
+        };
+      });
       knownDocumentIds = ids;
-      originalReferences = collectOriginalReferences({chats,quizSets:quizRows[0],quizQuestions:quizRows[1],quizRuns:quizRows[2],
+      originalReferences = collectOriginalReferences({chats:chatsWithRefs,quizSets:quizRows[0],quizQuestions:quizRows[1],quizRuns:quizRows[2],
         checklists:checklistDocumentIds,workspaceDocumentIds,chromaDocumentIds,imageFolders,referenceIdentities});
     } catch {
       knownDocumentIds = null;
@@ -1111,10 +1179,7 @@ async function loadStorageCleanupInputs() {
   return {
     knownDocumentIds,
     originalReferences,
-    pageRecords: readPageRecords(
-      path.join(root, "documents"),
-      path.join(root, "vector-cache")
-    ),
+    pageRecords,
     workspaceDocs,
     vectorDocIds: new Set(vectorRows.map((r) => r.docId)),
     chromaDocumentIds,
@@ -1145,4 +1210,5 @@ module.exports = {
   loadStorageCleanupInputs,
   originalStorageKey,
   vectorCacheNames,
+  readPageRecords,
 };

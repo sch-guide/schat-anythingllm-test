@@ -149,3 +149,11 @@ test("현재 사용 중 문서는 삭제 불가, 예전 문서는 서버 점검�
     ["c"]
   );
 });
+
+test("과거 답변 출처로만 쓰인 예전 문서는 경고 후 '그래도 삭제'", () => {
+  const src = readFileSync(new URL("./index.jsx", import.meta.url), "utf8");
+  assert.match(src, /pastAnswers=\{\s*Number\(groups\?\.get\(deleting\.cleanupKey\)\?\.pastAnswerRefs\) \|\| 0\s*\}/);
+  assert.match(src, /이 문서는 과거 답변 \{pastAnswers\}건의 출처로 사용되었습니다\./);
+  assert.match(src, /삭제하면 해당 과거 답변에서 원본을 다시 열 수 없습니다\./);
+  assert.match(src, /pastAnswers > 0 \? "그래도 삭제" : "삭제"/);
+});

@@ -427,22 +427,27 @@ test("delete endpoints are admin only and need a matching preview", () => {
   );
 });
 
-test("과거 답변 출처·퀴즈가 가리키는 예전 업로드는 삭제 후보가 아님", () => {
+test("현재 퀴즈 문제만 삭제를 막고, 과거 답변 출처는 경고 후 삭제 가능", () => {
   const counts = (extra) => ({ chats: 0, quizSets: 0, quizQuestions: 0, quizRuns: 0, checklists: 0, workspaces: 0, search: 0, images: 0, ...extra });
-  const statusOfOld = (input) =>
+  const oldGroup = (input) =>
     classifyStorage(input).groups.find((g) => g.kind === "upload" && g.title === "가상지침.pdf" && g.usage.workspacePages === 0);
+  const withRefs = (extra) => fixture({ originalReferences: new Map([[originalStorageKey(OLD), { counts: counts(extra) }]]) });
   // 연결 확인 결과 없이 만든 예전 검사 자료: 기존 판단 그대로
-  assert.equal(statusOfOld(fixture()).status, STATUS.OLD_UPLOAD);
-  // 아무도 가리키지 않음 → 삭제 가능
-  assert.equal(statusOfOld(fixture({ originalReferences: new Map() })).status, STATUS.OLD_UPLOAD);
-  // 과거 답변이 가리킴 → 검토 필요(삭제 불가)
-  const cited = statusOfOld(fixture({ originalReferences: new Map([[originalStorageKey(OLD), { counts: counts({ chats: 2 }) }]]) }));
-  assert.equal(cited.status, STATUS.REVIEW);
-  assert.match(cited.reasons.join(" "), /과거 답변 출처나 퀴즈/);
-  // 퀴즈가 가리킴 → 검토 필요
-  assert.equal(statusOfOld(fixture({ originalReferences: new Map([[originalStorageKey(OLD), { counts: counts({ quizQuestions: 1 }) }]]) })).status, STATUS.REVIEW);
+  assert.equal(oldGroup(fixture()).status, STATUS.OLD_UPLOAD);
+  // 아무도 가리키지 않음 → 삭제 가능, 경고 없음
+  assert.equal(oldGroup(fixture({ originalReferences: new Map() })).pastAnswerRefs, 0);
+  // 과거 답변만 가리킴 → 삭제 가능 + 경고용 건수
+  const cited = oldGroup(withRefs({ chats: 4 }));
+  assert.equal(cited.status, STATUS.OLD_UPLOAD);
+  assert.equal(cited.pastAnswerRefs, 4);
+  // 현재 퀴즈 문제가 있음 → 차단
+  const quiz = oldGroup(withRefs({ quizQuestions: 2, chats: 1 }));
+  assert.equal(quiz.status, STATUS.REVIEW);
+  assert.match(quiz.reasons.join(" "), /현재 퀴즈 2문항/);
+  // 퀴즈 문제를 지운 뒤 남은 생성 기록·빈 세트는 막지 않음
+  assert.equal(oldGroup(withRefs({ quizRuns: 3, quizSets: 1 })).status, STATUS.OLD_UPLOAD);
   // 연결 확인 실패(null) → 삭제하지 않음
-  assert.equal(statusOfOld(fixture({ originalReferences: null })).status, STATUS.REVIEW);
+  assert.equal(oldGroup(fixture({ originalReferences: null })).status, STATUS.REVIEW);
 });
 
 test("등록 안 된 업로드에만 붙은 체크리스트는 사용 중으로 보지 않고 문서와 함께 삭제", async () => {
@@ -487,4 +492,37 @@ test("체크리스트 파일 이름이 이상하면 삭제 대상을 만들지 �
     .groups.find((g) => g.title === "가상검사.pdf");
   assert.equal(group.status, STATUS.OLD_UPLOAD);
   assert.throws(() => deletionTargets([group], os.tmpdir()), /unsafe checklist file/);
+});
+
+test("예전 문서를 지울 때 원본 '삭제됨' 표시를 남겨 과거 답변에서 안내가 나오게 함", async () => {
+  const { root, dirs, loadInputs } = makeStorage();
+  const report = classifyStorage(await loadInputs());
+  const old = report.groups.find((g) => g.status === STATUS.OLD_UPLOAD && g.original.exists);
+  const result = await executeStorageCleanup([old.key], { loadInputs, root, actorId: 1 });
+  assert.equal(result.ok, true);
+  const receipts = fs.readdirSync(path.join(dirs.originals, ".deleted-refs"));
+  assert.equal(receipts.length, 1);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+
+test("Excel 하위 폴더를 점검하고 현재 사용 문서는 보호한다", () => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const {readPageRecords, deletionTargets} = require("../../../utils/schatAdmin/storageCleanup");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "excel-cleanup-"));
+  try {
+    const dir = path.join(root,"documents",".xlsx-test"); fs.mkdirSync(dir,{recursive:true});
+    fs.writeFileSync(path.join(dir,"sheet-1.json"),JSON.stringify({document_id:OLD,title:"가상.xlsx"}));
+    const records=readPageRecords(path.join(root,"documents"));
+    assert.equal(records.length,1);
+    assert.equal(records[0].docpath,".xlsx-test/sheet-1.json");
+    const input={pageRecords:records,workspaceDocs:[],knownDocumentIds:new Set()};
+    const old=classifyStorage(input).groups.find(g=>g.documentId===OLD);
+    assert.equal(old.status,STATUS.OLD_UPLOAD);
+    assert.deepEqual(deletionTargets([old],root).files,[path.join(dir,"sheet-1.json")]);
+    const live=classifyStorage({...input,workspaceDocs:[{docpath:records[0].docpath,docId:"active"}]}).groups.find(g=>g.documentId===OLD);
+    assert.equal(live.status,STATUS.IN_USE);
+    assert.throws(()=>deletionTargets([live],root),/protected/);
+    assert.throws(()=>deletionTargets([{...old,pagePaths:["../escape.json"]}],root),/unsafe/);
+  } finally { fs.rmSync(root,{recursive:true,force:true}); }
 });

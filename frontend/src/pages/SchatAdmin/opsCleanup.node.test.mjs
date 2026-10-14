@@ -75,8 +75,8 @@ test("mobile citations open a full-screen PDF/텍스트 source view", () => {
   );
   assert.match(canvas, /openEvidenceDocument\(data\)/);
   assert.match(src('../../utils/pdfEvidenceDocument.js'), /isEvalSupported: false/);
-  assert.match(screen, /원본이 삭제되었습니다/);
-  assert.match(row, /원본이 삭제되었습니다/);
+  assert.match(screen, /이 출처는 이전 버전 문서로 현재 원문을 확인할 수 없습니다/);
+  assert.match(row, /이 출처는 이전 버전 문서로 현재 원문을 확인할 수 없습니다/);
   assert.match(screen, /lazy\(\(\) => import\("\.\/PdfPageCanvas"\)\)/);
 });
 

@@ -58,11 +58,16 @@ async function currentStorageSignature() {
     checklists = require("../utils/documentChecklists/repository")
       .ChecklistRepository.listAll().length;
   } catch {}
+  // 퀴즈 문제를 지우면 예전 문서의 삭제 가능 여부가 바뀌므로 다시 점검함.
+  const quizQuestions = await prisma.schat_quiz_questions
+    .count({ where: { status: { not: "deleted" } } })
+    .catch(() => null);
   return JSON.stringify([
     rows._count._all,
     rows._max.lastUpdatedAt?.toISOString?.() || null,
     pageFiles,
     checklists,
+    quizQuestions,
   ]);
 }
 

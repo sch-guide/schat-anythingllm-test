@@ -342,6 +342,9 @@ export default function Directory({
           checklists={
             Number(groups?.get(deleting.cleanupKey)?.orphanChecklists) || 0
           }
+          pastAnswers={
+            Number(groups?.get(deleting.cleanupKey)?.pastAnswerRefs) || 0
+          }
           onClose={() => setDeleting(null)}
           onDeleted={handleDeleted}
         />
@@ -357,6 +360,7 @@ export default function Directory({
 export function DeleteOldDocumentDialog({
   doc,
   checklists = 0,
+  pastAnswers = 0,
   onClose,
   onDeleted,
 }) {
@@ -404,6 +408,16 @@ export function DeleteOldDocumentDialog({
           <br />
           삭제 후 복구할 수 없습니다.
         </p>
+        {pastAnswers > 0 && (
+          <p
+            className="mt-2 rounded-md border border-amber-400 bg-amber-500/10 p-2 text-xs"
+            data-testid="past-answer-warning"
+          >
+            이 문서는 과거 답변 {pastAnswers}건의 출처로 사용되었습니다.
+            삭제하면 해당 과거 답변에서 원본을 다시 열 수 없습니다. (과거 답변
+            자체는 지워지지 않습니다)
+          </p>
+        )}
         {checklists > 0 && (
           <p className="mt-2 text-xs" data-testid="orphan-checklists">
             이 문서에만 연결된 체크리스트 {checklists}개도 함께 삭제됩니다.
@@ -435,7 +449,7 @@ export function DeleteOldDocumentDialog({
             disabled={busy}
             className="rounded-lg bg-red-600 px-3 py-1.5 font-medium text-white hover:bg-red-700 disabled:opacity-50"
           >
-            {busy ? "삭제 중..." : "삭제"}
+            {busy ? "삭제 중..." : pastAnswers > 0 ? "그래도 삭제" : "삭제"}
           </button>
         </div>
       </div>
