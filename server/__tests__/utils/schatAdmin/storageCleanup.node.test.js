@@ -526,3 +526,39 @@ test("Excel 하위 폴더를 점검하고 현재 사용 문서는 보호한다",
     assert.throws(()=>deletionTargets([{...old,pagePaths:["../escape.json"]}],root),/unsafe/);
   } finally { fs.rmSync(root,{recursive:true,force:true}); }
 });
+
+test("문서 번호 없는 예전 형식 Excel은 이름으로 점검해 등록 전이면 삭제 가능, 등록돼 있으면 보호", () => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const { readPageRecords, deletionTargets, groupKey } = require("../../../utils/schatAdmin/storageCleanup");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "legacy-excel-"));
+  try {
+    const docs = path.join(root, "documents");
+    fs.mkdirSync(path.join(docs, "custom-documents"), { recursive: true });
+    fs.mkdirSync(path.join(docs, ".xlsx-new"), { recursive: true });
+    const title = "가상전화번호부.xlsx - Sheet:Sheet1";
+    // 예전 형식: document_id 없음
+    fs.writeFileSync(path.join(docs, "custom-documents", "old-sheet.json"), JSON.stringify({ title, pageContent: "x" }));
+    // 현재 Excel: 다른 폴더, 문서 번호 있음
+    fs.writeFileSync(path.join(docs, ".xlsx-new", "sheet-1.json"), JSON.stringify({ document_id: CURRENT, title: "가상전화번호부.xlsx" }));
+    // 정말 읽을 수 없는 파일
+    fs.writeFileSync(path.join(docs, "custom-documents", "broken.json"), "{not json");
+    const records = readPageRecords(docs);
+    const current = { docpath: ".xlsx-new/sheet-1.json", docId: "live" };
+    const input = { pageRecords: records, workspaceDocs: [current], vectorDocIds: new Set(["live"]), chromaDocumentIds: new Set([CURRENT]), knownDocumentIds: new Set([CURRENT]) };
+    const report = classifyStorage(input);
+    const legacy = report.groups.find((g) => g.legacy);
+    assert.equal(legacy.title, title);
+    assert.equal(legacy.key, groupKey("title", title));
+    assert.equal(legacy.status, STATUS.OLD_UPLOAD);
+    assert.equal(legacy.pastAnswerRefs, 0);
+    // 지우는 대상은 예전 파일 하나뿐, 현재 Excel은 건드리지 않음
+    assert.deepEqual(deletionTargets([legacy], root).files, [path.join(docs, "custom-documents", "old-sheet.json")]);
+    assert.equal(report.groups.find((g) => g.documentId === CURRENT).status, STATUS.IN_USE);
+    // 내용을 못 읽는 파일만 "확인 필요"
+    assert.equal(report.groups.find((g) => g.kind === "unreadable").pageRecords, 1);
+    // 예전 형식이라도 등록돼 있으면 보호
+    const registered = classifyStorage({ ...input, workspaceDocs: [current, { docpath: "custom-documents/old-sheet.json", docId: "old-live" }] }).groups.find((g) => g.legacy);
+    assert.equal(registered.status, STATUS.IN_USE);
+    assert.throws(() => deletionTargets([registered], root), /protected/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

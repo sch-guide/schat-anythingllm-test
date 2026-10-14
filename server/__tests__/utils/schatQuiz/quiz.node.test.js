@@ -583,3 +583,26 @@ test("띄어 쓴 주제와 제목이 곧 주제인 문서도 본문 근거로 �
   assert.deepEqual(await byTitle("수혈", "3-3. 실무지침서_중심정맥관.pdf"), []);
   assert.deepEqual(await byTitle("중심정맥관", "가상지침.pdf"), []);
 });
+
+test("쪽마다 머리글만 읽힌 문서(스캔 PDF)는 AI를 부르지 않고 원인을 알려 줌", async () => {
+  const generation = require("../../../utils/schatQuiz/generation");
+  const logs = [];
+  let called = false;
+  const before = generation.counters.geminiCalls;
+  const header = Array.from({ length: 15 }, (_, i) => [
+    "가상 수혈 간호실무지침 머리글",
+    { document_id: "D1", page: i + 1 },
+  ]);
+  await assert.rejects(
+    generation.generate(1, INPUT, {
+      live: LIVE,
+      log: async (row) => logs.push(row),
+      vectorDb: fakeVectorDb(header),
+      llm: { getChatCompletion: async () => { called = true; return null; } },
+    }),
+    /읽을 수 있는 본문 글자가 거의 없어/
+  );
+  assert.equal(called, false);
+  assert.equal(generation.counters.geminiCalls, before);
+  assert.equal(logs[0].status, "no_evidence");
+});

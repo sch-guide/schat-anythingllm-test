@@ -233,6 +233,11 @@ function workspaceEndpoints(app) {
               "document",
               documentId
             ),
+          titleKeyOf: (title) =>
+            require("../utils/schatAdmin/storageCleanup").groupKey(
+              "title",
+              title
+            ),
         });
         response.set("Cache-Control", "no-store");
         return response.status(200).json({ success: true, documents });

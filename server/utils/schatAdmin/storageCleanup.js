@@ -24,6 +24,12 @@ function storageRoot() {
 }
 
 // Opaque, stable key so the browser never sees document ids or paths.
+// 문서 등록 창(documentLibrary)과 같은 이름 기준: 경로를 떼고 NFC로 맞춤.
+function legacyTitle(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  return value.replace(/\\/g, "/").split("/").pop().normalize("NFC");
+}
+
 function groupKey(kind, id) {
   return crypto
     .createHash("sha256")
@@ -142,9 +148,18 @@ function classifyStorage(input) {
 
   const byDocument = new Map();
   const unreadable = [];
+  // 예전 형식 파일(문서 번호 없이 이름만 있는 Excel 시트 등)은 문서 등록 창과
+  // 같은 기준(이름)으로 묶어 점검함. 내용을 읽을 수 없는 파일만 "확인 필요".
+  const legacyByTitle = new Map();
   for (const record of pageRecords) {
     if (!record.documentId) {
-      unreadable.push(record);
+      const title = legacyTitle(record.title);
+      if (!title) {
+        unreadable.push(record);
+        continue;
+      }
+      if (!legacyByTitle.has(title)) legacyByTitle.set(title, []);
+      legacyByTitle.get(title).push(record);
       continue;
     }
     if (!byDocument.has(record.documentId))
@@ -333,6 +348,57 @@ function classifyStorage(input) {
               "대화 기록·퀴즈 등 다른 자료에서 이 문서를 가리키고 있어 확인이 필요합니다.",
             ]
           : ["어느 업로드의 원본인지 확인할 수 없습니다."],
+    });
+  }
+
+  for (const [title, records] of legacyByTitle) {
+    const livePages = records.filter((r) =>
+      workspaceByDocpath.has(r.docpath || `custom-documents/${r.fileName}`)
+    );
+    const vectorPages = livePages.filter((r) =>
+      vectorDocIds.has(
+        workspaceByDocpath.get(r.docpath || `custom-documents/${r.fileName}`).docId
+      )
+    ).length;
+    const cacheFiles = records.flatMap((r) => r.cacheFiles || []);
+    const published = records
+      .map((r) => Date.parse(r.published) || Date.parse(r.modifiedAt))
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b)[0];
+    // 문서 번호가 없으면 검색 데이터·체크리스트·퀴즈·과거 답변 출처·원본이
+    // 이 파일을 가리킬 수 없음. 등록돼 있을 때만 "현재 사용 중".
+    const usage = {
+      ...EMPTY_USAGE,
+      workspacePages: livePages.length,
+      vectorPages,
+      pdfViewerReferenced: livePages.length > 0,
+    };
+    groups.push({
+      key: groupKey("title", title),
+      documentId: null,
+      legacy: true,
+      kind: "upload",
+      title,
+      uploadedAt: Number.isFinite(published)
+        ? new Date(published).toISOString()
+        : null,
+      pages: records.length,
+      pageRecords: records.length,
+      pageRecordBytes: records.reduce((sum, r) => sum + (r.bytes || 0), 0),
+      pageFiles: records.filter((r) => !r.docpath).map((r) => r.fileName),
+      pagePaths: records.filter((r) => r.docpath).map((r) => r.docpath),
+      auxiliaryFiles: cacheFiles.length,
+      auxiliaryBytes: cacheFiles.reduce((sum, c) => sum + (c.bytes || 0), 0),
+      cacheFileNames: cacheFiles.map((c) => c.name),
+      imageFiles: 0,
+      imageBytes: 0,
+      original: { exists: false, bytes: 0, inUse: false },
+      usage,
+      pastAnswerRefs: 0,
+      orphanChecklists: 0,
+      checklistFiles: [],
+      status: isInUse(usage) ? STATUS.IN_USE : STATUS.OLD_UPLOAD,
+      reasons: [],
     });
   }
 
@@ -589,6 +655,8 @@ function deletionTargets(groups, root, { checklistsDir = null } = {}) {
         throw new Error("unsafe checklist file");
       add(files, dirs.checklists, name);
     }
+    // 문서 번호가 없는 예전 형식 파일은 쪽 파일·캐시만 지움(이미지·원본 없음).
+    if (group.legacy === true && group.documentId === null) continue;
     if (!group.documentId || !SAFE_DOCUMENT_ID.test(group.documentId))
       throw new Error("unsafe document id");
     // .description-cache starts with "." and never matches SAFE_DOCUMENT_ID.

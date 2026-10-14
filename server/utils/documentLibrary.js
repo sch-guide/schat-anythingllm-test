@@ -54,7 +54,8 @@ function summarize(
   rows,
   workspaceId,
   pdfMeta = () => ({}),
-  keyOf = () => null
+  keyOf = () => null,
+  titleKeyOf = () => null
 ) {
   const byPath = new Map();
   for (const row of rows) {
@@ -129,7 +130,10 @@ function summarize(
           status === "unregistered" && registeredTitles.has(group.title),
         // 원본 PDF 링크(관리자 화면 원본 보기용)와 안전 점검 열쇠(예전 문서 삭제용).
         ...pdfMeta({ document_id: group.documentId, title: group.title }),
-        cleanupKey: group.documentId ? keyOf(group.documentId) : null,
+        // 문서 번호가 없는 예전 형식 파일은 이름으로 안전 점검 결과를 찾음.
+        cleanupKey: group.documentId
+          ? keyOf(group.documentId)
+          : titleKeyOf(group.title),
       };
     })
     .sort(
@@ -140,14 +144,21 @@ function summarize(
     );
 }
 
-async function documentLibrary({ root, workspaceId, prisma, pdfMeta, keyOf }) {
+async function documentLibrary({
+  root,
+  workspaceId,
+  prisma,
+  pdfMeta,
+  keyOf,
+  titleKeyOf,
+}) {
   const [files, rows] = await Promise.all([
     readCatalog(root),
     prisma.workspace_documents.findMany({
       select: { docpath: true, workspaceId: true, metadata: true },
     }),
   ]);
-  return summarize(files, rows, workspaceId, pdfMeta, keyOf);
+  return summarize(files, rows, workspaceId, pdfMeta, keyOf, titleKeyOf);
 }
 
 module.exports = { documentLibrary, summarize, readCatalog };

@@ -233,6 +233,25 @@ function topicInTitle(topic, title) {
   return Boolean(name && terms.length && terms.every((t) => name.includes(t)));
 }
 
+// 찾은 근거가 3쪽 이상인데 쪽당 평균 60자도 안 되면(스캔 PDF처럼 쪽마다
+// 머리글만 읽힌 문서) 문제를 만들 내용이 없음. AI를 부르지 않고 원인을 알려 줌.
+const THIN_EVIDENCE_CHARS_PER_PAGE = 60;
+function thinEvidence(evidence = []) {
+  const chars = evidence.reduce(
+    (sum, e) => sum + String(e.text || "").replace(/\s+/g, "").length,
+    0
+  );
+  return (
+    evidence.length >= 3 &&
+    chars / evidence.length < THIN_EVIDENCE_CHARS_PER_PAGE
+  );
+}
+
+function thinEvidenceMessage(doc) {
+  const name = doc?.title ? `「${doc.title}」` : "이 문서";
+  return `${name}에서 읽을 수 있는 본문 글자가 거의 없어 문제를 만들 수 없습니다. 스캔본처럼 글자가 그림으로 된 PDF일 수 있습니다. 글자가 들어 있는 PDF로 다시 등록해 주세요.`;
+}
+
 function noEvidenceMessage(doc, topic) {
   const name = doc?.title ? `「${doc.title}」` : "이 문서";
   return `${name}에서 '${topic}' 주제의 근거를 찾지 못했습니다. 대상 문서가 맞는지 확인하거나 주제를 바꿔 다시 시도해 주세요.`;
@@ -336,7 +355,7 @@ async function generate(
     },
     { vectorDb }
   );
-  if (!evidence.length) {
+  if (!evidence.length || thinEvidence(evidence)) {
     await log({
       admin_id: adminId,
       document_id: doc.documentId,
@@ -344,7 +363,11 @@ async function generate(
       requested: request.count,
       status: "no_evidence",
     });
-    throw bank.userError(noEvidenceMessage(doc, request.topic));
+    throw bank.userError(
+      evidence.length
+        ? thinEvidenceMessage(doc)
+        : noEvidenceMessage(doc, request.topic)
+    );
   }
 
   let output;
@@ -486,7 +509,7 @@ async function regenerate(
     },
     { vectorDb }
   );
-  if (!evidence.length) {
+  if (!evidence.length || thinEvidence(evidence)) {
     await logGeneration({
       admin_id: adminId,
       document_id: q.document_id,
@@ -494,7 +517,9 @@ async function regenerate(
       requested: 1,
       status: "no_evidence",
     }).catch(() => null);
-    throw bank.userError(noEvidenceMessage(doc, q.topic));
+    throw bank.userError(
+      evidence.length ? thinEvidenceMessage(doc) : noEvidenceMessage(doc, q.topic)
+    );
   }
   let output;
   try {

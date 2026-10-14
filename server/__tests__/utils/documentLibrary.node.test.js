@@ -57,3 +57,12 @@ test("예전 버전 체크리스트는 화면에서 빼고, 같은 이름 업데
   const personal = fs.readFileSync(path.join(__dirname, "../../endpoints/checklistPersonalState.js"), "utf8");
   assert.match(personal, /schat_document_update_archived !== true/);
 });
+
+test("문서 번호 없는 예전 형식 파일도 이름으로 안전 점검 열쇠를 받음", () => {
+  const files = [file("custom-documents/old-sheet.json", "가상전화번호부.xlsx - Sheet:Sheet1", null, null)];
+  const [doc] = summarize(files, [], 1, () => ({}), (id) => `doc:${id}`, (title) => `title:${title}`);
+  assert.equal(doc.status, "unregistered");
+  assert.equal(doc.cleanupKey, "title:가상전화번호부.xlsx - Sheet:Sheet1");
+  const [withId] = summarize([file("custom-documents/a.json", "가.pdf", "D1", 1)], [], 1, () => ({}), (id) => `doc:${id}`, (t) => `title:${t}`);
+  assert.equal(withId.cleanupKey, "doc:D1");
+});
