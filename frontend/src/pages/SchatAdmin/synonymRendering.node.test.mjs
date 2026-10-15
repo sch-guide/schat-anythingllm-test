@@ -464,6 +464,7 @@ function renderAdmin(sectionKey, SynonymsSection = loadedSynonyms()) {
     "Reports",
     "Quiz",
     "Checklists",
+    "GuidelineLibrary",
     "UsageStats",
     "Status",
     "Storage",

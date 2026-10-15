@@ -19,6 +19,7 @@ test("the wrench opens exactly the SCHAT admin sections in order", () => {
       "답변 근거 보기",
       "문제 신고",
       "퀴즈 관리",
+      "지침서 원본 자료",
       "체크리스트 관리",
       "동의어 관리",
       "사용 통계",
@@ -277,7 +278,7 @@ test("이용 가이드 is a staff page under 새 대화 using the same FAQ data"
   assert.equal(
     (
       sidebar.match(
-        /<ActiveWorkspaces \/>\s*<QuizLink \/>\s*<GuideLink \/>/g
+        /<GuidelineLink \/>\s*<QuizLink \/>\s*<GuideLink \/>\s*<ActiveWorkspaces \/>/g
       ) || []
     ).length,
     2

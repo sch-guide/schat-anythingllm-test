@@ -24,6 +24,7 @@ import ChecklistsSection from "./sections/Checklists";
 import SynonymsSection from "./sections/Synonyms";
 import UsageStatsSection from "./sections/UsageStats";
 import StatusSection from "./sections/Status";
+import GuidelineLibrarySection from "./sections/GuidelineLibrary";
 import GeminiAvailabilityBanner from "./GeminiAvailabilityBanner";
 
 const SECTIONS = {
@@ -35,6 +36,7 @@ const SECTIONS = {
   reports: ReportsSection,
   quiz: QuizSection,
   checklists: ChecklistsSection,
+  "guideline-library": GuidelineLibrarySection,
   synonyms: SynonymsSection,
   usage: UsageStatsSection,
   status: StatusSection,

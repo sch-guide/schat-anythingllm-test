@@ -64,6 +64,13 @@ const router = createBrowserRouter([
         },
       },
       {
+        path: "/guideline",
+        lazy: async () => {
+          const { default: GuidelinePage } = await import("@/pages/Guideline");
+          return { element: <PrivateRoute Component={GuidelinePage} /> };
+        },
+      },
+      {
         path: "/quiz",
         lazy: async () => {
           const { default: QuizPage } = await import("@/pages/Quiz");

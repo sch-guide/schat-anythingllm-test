@@ -44,6 +44,12 @@ export const SCHAT_ADMIN_SECTIONS = [
       "지침서 근거로 AI 퀴즈 문제를 만들고, 검토·수정·공개하며 풀이 통계를 확인합니다.",
   },
   {
+    key: "guideline-library",
+    label: "지침서 원본 자료",
+    description:
+      "직원 메뉴 '지침서 원본 보기'에 보일 PDF를 올리고 관리합니다. 챗봇 답변에는 쓰이지 않고, 챗봇용 문서는 원본 보기에 나오지 않습니다.",
+  },
+  {
     key: "checklists",
     label: "체크리스트 관리",
     description:

@@ -957,6 +957,114 @@ function workspaceEndpoints(app) {
     }
   );
 
+  // 직원 메뉴 "지침서 원본 보기": 관리자가 '지침서 원본 자료'에 올린 PDF 목록.
+  // 챗봇용 문서(문서 등록)는 챗봇 답변에만 쓰고 여기에는 보이지 않는다(2026-10-15 결정).
+  app.get(
+    "/workspace/:slug/guideline-originals",
+    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    async (request, response) => {
+      try {
+        const user = await userFromSession(request, response);
+        const workspace = multiUserMode(response)
+          ? await Workspace.getWithUser(user, { slug: request.params.slug })
+          : await Workspace.get({ slug: request.params.slug });
+        if (!workspace) return response.sendStatus(404);
+        const { listLibraryItems } = require("../utils/guidelineLibraryStore");
+        response
+          .set("Cache-Control", "no-store")
+          .status(200)
+          .json({
+            documents: [
+              ...listLibraryItems().map((item) => ({
+                kind: "library",
+                ref: item.id,
+                title: item.title,
+                pageCount: item.pageCount,
+              })),
+            ],
+          });
+      } catch (error) {
+        console.error("[guideline-originals]", error.message);
+        response.sendStatus(500);
+      }
+    }
+  );
+
+  // 지침서 원본 보기 자료의 쪽별 글자 검색(띄어쓰기·대소문자 무시). 화면에서는 아직 쓰지 않음.
+  app.get(
+    "/workspace/:slug/guideline-search",
+    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    async (request, response) => {
+      try {
+        const user = await userFromSession(request, response);
+        const workspace = multiUserMode(response)
+          ? await Workspace.getWithUser(user, { slug: request.params.slug })
+          : await Workspace.get({ slug: request.params.slug });
+        if (!workspace) return response.sendStatus(404);
+        const query = typeof request.query.q === "string" ? request.query.q : "";
+        const { compileQuery, searchPageTexts } = require("../utils/guidelineLibrary");
+        if (!compileQuery(query))
+          return response.status(400).json({ error: "검색어를 1~50자로 입력해 주세요." });
+        const { libraryPageTexts } = require("../utils/guidelineLibraryStore");
+        const entries = [
+          ...libraryPageTexts().flatMap((item) =>
+            item.pages.map((page) => ({
+              kind: "library",
+              ref: item.id,
+              title: item.title,
+              page: page.page,
+              text: page.text,
+            }))
+          ),
+        ];
+        response
+          .set("Cache-Control", "no-store")
+          .status(200)
+          .json(searchPageTexts(entries, query));
+      } catch (error) {
+        console.error("[guideline-search]", error.message);
+        response.sendStatus(500);
+      }
+    }
+  );
+
+  // 보기 전용 자료 PDF(부분 전송 지원). 로그인한 사용자 누구나 화면에서 볼 수 있다.
+  app.get(
+    "/guideline-library/:id/pdf",
+    [validatedRequest, flexUserRoleValid([ROLES.all])],
+    async (request, response) => {
+      try {
+        const { libraryPdfPath } = require("../utils/guidelineLibraryStore");
+        const file = libraryPdfPath(request.params.id);
+        if (!file) return response.sendStatus(404);
+        const stat = await fs.promises.stat(file);
+        const requestedRange = request.headers.range;
+        const range = requestedRange
+          ? parsePdfByteRange(requestedRange, stat.size)
+          : null;
+        if (requestedRange && !range) {
+          response.setHeader("Content-Range", `bytes */${stat.size}`);
+          return response.sendStatus(416);
+        }
+        response.setHeader("Content-Type", "application/pdf");
+        response.setHeader("Accept-Ranges", "bytes");
+        response.setHeader("Cache-Control", "private, no-store");
+        response.setHeader("Content-Disposition", "inline");
+        if (range) {
+          response.status(206);
+          response.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${stat.size}`);
+          response.setHeader("Content-Length", range.end - range.start + 1);
+          return fs.createReadStream(file, range).pipe(response);
+        }
+        response.setHeader("Content-Length", stat.size);
+        return fs.createReadStream(file).pipe(response);
+      } catch (error) {
+        console.error("[guideline-library pdf]", error.message);
+        return response.sendStatus(500);
+      }
+    }
+  );
+
   app.get(
     "/workspace/:slug/original-pdf/:pdfRef",
     [validatedRequest, flexUserRoleValid([ROLES.all])],

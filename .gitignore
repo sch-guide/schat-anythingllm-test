@@ -19,3 +19,5 @@ docs/02_멘토링/산출물_2026-09-30/로컬전용_원자료/
 server/storage/document-updates/
 collector/storage/document-updates/
 server/storage/original-spreadsheets/
+# 지침서 원본 보기 자료(관리자 업로드 PDF와 쪽 글자). 운영 자료라 Git에 올리지 않음.
+server/storage/guideline-library/

@@ -106,6 +106,73 @@ function schatAdminEndpoints(app) {
   app.post('/schat-admin/ai-models', aiAdminOnly, aiSettings.models);
   app.put('/schat-admin/ai-settings', aiAdminOnly, aiSettings.save);
 
+  // 지침서 원본 보기의 보기 전용 자료실(챗봇 검색에는 넣지 않음).
+  // 요청이 올 때만 불러온다(관리자 API 등록 자체는 기존과 같게 유지).
+  const guidelineStore = () => require("../utils/guidelineLibraryStore");
+  const libraryError = (response, error) =>
+    error?.status
+      ? response.status(error.status).json({ error: error.message })
+      : response.status(500).json({ error: "자료를 처리하지 못했습니다." });
+  app.get("/schat-admin/guideline-library", aiAdminOnly, (_request, response) => {
+    try {
+      response.set("Cache-Control", "no-store").json({ items: guidelineStore().listLibraryItems() });
+    } catch (error) {
+      libraryError(response, error);
+    }
+  });
+  app.post(
+    "/schat-admin/guideline-library",
+    aiAdminOnly,
+    (request, response, next) =>
+      require("multer")({
+        storage: require("multer").memoryStorage(),
+        limits: { files: 1, fileSize: guidelineStore().MAX_PDF_BYTES, fieldSize: 30 * 1024 * 1024 },
+      }).single("file")(request, response, (error) =>
+        error
+          ? response.status(413).json({ error: "PDF는 100MB까지 올릴 수 있습니다." })
+          : next()
+      ),
+    async (request, response) => {
+      try {
+        let pages = [];
+        try {
+          pages = JSON.parse(request.body?.pages || "[]");
+        } catch {
+          pages = [];
+        }
+        const item = await guidelineStore().saveLibraryItem({
+          buffer: request.file?.buffer,
+          filename: request.file
+            ? Buffer.from(request.file.originalname, "latin1").toString("utf8")
+            : "",
+          title: request.body?.title,
+          pages,
+        });
+        await EventLogs.logEvent(
+          "schat_guideline_library_uploaded",
+          { title: item.title, pageCount: item.pageCount },
+          response.locals?.user?.id
+        ).catch(() => null);
+        response.status(201).json({ item });
+      } catch (error) {
+        libraryError(response, error);
+      }
+    }
+  );
+  app.delete("/schat-admin/guideline-library/:id", aiAdminOnly, async (request, response) => {
+    try {
+      guidelineStore().removeLibraryItem(request.params.id);
+      await EventLogs.logEvent(
+        "schat_guideline_library_deleted",
+        { id: request.params.id },
+        response.locals?.user?.id
+      ).catch(() => null);
+      response.json({ ok: true });
+    } catch (error) {
+      libraryError(response, error);
+    }
+  });
+
   app.get(
     "/schat-admin/status",
     [validatedRequest, flexUserRoleValid([ROLES.admin])],

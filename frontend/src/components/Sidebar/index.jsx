@@ -10,6 +10,7 @@ import SettingsButton from "../SettingsButton";
 import SchatBrand from "./SchatBrand";
 import GuideLink from "@/components/SchatGuide/GuideLink";
 import QuizLink from "@/components/SchatQuiz/QuizLink";
+import GuidelineLink from "@/components/SchatGuideline/GuidelineLink";
 import { Link } from "react-router-dom";
 import paths from "@/utils/paths";
 import { useTranslation } from "react-i18next";
@@ -64,9 +65,11 @@ export default function Sidebar() {
                 <div className="relative h-[calc(100%-60px)] flex flex-col w-full justify-between pt-[10px] overflow-y-scroll no-scroll">
                   <div className="flex flex-col gap-y-[14px]">
                     <SearchBox user={user} showNewWsModal={showNewWsModal} />
-                    <ActiveWorkspaces />
+                    {/* 고정 메뉴를 위에 두고, 질문 목록(작업 공간)은 그 아래에 둔다. */}
+                    <GuidelineLink />
                     <QuizLink />
                     <GuideLink />
+                    <ActiveWorkspaces />
                   </div>
                 </div>
                 <div className="absolute bottom-0 left-0 right-0 pb-3 rounded-b-[16px] bg-theme-bg-sidebar light:bg-slate-200 bg-opacity-80 backdrop-filter backdrop-blur-md z-10">
@@ -165,9 +168,10 @@ export function SidebarMobileHeader() {
                     user={user}
                     showNewWsModal={showNewWsModal}
                   />
-                  <ActiveWorkspaces />
+                  <GuidelineLink />
                   <QuizLink />
                   <GuideLink />
+                  <ActiveWorkspaces />
                 </div>
               </div>
               <div className="z-99 absolute bottom-0 left-0 right-0 pt-2 pb-6 rounded-br-[26px] bg-theme-bg-sidebar bg-opacity-80 backdrop-filter backdrop-blur-md">

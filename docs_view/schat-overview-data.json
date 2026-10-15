@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedOn": "2026-10-14",
+  "generatedOn": "2026-10-15",
   "project": {
     "name": "SCHAT 병원 실무지침 AI 시스템",
     "relationship": "AnythingLLM의 서비스 기반에 직접 검증한 SCHAT 검색과 병원 전용 기능을 적용함.",
@@ -293,10 +293,10 @@
     "document": "docs/00_현재상태/SCHAT_버전_체계.md"
   },
   "tests": {
-    "totalFiles": 305,
+    "totalFiles": 308,
     "byArea": {
-      "frontend": 83,
-      "server": 185,
+      "frontend": 84,
+      "server": 187,
       "collector": 13,
       "Python 안전검사": 13,
       "저장소 검사": 11
@@ -310,6 +310,13 @@
     "검색 관련 변경 뒤 기존 질문 회귀검사를 실행함."
   ],
   "history": [
+    {
+      "date": "2026-10-15",
+      "title": "지침서 원본 보기 메뉴 (3001 반영)",
+      "summary": "날짜: 2026-10-15",
+      "feature": "지침서 원본보기 메뉴",
+      "document": "docs/01_작업일지/2026-10-15_지침서_원본보기_메뉴.md"
+    },
     {
       "date": "2026-10-14",
       "title": "한컴 PDF 글자 읽기와 퀴즈 주제 일치",

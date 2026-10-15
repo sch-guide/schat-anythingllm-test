@@ -105,6 +105,7 @@ export default {
   },
   guide: () => "/guide",
   quiz: () => "/quiz",
+  guideline: () => "/guideline",
   settings: {
     schatAdmin: (section = "brand") => `/settings/schat/${section}`,
     users: () => {

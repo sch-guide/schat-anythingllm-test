@@ -15,6 +15,7 @@ import {
   Plugs,
   Pulse,
   Broom,
+  BookOpenText,
 } from "@phosphor-icons/react";
 import useUser from "@/hooks/useUser";
 import { isMobile } from "react-device-detect";
@@ -155,6 +156,7 @@ const SECTION_ICONS = {
   reports: Megaphone,
   quiz: Exam,
   checklists: ListChecks,
+  "guideline-library": BookOpenText,
   synonyms: Swap,
   usage: ChartBar,
   connections: Plugs,
