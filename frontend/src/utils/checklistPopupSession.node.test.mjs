@@ -231,3 +231,25 @@ test("storage failure is visible instead of silently claiming persistence", asyn
   s.edit({ other: "합성" });
   assert.equal(view.error, "UNAVAILABLE");
 });
+
+// 2026-10-17: 채팅 화면 창에서 적은 이름은 "별도 창으로 열기"를 눌러도 그대로 보인다.
+test("별도 창은 채팅 화면 창이 이 PC에 둔 원래 이름을 쓰고, 고친 이름도 함께 남긴다", async () => {
+  let shared = { patient: "홍길동", other: "", expiresAt: Date.now() + day };
+  const sharedNames = { read: () => shared, write: (v) => (shared = v), clear: () => (shared = null) };
+  let view;
+  const s = createPopupSession({
+    api: {
+      read: async () => ({ checks: {}, patient: "홍○동", other: "", updatedAt: 1, expiresAt: Date.now() + day, revision: "1" }),
+      write: async (b) => ({ ...b, revision: "2", updatedAt: 2, expiresAt: Date.now() + day }),
+    },
+    notify: (v) => (view = v),
+    storage: storage(),
+    key: "p",
+    owner: "1",
+    sharedNames,
+  });
+  await s.load();
+  assert.equal(view.patient, "홍길동");
+  s.edit({ patient: "김철수" });
+  assert.equal(shared.patient, "김철수");
+});

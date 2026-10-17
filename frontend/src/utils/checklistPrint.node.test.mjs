@@ -28,3 +28,19 @@ test("인쇄 프레임 출력과 완료 후 제거",async()=>{
  const doc={querySelector(){return null},createElement(tag){assert.equal(tag,"iframe");return frame},body:{appendChild(f){assert.equal(f,frame)}}};
  printChecklist(checklist,{}, {},doc);assert.match(frame.srcdoc,/가상 검사/);await frame.onload();assert.equal(printed,1);assert.equal(focused,1);handler();assert.equal(removed,1);
 });
+
+// 2026-10-17 사용자 요청: 가능하면 A4 한 장. 넘치면 읽을 수 있는 크기(0.6배)까지 줄인다.
+test("한 장 높이를 넘을 때만 줄이고, 0.6배보다 작게는 줄이지 않는다", async () => {
+  const { onePageScale } = await import("./checklistPrint.js");
+  const page = 297 * (96 / 25.4) - 4;
+  assert.equal(onePageScale(page - 10), 1);
+  assert.equal(onePageScale(page * 1.25), 0.8);
+  assert.equal(onePageScale(page * 3), 0.6);
+});
+
+test("인쇄 종이의 위·아래 여백은 0이라 브라우저 주소·날짜가 찍히지 않고, 빈 줄로 여백을 만든다", () => {
+  const html = buildChecklistPrintDocument({ id: "c", title: "가상", sections: [] });
+  assert.match(html, /@page \{ size: A4 portrait; margin: 0 10mm; \}/);
+  assert.match(html, /<thead><tr><td><div class="space"><\/div><\/td><\/tr><\/thead>/);
+  assert.match(html, /<tfoot><tr><td><div class="space"><\/div><\/td><\/tr><\/tfoot>/);
+});

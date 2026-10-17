@@ -91,6 +91,13 @@ export default function useChecklistPersonalState(
           storage: window.localStorage,
           key: popupStorageKey(slug, checklistId),
           owner: token ? String(user?.id || "") : null,
+          sharedNames:
+            token && user?.id
+              ? createLocalNames(
+                  window.localStorage,
+                  localNamesKey(user.id, slug, checklistId)
+                )
+              : null,
         })
       : createPersonalSession(
           api,

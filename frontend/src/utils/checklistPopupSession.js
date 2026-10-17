@@ -54,6 +54,9 @@ export function createPopupSession({
   key,
   owner,
   clock = Date.now,
+  // 채팅 화면 체크리스트 창이 이 PC에 둔 원래 글자(같은 사용자·체크리스트). 별도 창으로 열어도
+  // 홍길동 그대로 보이게 하고, 별도 창에서 고친 글자도 채팅 화면 창과 함께 쓴다.
+  sharedNames = null,
 }) {
   let cached = null;
   try {
@@ -110,11 +113,23 @@ export function createPopupSession({
     clock,
     {
       // 새로고침 뒤 서버의 가린 이름 대신 이 PC 저장본의 원래 글자를 보여 준다.
-      read: () => ({
-        patient: cached?.patient,
-        other: cached?.other,
-        expiresAt: cached?.expiresAt,
-      }),
+      read: () => {
+        const own = cached
+          ? {
+              patient: cached.patient,
+              other: cached.other,
+              expiresAt: cached.expiresAt,
+            }
+          : null;
+        let shared = null;
+        try {
+          shared = sharedNames?.read?.() || null;
+        } catch {}
+        // 둘 다 있으면 더 최근에 고친 쪽(기한이 더 늦은 쪽)을 쓴다.
+        return (shared?.expiresAt || 0) > (own?.expiresAt || 0) ? shared : own;
+      },
+      write: (value) => sharedNames?.write?.(value),
+      clear: () => sharedNames?.clear?.(),
     }
   );
   const result = {
