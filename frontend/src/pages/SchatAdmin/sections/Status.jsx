@@ -9,6 +9,7 @@ import ChatAdmissionPanel from '../ChatAdmissionPanel';
 import { useGeminiAvailability } from '../GeminiAvailabilityBanner';
 import { SystemLights } from '../SystemOverview';
 import { Link } from 'react-router-dom';
+import { SearchDataRow } from '../CurrentUsageCard';
 
 // Plain-language names for the system records admins are likely to see.
 export const EVENT_LABELS = {
@@ -151,7 +152,7 @@ export default function StatusSection() {
   if (status.error)
     return <Notice tone="warning">시스템 상태를 불러오지 못했습니다.</Notice>;
 
-  const { workspaces = [], checklists, connections, models = [] } = status;
+  const { workspaces = [], checklists, guidelineLibrary, connections, models = [] } = status;
   return (
     <div className="flex flex-col gap-y-5">
       <SystemLights ai={availability?.state} aiError={availabilityError} daily={admission?.dailyUsage}
@@ -162,36 +163,35 @@ export default function StatusSection() {
       <GeminiCostCard ai={availability?.state} aiError={availabilityError} budget={availability?.budget} />
       <ChatAdmissionPanel onState={setAdmission} showDaily={false} />
       <Card
-        title="등록 지침과 체크리스트"
+        title="등록 자료"
         help={[
-          "등록된 지침과 체크리스트 현황을 확인해요.",
-          "지침 추가·삭제는 문서 관리 화면에서 해요.",
+          "챗봇 답변용 문서: 챗봇이 지금 답할 때 쓰는 문서예요. 새 판으로 바뀐 예전 판은 세지 않아요.",
+          "지침서 원본 자료: 직원 메뉴 '지침서 원본 보기'에 보이는 PDF예요. 챗봇 답변에는 쓰지 않아요.",
+          "검색 데이터는 처음 계산에 20초쯤 걸릴 수 있어요.",
         ]}
       >
         {workspaces.map((ws) => (
-          <div key={ws.slug}>
-            {workspaces.length > 1 && (
-              <p className="text-sm font-semibold text-theme-text-primary mb-1">
-                {ws.name}
-              </p>
-            )}
-            <InfoRow label="등록 지침 수">
-              {formatNumber(ws.documents?.files)}개 (검색용{" "}
-              {formatNumber(ws.documents?.pages)}쪽)
-            </InfoRow>
-            <InfoRow label="답변 규칙">
-              {ws.inheritsDefaultPrompt
-                ? "기본 답변 규칙 사용"
-                : "작업 공간 별도 규칙 사용"}
-            </InfoRow>
-          </div>
+          <InfoRow
+            key={ws.slug}
+            label={workspaces.length > 1 ? `챗봇 답변용 문서 (${ws.name})` : "챗봇 답변용 문서"}
+          >
+            {formatNumber(ws.documents?.files)}개 ({formatNumber(ws.documents?.pages)}쪽)
+          </InfoRow>
         ))}
+        <SearchDataRow />
+        <InfoRow label="지침서 원본 자료">
+          {guidelineLibrary
+            ? `${formatNumber(guidelineLibrary.files)}개 (${formatNumber(guidelineLibrary.pages)}쪽)`
+            : "확인 불가"}
+        </InfoRow>
         <InfoRow label="체크리스트 수">
           {checklists
             ? `${formatNumber(checklists.total)}개 (공개 ${formatNumber(checklists.active)} · 검토 필요 ${formatNumber(checklists.review)}${checklists.hidden ? ` · 숨김 ${formatNumber(checklists.hidden)}` : ""})`
             : "확인 불가"}
         </InfoRow>
-        <Link to="/settings/schat/checklists" className="text-sm text-sky-600 underline">검토하러 가기</Link>
+        {checklists?.review > 0 && (
+          <Link to="/settings/schat/checklists" className="text-sm text-sky-600 underline">검토하러 가기</Link>
+        )}
       </Card>
       <details onToggle={event => setDetails(event.currentTarget.open)} className="rounded-xl border border-theme-sidebar-border p-4 text-theme-text-primary">
         <summary className="cursor-pointer font-medium">자세히 보기</summary>

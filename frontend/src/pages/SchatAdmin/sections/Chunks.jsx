@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import ChunkViewer from "@/models/chunkViewer";
 import { createChunkViewerController } from "../chunkViewerController";
 import { Button, Card, Help, Notice } from "../ui";
-import CurrentUsageCard from "../CurrentUsageCard";
 import ChatReplay from "./ChatReplay";
 import UsageStatsSection from "./UsageStats";
 
@@ -74,6 +73,7 @@ export function ChatDetail({ detail, workspaceSlug }) {
       title="직원이 본 답변"
       help={[
         "직원 채팅 화면과 같은 방식으로 저장된 답변을 보여요.",
+        "체크리스트 버튼도 직원 화면처럼 보여요. 버튼 여부는 저장되지 않아 지금 등록된 체크리스트 기준이에요.",
         "질문한 직원은 부서와 사번만 보여요. 이름은 보이지 않아요.",
         "질문의 전화번호와 긴 숫자는 가려요.",
       ]}
@@ -270,7 +270,6 @@ export default function ChunksSection({ workspace }) {
       <div className={tab === "chats" ? "flex flex-col gap-5" : "hidden"}>
         {workspace ? (
           <>
-            <CurrentUsageCard />
             <ChunksView {...{ controller, state, workspace }} />
           </>
         ) : (

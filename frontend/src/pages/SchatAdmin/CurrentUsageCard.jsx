@@ -21,6 +21,46 @@ export function CurrentUsageRows({ current }) {
   );
 }
 
+/**
+ * 2026-10-17: 시스템 상태 '등록 자료' 칸의 "검색 데이터" 줄.
+ * 계산이 오래 걸릴 수 있어 따로 불러오고 "다시 계산"을 함께 둔다.
+ */
+export function SearchDataRow() {
+  const [current, setCurrent] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  async function load(refresh = false) {
+    setRefreshing(refresh);
+    const report = await SchatAdmin.storageReport({ refresh });
+    setRefreshing(false);
+    if (!report?.summary?.current) return setFailed(true);
+    setFailed(false);
+    setCurrent(report.summary.current);
+  }
+  useEffect(() => {
+    load();
+  }, []);
+  return (
+    <InfoRow label="검색 데이터">
+      <span className="inline-flex flex-wrap items-center justify-end gap-2">
+        {current
+          ? `본문 ${n(current.bodyVectors)} · 이미지 설명 ${n(current.imageVectors)}`
+          : failed
+            ? "불러오지 못함"
+            : "계산 중…"}
+        <button
+          type="button"
+          className="text-xs font-normal text-sky-600 underline disabled:opacity-50"
+          disabled={refreshing}
+          onClick={() => load(true)}
+        >
+          {refreshing ? "다시 계산하는 중..." : "다시 계산"}
+        </button>
+      </span>
+    </InfoRow>
+  );
+}
+
 export default function CurrentUsageCard() {
   const [current, setCurrent] = useState(null);
   const [failed, setFailed] = useState(false);

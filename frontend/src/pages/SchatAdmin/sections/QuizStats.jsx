@@ -87,7 +87,7 @@ export default function QuizStats() {
 
       <Card
         title="부서별 통계"
-        description={`응답자가 ${stats.minRespondents}명 이상인 부서만 평균을 표시합니다. 퀴즈를 완료할 때의 부서 기준이며, 부서 순위는 만들지 않습니다.`}
+        description="응답자가 적은 부서도 모두 표시합니다. 퀴즈를 완료할 때의 부서 기준이며, 부서 순위는 만들지 않습니다."
       >
         {stats.departments.length === 0 ? (
           <p className="text-sm text-theme-text-secondary">

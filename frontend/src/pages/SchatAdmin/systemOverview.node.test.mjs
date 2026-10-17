@@ -127,6 +127,7 @@ test("status keeps details closed and tests both connections only on button acti
     "../ui": load("./ui.jsx"),
     "../GeminiBudgetPanel": { __esModule: true, default: "budget-panel" },
     "../GeminiCostCard": { __esModule: true, default: "gemini-cost-card" },
+    "../CurrentUsageCard": { __esModule: true, SearchDataRow: "search-data-row" },
     "./Connections": { __esModule: true, default: "connection-settings" },
     "../ChatAdmissionPanel": { __esModule: true, default: "admission-panel" },
     "../GeminiAvailabilityBanner": {

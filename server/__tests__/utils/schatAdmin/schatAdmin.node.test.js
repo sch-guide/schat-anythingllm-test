@@ -16,9 +16,22 @@ test("pages of one PDF count as one registered file", () => {
       "custom-documents/b.pdf-page-1-33.json",
       "custom-documents/note.txt-44.json",
     ]),
-    { files: 3, pages: 4 }
+    { files: 3, pages: 4, previousFiles: 0 }
   );
-  assert.deepEqual(summarizeDocuments([]), { files: 0, pages: 0 });
+  assert.deepEqual(summarizeDocuments([]), { files: 0, pages: 0, previousFiles: 0 });
+});
+
+test("새 판으로 바뀐 예전 판은 문서·쪽 수에서 빼고 따로 센다", () => {
+  const archived = JSON.stringify({ schat_document_update_archived: true });
+  assert.deepEqual(
+    summarizeDocuments([
+      { docpath: "custom-documents/new.pdf-page-1-1.json", metadata: "{}" },
+      { docpath: "custom-documents/new.pdf-page-2-2.json", metadata: {} },
+      { docpath: "custom-documents/old.pdf-page-1-3.json", metadata: archived },
+      { docpath: "custom-documents/old.pdf-page-2-4.json", metadata: archived },
+    ]),
+    { files: 1, pages: 2, previousFiles: 1 }
+  );
 });
 
 test("checklists needing review are counted separately", () => {

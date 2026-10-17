@@ -353,6 +353,14 @@ function createChunkViewer({
       relatedImages: Array.isArray(response.relatedImages)
         ? response.relatedImages
         : [],
+      // 직원 화면이 체크리스트 버튼을 띄울지 정할 때 쓰는 검색 결과 표시(못 찾음이면 버튼 없음).
+      searchOutcome:
+        response.searchOutcome && typeof response.searchOutcome === "object"
+          ? {
+              version: Number(response.searchOutcome.version) || null,
+              status: text(response.searchOutcome.status, 30) || null,
+            }
+          : null,
       missing,
     };
   }

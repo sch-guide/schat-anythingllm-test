@@ -228,3 +228,16 @@ test("questions about using a device do not open its procedure checklist", () =>
   ])
     assert.deepEqual(shown(question), ["picc"], question);
 });
+
+// 2026-10-17: 관리자 '질문별 답변'에서 직원이 체크리스트 버튼을 봤는지 같은 규칙으로 계산.
+test("저장된 답변에도 직원 화면과 같은 체크리스트 버튼 판단을 쓴다", async () => {
+  const { checklistsForStoredAnswer } = await import("./checklistMatcher.js");
+  const lists = [{ id: "a", title: "가상 시술", aliases: ["가상시술"], active: true }];
+  const ok = { available: true, text: "가상시술 준비는 다음과 같습니다." };
+  assert.deepEqual(checklistsForStoredAnswer("가상시술 준비 알려줘", ok, lists).map((c) => c.id), ["a"]);
+  // 근거 없는 답·검색 실패·답변 없음은 버튼이 뜨지 않는다.
+  assert.deepEqual(checklistsForStoredAnswer("가상시술 준비 알려줘", { available: true, text: "등록된 문서에서 확인되지 않습니다." }, lists), []);
+  assert.deepEqual(checklistsForStoredAnswer("가상시술 준비 알려줘", { ...ok, searchOutcome: { version: 2, status: "not_found" } }, lists), []);
+  assert.deepEqual(checklistsForStoredAnswer("가상시술 준비 알려줘", { available: false, text: "" }, lists), []);
+  assert.deepEqual(checklistsForStoredAnswer("다른 질문", ok, lists), []);
+});

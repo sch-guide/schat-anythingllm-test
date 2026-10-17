@@ -127,6 +127,19 @@ export function asksDeviceUseOnly(question = "") {
   return !/(^| )(전|후)(에|에는|부터|까지)?( |$)/u.test(normalized);
 }
 
+/**
+ * 관리자 '질문별 답변'에서 저장된 답변에 직원 화면과 같은 체크리스트 버튼이 떴는지 계산한다.
+ * 직원 채팅 화면과 같은 규칙(matchChecklists)과 같은 공개 체크리스트 목록을 쓴다.
+ */
+export function checklistsForStoredAnswer(question = "", answer = null, checklists = []) {
+  if (!answer?.available) return [];
+  return matchChecklists(question || "", checklists, {
+    content: answer.text,
+    searchOutcome: answer.searchOutcome || undefined,
+    closed: true,
+  });
+}
+
 export function matchChecklists(question = "", checklists = [], response) {
   // Use the same no-evidence decision as the citation display, including old chats.
   if (response && (

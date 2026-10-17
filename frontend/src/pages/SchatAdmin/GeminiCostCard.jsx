@@ -20,21 +20,17 @@ export function percentText(budget) {
   return `약 ${Math.round(budget.percent).toLocaleString("ko-KR")}%`;
 }
 
+// 2026-10-17 사용자 요청: "계산에서 뺀 기록 … 단가 모르는 모델 …" 줄은 보이지 않게 함
+// (단가 모르는 모델을 빼고 계산한다는 내용은 도움말에 있음).
 export default function GeminiCostCard({ ai, aiError, budget }) {
   const month = budget?.month;
-  const excluded = [month, budget].find((e) => e?.partial);
-  const unknownModels = [
-    ...new Set([
-      ...(month?.unknownModels || []),
-      ...(budget?.unknownModels || []),
-    ]),
-  ];
   return (
     <Card
       title="Gemini AI"
       help={[
         "기록된 사용량 기준 예상 비용이에요. Google에 남은 실제 잔액이 아니에요.",
         "채팅마다 그때 쓴 모델의 단가로 계산해요. 단가를 모르는 모델은 빼고 계산해요.",
+        "문서 등록 때 그림 설명, 퀴즈 생성, 동의어 제안에 쓴 비용은 들어 있지 않아요.",
       ]}
     >
       <div data-testid="gemini-cost-card">
@@ -43,20 +39,9 @@ export default function GeminiCostCard({ ai, aiError, budget }) {
         <InfoRow label="충전 금액 대비 예상 사용량">
           {percentText(budget)}
         </InfoRow>
-        {excluded && (
-          <p className="mt-2 text-xs text-theme-text-secondary">
-            {excluded.reason || "일부 과거 기록 제외"}
-          </p>
-        )}
-        {unknownModels.length > 0 && (
-          <p className="mt-2 text-xs text-theme-text-secondary">
-            단가 정보 없음: {unknownModels.join(", ")} (이 모델 기록은 계산에서
-            빠져요)
-          </p>
-        )}
         <p className="mt-2 text-xs text-theme-text-secondary">
-          기록된 사용량 기준 예상 비용 · ※ SCHAT에 기록된 채팅 사용량 기준
-          추정치입니다. 실제 Gemini 잔액과 다를 수 있습니다.
+          채팅 답변만 계산한 예상치예요. 문서 등록·퀴즈 생성 비용은 빠져 있어
+          실제 잔액과 다를 수 있어요.
         </p>
       </div>
     </Card>

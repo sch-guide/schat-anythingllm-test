@@ -12,7 +12,8 @@ const CHOICE_IDS = ["c1", "c2", "c3", "c4"];
 const LETTERS = ["A", "B", "C", "D"];
 const MAX_COUNT = 30;
 // Departments with fewer respondents than this never show an average.
-const MIN_DEPARTMENT_RESPONDENTS = 5;
+// 2026-10-17 사용자 요청: 응답자가 적은 부서도 모두 보여 준다(사용 통계와 같음). 개인별 점수·순위는 여전히 없음.
+const MIN_DEPARTMENT_RESPONDENTS = 1;
 
 const clean = (value, max = 1000) =>
   String(value ?? "")
@@ -232,8 +233,7 @@ function questionStats(answers = []) {
 
 /**
  * Department averages from completed attempts. No individual rows or ranking;
- * departments with fewer than MIN_DEPARTMENT_RESPONDENTS distinct people only
- * show that the number is too small.
+ * every department with at least one respondent is shown (2026-10-17).
  */
 function departmentStats(attempts = [], answersByAttempt = new Map()) {
   const groups = new Map();

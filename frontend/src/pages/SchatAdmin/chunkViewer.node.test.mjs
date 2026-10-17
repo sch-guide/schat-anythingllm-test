@@ -267,3 +267,9 @@ test("통계 탭: 주제·문서·검색 실패·근거 없음은 누를 수 있
   const departmentCard = source.slice(source.indexOf('title="부서별 사용량"'));
   assert.doesNotMatch(departmentCard, /PickLabel|pickWith|onPick/);
 });
+test("직원이 본 답변은 직원 화면과 같은 체크리스트 버튼 부품(PromptReply의 checklists)으로 그린다", () => {
+  const source = readFileSync(new URL("./sections/ChatReplay.jsx", import.meta.url), "utf8");
+  assert.match(source, /checklistsForStoredAnswer\(detail\.question, detail\.answer, checklists\)/);
+  assert.match(source, /checklists=\{matched\}/);
+  assert.match(source, /openChecklistPopup\(workspaceSlug, checklistId\)/);
+});

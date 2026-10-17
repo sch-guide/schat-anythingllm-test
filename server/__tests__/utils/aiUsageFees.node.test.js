@@ -230,8 +230,9 @@ test("모델이 섞이면 기록마다 그 모델로 계산하고, 단가 없는
   assert.equal(result.noUsageChats, 1);
   assert.equal(result.partial, true);
   assert.deepEqual(result.unknownModels, ["gemini-3.1-flash"]);
-  assert.match(result.reason, /일부 기록 제외 2건/);
-  assert.match(result.reason, /단가 정보 없음 1건/);
+  assert.match(result.reason, /계산에서 뺀 기록 2건/);
+  assert.match(result.reason, /단가 모르는 모델 1건/);
+  assert.match(result.reason, /사용량 없는 예전 기록 1건/);
   assert.deepEqual(
     result.byModel.map((m) => [m.model, m.krw]),
     [["gemini-3.8-flash", 1575]]

@@ -49,14 +49,14 @@ test("기록된 사용량 기준 예상 비용으로 표시하고 '현재 잔액
     "이번 달 예상 사용요금",
     "약 2,300원",
     "약 23%",
-    "기록된 사용량 기준 예상 비용",
-    "실제 Gemini 잔액과 다를 수 있습니다",
+    "채팅 답변만 계산한 예상치예요",
+    "실제 잔액과 다를 수 있어요",
   ])
     assert.ok(html.includes(text), text);
   assert.doesNotMatch(html, /현재 Gemini 잔액/);
 });
 
-test("일부 기록 제외와 단가 정보 없음 모델을 따로 알려줌", () => {
+test("계산에서 뺀 기록·단가 모르는 모델 줄은 보이지 않고 예상 금액만 보여 줌", () => {
   const html = render({
     ai: { status: "normal" },
     budget: {
@@ -64,14 +64,14 @@ test("일부 기록 제외와 단가 정보 없음 모델을 따로 알려줌", 
         estimatedKrw: 1575,
         chargedQuestions: 3,
         partial: true,
-        reason: "일부 기록 제외 2건: 단가 정보 없음 1건",
+        reason: "계산에서 뺀 기록 2건(단가 모르는 모델 1건)",
         unknownModels: ["gemini-3.1-flash"],
       },
     },
   });
   assert.match(html, /약 1,600원/);
-  assert.match(html, /일부 기록 제외 2건/);
-  assert.match(html, /단가 정보 없음: gemini-3\.1-flash/);
+  assert.doesNotMatch(html, /계산에서 뺀 기록|단가 모르는 모델:|이 모델 기록은 계산에서|추정치입니다/);
+  assert.match(html, /채팅 답변만 계산한 예상치예요/);
   assert.match(html, /충전 기록을 추가하면 표시돼요/);
 });
 

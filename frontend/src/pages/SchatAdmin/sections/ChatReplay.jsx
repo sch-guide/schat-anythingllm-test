@@ -1,6 +1,28 @@
+import { useEffect, useState } from "react";
 import PromptReply from "@/components/WorkspaceChat/ChatContainer/ChatHistory/PromptReply";
 import { ChatSidebarProvider } from "@/components/WorkspaceChat/ChatContainer/ChatSidebar";
+import Checklist from "@/models/checklist";
+import { checklistsForStoredAnswer } from "@/utils/checklistMatcher";
+import { openChecklistPopup } from "@/utils/checklistPopup";
 import { Notice } from "../ui";
+
+// 2026-10-17: 직원 화면과 똑같이 답변 아래에 체크리스트 버튼을 그린다.
+// 직원 채팅 화면과 같은 규칙·같은 공개 체크리스트 목록으로 계산하며, 버튼 여부는 기록에
+// 저장되지 않으므로 "지금 등록된 체크리스트 기준"이다. 누르면 별도 창으로 연다.
+function useReplayChecklists(detail, workspaceSlug) {
+  const [checklists, setChecklists] = useState([]);
+  useEffect(() => {
+    let active = true;
+    setChecklists([]);
+    Checklist.list(workspaceSlug)
+      .then((items) => active && setChecklists(Array.isArray(items) ? items : []))
+      .catch(() => active && setChecklists([]));
+    return () => {
+      active = false;
+    };
+  }, [workspaceSlug]);
+  return checklistsForStoredAnswer(detail.question, detail.answer, checklists);
+}
 
 // 질문별 보기의 "답변 원문 보기".
 // 직원 채팅 화면이 쓰는 답변 컴포넌트(PromptReply)를 그대로 사용해
@@ -8,6 +30,7 @@ import { Notice } from "../ui";
 // 저장된 질문·답변만 보여 주며 새로 만들거나 요약하지 않는다.
 export default function ChatReplay({ detail, workspaceSlug }) {
   const answer = detail.answer;
+  const matched = useReplayChecklists(detail, workspaceSlug);
   if (!answer) {
     return (
       <Notice tone="warning">
@@ -47,6 +70,11 @@ export default function ChatReplay({ detail, workspaceSlug }) {
               presentation={answer.presentation}
               relatedImages={answer.relatedImages || []}
               citationQuestion={detail.question}
+              citationAliases={matched.flatMap((checklist) => checklist.aliases || [])}
+              checklists={matched}
+              onOpenChecklist={(checklistId) =>
+                openChecklistPopup(workspaceSlug, checklistId)
+              }
               workspaceSlug={workspaceSlug}
             />
           </ChatSidebarProvider>

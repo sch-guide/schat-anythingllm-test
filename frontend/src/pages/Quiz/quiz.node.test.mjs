@@ -135,10 +135,9 @@ test("admin statistics are aggregates without individual results", () => {
     "주제별 정답률",
   ])
     assert.match(stats, new RegExp(label));
-  assert.match(
-    stats,
-    /응답자 \{stats\.minRespondents\}명 미만 · 표시하지 않음/
-  );
+  // 2026-10-17: 응답자가 적은 부서도 모두 표시한다.
+  assert.match(stats, /응답자가 적은 부서도 모두 표시합니다/);
+  assert.doesNotMatch(stats, /명 이상인 부서만/);
   assert.match(stats, /직원 개인별 점수나 순위는/);
   // no per-person fields are rendered
   assert.doesNotMatch(stats, /userId|username|employeeNumber|displayName/i);

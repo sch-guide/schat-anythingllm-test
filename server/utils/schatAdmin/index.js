@@ -6,13 +6,35 @@ const GEMINI_MODELS_URL =
 
 // Stored page documents look like "<file>.pdf-page-12-<uuid>.json"; every page
 // of one PDF counts as a single registered file.
-function summarizeDocuments(docpaths = []) {
+// 2026-10-17: 새 판으로 바뀐 예전 판(schat_document_update_archived)은 지금 답변에 쓰지 않으므로
+// 문서·쪽 수에서 빼고 previousFiles로 따로 센다. 항목은 docpath 문자열 또는 {docpath, metadata}.
+function summarizeDocuments(entries = []) {
   const files = new Set();
-  for (const docpath of docpaths) {
+  const previous = new Set();
+  let pages = 0;
+  for (const entry of entries) {
+    const docpath = typeof entry === "string" ? entry : entry?.docpath;
     if (typeof docpath !== "string" || !docpath) continue;
-    files.add(docpath.replace(/\.pdf-page-\d+-[^/]*$/iu, ".pdf"));
+    let metadata = {};
+    if (typeof entry === "object") {
+      try {
+        metadata =
+          typeof entry.metadata === "string"
+            ? JSON.parse(entry.metadata || "{}")
+            : entry.metadata || {};
+      } catch {
+        metadata = {};
+      }
+    }
+    const file = docpath.replace(/\.pdf-page-\d+-[^/]*$/iu, ".pdf");
+    if (metadata.schat_document_update_archived === true) {
+      previous.add(file);
+      continue;
+    }
+    files.add(file);
+    pages += 1;
   }
-  return { files: files.size, pages: docpaths.length };
+  return { files: files.size, pages, previousFiles: previous.size };
 }
 
 function summarizeChecklists(checklists = []) {

@@ -190,14 +190,24 @@ test("document screen hides raw file counts and shows documents and pages", asyn
   assert.match(workspaceDir, /등록 문서 \{documentSummary\.documents\}개 · 총/);
 });
 
-test("저장공간 정리 메뉴는 없고, 현재 사용 중 요약은 답변 근거 보기로, 예전 문서 삭제는 문서 등록 창으로", async () => {
+test("저장공간 정리 메뉴는 없고, 사용 현황은 시스템 상태 한 칸에, 예전 문서 삭제는 문서 등록 창으로", async () => {
   const menu = src("./menu.js");
   assert.doesNotMatch(menu, /label: "저장공간 정리"/);
   assert.match(menu, /if \(key === "storage"\) key = "chunks";/);
   const index = src("./index.jsx");
   assert.doesNotMatch(index, /StorageSection|sections\/Storage/);
+  // 2026-10-17: "현재 사용 중"과 "등록 지침과 체크리스트"를 시스템 상태의 "등록 자료" 한 칸으로 합침.
   const chunks = src("./sections/Chunks.jsx");
-  assert.match(chunks, /<CurrentUsageCard \/>/);
+  assert.doesNotMatch(chunks, /CurrentUsageCard/);
+  const status = src("./sections/Status.jsx");
+  assert.match(status, /title="등록 자료"/);
+  assert.match(status, /<SearchDataRow \/>/);
+  // 2026-10-17 사용자 요청: "예전 판 n개 제외"는 보이지 않게, 지침서 원본 자료는 따로 한 줄.
+  assert.doesNotMatch(status, /previousFiles|개 제외/);
+  assert.match(status, /"챗봇 답변용 문서"/);
+  assert.match(status, /<InfoRow label="지침서 원본 자료">/);
+  assert.match(status, /checklists\?\.review > 0 && \(/);
+  assert.doesNotMatch(status, /label="답변 규칙"|등록 지침과 체크리스트/);
   const card = src("./CurrentUsageCard.jsx");
   for (const label of ["등록 문서", "총 페이지", "검색 데이터", "체크리스트"])
     assert.match(card, new RegExp(label));

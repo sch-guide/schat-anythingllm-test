@@ -187,7 +187,7 @@ function schatAdminEndpoints(app) {
             null,
             null,
             null,
-            { docpath: true }
+            { docpath: true, metadata: true }
           );
           let vectors = null;
           try {
@@ -198,7 +198,7 @@ function schatAdminEndpoints(app) {
           details.push({
             slug: workspace.slug,
             name: workspace.name,
-            documents: summarizeDocuments(documents.map((doc) => doc.docpath)),
+            documents: summarizeDocuments(documents),
             vectors,
             inheritsDefaultPrompt: workspace.openAiPrompt == null,
           });
@@ -209,9 +209,21 @@ function schatAdminEndpoints(app) {
         } catch {
           checklists = null;
         }
+        // 직원 메뉴 '지침서 원본 보기'에 올린 보기 전용 자료(챗봇 답변에는 안 씀).
+        let guidelineLibrary = null;
+        try {
+          const items = require("../utils/guidelineLibraryStore").listLibraryItems();
+          guidelineLibrary = {
+            files: items.length,
+            pages: items.reduce((sum, item) => sum + (Number(item.pageCount) || 0), 0),
+          };
+        } catch {
+          guidelineLibrary = null;
+        }
         response.status(200).json({
           workspaces: details,
           checklists,
+          guidelineLibrary,
           connections: publicConnectionState(),
           // 용도별 모델 이름만(키 없음). 관리자에게 어디에 어떤 모델이 쓰이는지 보여 준다.
           models: require("../utils/schatModels").modelSummary(),

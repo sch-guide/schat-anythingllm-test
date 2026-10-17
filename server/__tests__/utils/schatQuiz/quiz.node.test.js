@@ -145,7 +145,7 @@ test("generated items are checked against the evidence that was sent", () => {
   );
 });
 
-test("department averages need at least five respondents; no ranking", () => {
+test("every department shows its averages even with few respondents; no ranking", () => {
   const attempts = [];
   let id = 1;
   for (let u = 1; u <= 5; u++)
@@ -172,10 +172,11 @@ test("department averages need at least five respondents; no ranking", () => {
   assert.equal(a.enough, true);
   assert.equal(a.averageScore, 80);
   assert.equal(a.averageRate, 80);
-  assert.equal(b.enough, false);
-  assert.equal(b.averageScore, null);
-  assert.equal(b.averageRate, null);
-  assert.equal(b.respondents, null);
+  // 2026-10-17: 응답자가 4명인 부서도 숨기지 않고 평균을 보여 준다.
+  assert.equal(b.enough, true);
+  assert.equal(b.averageScore, 100);
+  assert.equal(b.averageRate, 100);
+  assert.equal(b.respondents, 4);
   // alphabetical, never sorted by score
   assert.deepEqual(
     stats.map((d) => d.department),

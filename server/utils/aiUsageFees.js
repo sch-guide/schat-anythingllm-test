@@ -210,12 +210,12 @@ function estimateChatCost(rows = []) {
   else if (!available)
     reason = unknownModels.size ? UNKNOWN_MODEL : MISSING_USAGE;
   else if (partial)
-    reason = `일부 기록 제외 ${excludedChats}건: ${[
-      noUsageChats && `사용량 기록 없는 과거 기록 ${noUsageChats}건`,
-      unpricedChats && `단가 정보 없음 ${unpricedChats}건`,
+    reason = `계산에서 뺀 기록 ${excludedChats}건(${[
+      noUsageChats && `사용량 없는 예전 기록 ${noUsageChats}건`,
+      unpricedChats && `단가 모르는 모델 ${unpricedChats}건`,
     ]
       .filter(Boolean)
-      .join(", ")}`;
+      .join(", ")})`;
   return {
     estimatedKrw: available ? cost : null,
     chargedQuestions,
