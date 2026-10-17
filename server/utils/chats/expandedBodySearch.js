@@ -193,5 +193,6 @@ module.exports = {
   buildBodySearchQueries,
   mergeBodySearchResults,
   runExpandedBodySearch,
+  sourceIdentity,
 };
 

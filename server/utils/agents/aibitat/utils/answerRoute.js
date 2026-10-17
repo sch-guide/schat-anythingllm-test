@@ -57,6 +57,51 @@ function withoutEarlierTurns(messages = []) {
   ];
 }
 
+// ---- 판단 질문의 상황 검색 (2026-10-17, 사용자 승인) ---------------------------------
+// "통합병동에서 전실 왔는데 … 심전도 모니터링 체크해야 해?"처럼 두 가지(항목 기준 + 병동을
+// 옮긴 날의 평가 기준)를 함께 묻는 질문은 근거 4개가 모두 '심전도' 쪽으로 가서
+// 매뉴얼 7쪽(전입 시 이전 병동 재원 시간부터 평가)·107쪽(전입 병동에서 함께 신고)을 못 찾았다.
+// 판단 질문에 상황 말이 있으면 상황으로 한 번 더 찾아, 처음 결과 뒤에 새 근거를 최대 2개 더한다.
+// 처음 검색 결과·점수·순서는 바꾸지 않는다. SCHAT_SITUATION_SEARCH=off로 끈다.
+const SITUATIONS = [
+  [/전실|전동|전입|전출|옮겨\s*왔|옮겨\s*온/u, "전실 전동 전입"],
+  [/입원|퇴원/u, "입원 퇴원"],
+  [/외박|외출/u, "외박 외출"],
+];
+const PLACE = /[가-힣A-Za-z0-9]*병동|ICU|CCU|중환자실/giu;
+const SITUATION_EXTRA = 2;
+
+/** 상황 검색어(예: "통합병동 전실 전동 전입 평가"). 판단 질문이 아니거나 상황 말이 없으면 null. */
+function situationQuery(question, env = process.env) {
+  if (String(env.SCHAT_SITUATION_SEARCH || "on").toLowerCase() === "off") return null;
+  if (!isJudgmentQuestion(question)) return null;
+  const text = String(question).slice(0, 2000);
+  const words = SITUATIONS.filter(([pattern]) => pattern.test(text)).map(([, word]) => word);
+  if (!words.length) return null;
+  const places = [...new Set((text.match(PLACE) || []).map((place) => place.replace(/에서$|으로$|로$/u, "")))].slice(0, 2);
+  return [...places, ...words, "평가"].join(" ");
+}
+
+/** 처음 결과는 그대로 두고, 상황 검색에서 새로 나온 근거만 뒤에 최대 2개 붙인다. */
+function appendSituationSources(result = {}, extra = {}, keyOf = (source) => source?.id) {
+  const sources = result.sources || [];
+  const seen = new Set(sources.map(keyOf));
+  const added = (extra.sources || [])
+    .filter((source) => {
+      const key = keyOf(source);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, SITUATION_EXTRA);
+  if (!added.length) return result;
+  return {
+    ...result,
+    sources: [...sources, ...added],
+    contextTexts: [...(result.contextTexts || []), ...added.map((source) => source.text).filter(Boolean)],
+  };
+}
+
 /** 한 번의 호출 동안만 모델을 바꾸고, 끝나면(실패해도) 원래대로 돌린다. */
 async function withModel(provider, { model, reasoningEffort }, run) {
   const before = { model: provider.model, reasoningEffort: provider.reasoningEffort };
@@ -110,5 +155,7 @@ module.exports = {
   judgmentRoute,
   withModel,
   withoutEarlierTurns,
+  situationQuery,
+  appendSituationSources,
   notFoundGate,
 };

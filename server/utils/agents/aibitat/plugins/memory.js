@@ -279,6 +279,20 @@ const memory = {
                     relatedImageSources: result.relatedImageSources || [],
                   };
               }
+              // 판단 질문("…전실 왔는데 … 체크해야 해?")은 상황(전실·입원·외박 등)으로 한 번 더
+              // 찾아 새 근거를 최대 2개 뒤에 더한다(answerRoute.situationQuery).
+              if (!result?.message) {
+                const { situationQuery, appendSituationSources } = require("../utils/answerRoute");
+                const { sourceIdentity } = require("../../../chats/expandedBodySearch");
+                const situation = situationQuery(
+                  String(this.super.handlerProps?.invocation?.prompt || query).replace(/^@agent\s*/u, "")
+                );
+                if (situation) {
+                  const extra = await searchOnce(situation).catch(() => null);
+                  if (extra && !extra.message)
+                    result = appendSituationSources(result, extra, sourceIdentity);
+                }
+              }
               if (result.sources?.length) {
                 const { enrichDirectorySources } = require("../utils/directoryEvidence");
                 const contactQuestion=String(this.super.handlerProps.invocation.prompt || query).replace(/^@agent\s*/u,'');

@@ -147,3 +147,27 @@ test("판단 모델이 실패해도 원래 모델로 되돌린다", async () => 
   assert.equal(provider.model, "gemini-3.5-flash-lite");
   assert.equal(provider.reasoningEffort, undefined);
 });
+
+// 2026-10-17(사용자 승인): 판단 질문의 상황(전실·입원·외박 등)으로 한 번 더 찾기.
+const { situationQuery, appendSituationSources } = require("../../../../utils/agents/aibitat/utils/answerRoute");
+
+test("판단 질문에 상황 말이 있을 때만 상황 검색어를 만든다", () => {
+  assert.equal(
+    situationQuery("통합병동에서 전실 왔는데 가상 모니터링은 전실 오기 전에만 유지했어. 전실 와서 체크해야 해?", {}),
+    "통합병동 전실 전동 전입 평가"
+  );
+  assert.equal(situationQuery("외박 다녀왔는데 오늘 가상 투약 체크해도 돼?", {}), "외박 외출 평가");
+  assert.equal(situationQuery("어제 낙상했는데 오늘도 낙상 코드 입력해야 해?", {}), null); // 상황 말 없음
+  assert.equal(situationQuery("가상병동 전실 절차 알려줘", {}), null); // 판단 질문 아님
+  assert.equal(situationQuery("통합병동에서 전실 왔는데 체크해야 해?", { SCHAT_SITUATION_SEARCH: "off" }), null);
+});
+
+test("처음 결과는 그대로 두고 상황 검색의 새 근거만 최대 2개 뒤에 붙인다", () => {
+  const first = { sources: [{ id: "a", text: "A" }, { id: "b", text: "B" }], contextTexts: ["A", "B"], other: 1 };
+  const extra = { sources: [{ id: "b", text: "B" }, { id: "c", text: "C" }, { id: "d", text: "D" }, { id: "e", text: "E" }] };
+  const merged = appendSituationSources(first, extra);
+  assert.deepEqual(merged.sources.map((s) => s.id), ["a", "b", "c", "d"]);
+  assert.deepEqual(merged.contextTexts, ["A", "B", "C", "D"]);
+  assert.equal(merged.other, 1);
+  assert.equal(appendSituationSources(first, { sources: [{ id: "a" }] }), first);
+});
