@@ -1,8 +1,4 @@
 import { createPersonalSession } from "./checklistPersonalSession.js";
-import {
-  maskChecklistOther,
-  maskChecklistPatient,
-} from "./checklistPatientMask.js";
 
 const DAY = 86400000;
 const blank = () => ({
@@ -49,6 +45,8 @@ export function hasSavedPopup(pathname, storage) {
 }
 
 // Only standalone windows use this store. It contains no authentication token.
+// 2026-10-17 사용자 결정: 이 PC 저장본에는 적은 그대로(홍길동) 두고, 서버에는 가린 이름만 보낸다
+// (가리기는 createPersonalSession이 서버로 보낼 때 한다).
 export function createPopupSession({
   api,
   notify,
@@ -77,8 +75,8 @@ export function createPopupSession({
         key,
         JSON.stringify({
           checks: state.checks,
-          patient: maskChecklistPatient(state.patient),
-          other: maskChecklistOther(state.other),
+          patient: state.patient,
+          other: state.other,
           updatedAt: state.updatedAt,
           expiresAt: state.expiresAt,
           checklist,
@@ -109,7 +107,15 @@ export function createPopupSession({
       if (next.ready || next.error === "EXPIRED") persist();
       publish();
     },
-    clock
+    clock,
+    {
+      // 새로고침 뒤 서버의 가린 이름 대신 이 PC 저장본의 원래 글자를 보여 준다.
+      read: () => ({
+        patient: cached?.patient,
+        other: cached?.other,
+        expiresAt: cached?.expiresAt,
+      }),
+    }
   );
   const result = {
     setChecklist(value) {
@@ -131,8 +137,6 @@ export function createPopupSession({
       server.dispose();
       state = {
         ...state,
-        patient: maskChecklistPatient(state.patient),
-        other: maskChecklistOther(state.other),
         ready: true,
         saving: false,
         error: null,
@@ -173,14 +177,8 @@ export function createPopupSession({
       persist();
       publish();
     },
-    mask() {
-      if (localOnly) {
-        state.patient = maskChecklistPatient(state.patient);
-        state.other = maskChecklistOther(state.other);
-        persist();
-        publish();
-      } else server.mask();
-    },
+    // 화면·PC 저장본의 글자는 가리지 않는다. 예전 호출과 맞추려고 남겨 둠.
+    mask() {},
     save() {
       if (localOnly) {
         result.mask();

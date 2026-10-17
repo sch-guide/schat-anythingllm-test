@@ -46,7 +46,8 @@ const storage = () => {
     removeItem: (k) => m.delete(k),
   };
 };
-test("logout preserves masked contents across reload and never writes to server again", async () => {
+// 2026-10-17 사용자 결정: 로그아웃 후 이 PC 별도 창에는 적은 그대로(홍길동) 남긴다.
+test("logout preserves typed contents across reload and never writes to server again", async () => {
   const store = storage();
   let reads = 0,
     writes = 0,
@@ -81,7 +82,7 @@ test("logout preserves masked contents across reload and never writes to server 
   await s.load();
   s.edit({ patient: "612호 / 홍길동" });
   s.detach();
-  assert.equal(view.patient, "612호 / 홍○동");
+  assert.equal(view.patient, "612호 / 홍길동");
   assert.equal(view.localOnly, true);
   s.edit({ other: "다음 직원" });
   await s.save();
@@ -96,6 +97,7 @@ test("logout preserves masked contents across reload and never writes to server 
   });
   await r.load();
   assert.equal(view.other, "다음 직원");
+  assert.equal(view.patient, "612호 / 홍길동");
   assert.equal(view.localOnly, true);
   assert.equal(reads, 1);
   now += day;

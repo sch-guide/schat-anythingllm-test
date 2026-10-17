@@ -11,6 +11,9 @@ import {
 import {
   createPersonalSession,
   clearLegacyChecklistCopies,
+  clearExpiredLocalNames,
+  createLocalNames,
+  localNamesKey,
 } from "@/utils/checklistPersonalSession";
 
 const blank = () => ({
@@ -47,6 +50,7 @@ export default function useChecklistPersonalState(
   const visible = loadedIdentity === identity ? state : blank();
   useEffect(() => {
     clearLegacyChecklistCopies(window.localStorage);
+    clearExpiredLocalNames(window.localStorage);
     if (!popup) setState(blank());
     setLoadedIdentity(identity);
     setLeftover(null);
@@ -88,7 +92,15 @@ export default function useChecklistPersonalState(
           key: popupStorageKey(slug, checklistId),
           owner: token ? String(user?.id || "") : null,
         })
-      : createPersonalSession(api, notify);
+      : createPersonalSession(
+          api,
+          notify,
+          Date.now,
+          createLocalNames(
+            window.localStorage,
+            localNamesKey(user?.id, slug, checklistId)
+          )
+        );
     sessionRef.current = session;
     void session.load();
     const checkAuth = (event) => {

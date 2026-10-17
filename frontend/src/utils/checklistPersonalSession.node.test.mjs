@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import {
   createPersonalSession,
   clearLegacyChecklistCopies,
+  clearExpiredLocalNames,
+  createLocalNames,
+  localNamesKey,
 } from "./checklistPersonalSession.js";
 test("network payload masks patient name but keeps free memo", async () => {
   let sent;
@@ -22,6 +25,7 @@ test("network payload masks patient name but keeps free memo", async () => {
   assert.equal(sent.patient, "612호 / 홍○동");
   assert.equal(sent.other, "합성 메모");
 });
+// 2026-10-17 사용자 결정: 서버로는 가려 보내고, 이 PC 화면에는 적은 그대로 둔다.
 test("기타메모도 이름처럼 보이는 부분만 가려 보내고 간호 용어는 그대로 둔다", async () => {
   let sent;
   let shown;
@@ -39,7 +43,36 @@ test("기타메모도 이름처럼 보이는 부분만 가려 보내고 간호 �
   session.edit({ patient: "", other: "612호 홍길동 NPO, 낙상 고위험 재평가" });
   await session.save();
   assert.equal(sent.other, "612호 홍○동 NPO, 낙상 고위험 재평가");
-  assert.equal(shown.other, "612호 홍○동 NPO, 낙상 고위험 재평가");
+  assert.equal(shown.other, "612호 홍길동 NPO, 낙상 고위험 재평가");
+});
+test("새로고침 뒤에는 이 PC에 둔 원래 글자를, 다른 PC에서 바뀐 내용은 서버 값을 보여 준다", async () => {
+  const store = new Map();
+  const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k), get length() { return store.size; }, key: (i) => [...store.keys()][i] };
+  const names = createLocalNames(storage, localNamesKey(7, "ws", "c1"));
+  let server = null;
+  const api = {
+    read: async () => server,
+    write: async (body) => (server = { ...body, revision: "r", updatedAt: 1, expiresAt: Date.now() + 86400000 }),
+  };
+  let shown;
+  const first = createPersonalSession(api, (next) => (shown = next), Date.now, names);
+  await first.load();
+  first.edit({ patient: "홍길동", other: "612호 김철수 NPO" });
+  await first.save();
+  assert.equal(server.patient, "홍○동");
+  assert.equal(server.other, "612호 김○수 NPO");
+  assert.equal(shown.patient, "홍길동");
+  const again = createPersonalSession(api, (next) => (shown = next), Date.now, names);
+  await again.load();
+  assert.equal(shown.patient, "홍길동");
+  assert.equal(shown.other, "612호 김철수 NPO");
+  server = { ...server, patient: "이○민" }; // 다른 PC에서 고침
+  const other = createPersonalSession(api, (next) => (shown = next), Date.now, names);
+  await other.load();
+  assert.equal(shown.patient, "이○민");
+  assert.equal(shown.other, "612호 김철수 NPO");
+  clearExpiredLocalNames(storage, () => Date.now() + 2 * 86400000);
+  assert.equal(store.size, 0);
 });
 test("conflict is not retried against a new revision", async () => {
   let writes = 0;
