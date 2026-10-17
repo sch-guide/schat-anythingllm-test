@@ -55,6 +55,7 @@ export const EVENT_LABELS = {
 const CHECKLIST_ISSUE_TEXT = {
   "pdf-layout-unavailable": "원본 PDF를 읽지 못함",
   "layout-not-recognised": "표 모양을 읽지 못함",
+  "region-not-recognised": "한 쪽의 양식 중 일부를 읽지 못함",
   "extract-failed": "추출 오류",
   "read-failed": "쪽 기록을 읽지 못함",
   "save-failed": "저장 오류",

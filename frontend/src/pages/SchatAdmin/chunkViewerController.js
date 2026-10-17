@@ -11,6 +11,8 @@ export function createChunkViewerController(api, workspaceId) {
     chunkOffset: 0,
     chunkHistory: [],
     selectedChat: null,
+    // 통계에서 누른 항목으로 고른 질문만 볼 때의 조건(없으면 전체 질문).
+    filter: null,
     loading: {},
     errors: {},
   };
@@ -116,7 +118,21 @@ export function createChunkViewerController(api, workspaceId) {
         loading: { ...state.loading, detail: false },
         errors: { ...state.errors, detail: "" },
       });
-      return read("chats", () => api.chats(workspaceId, offset));
+      const filter = state.filter;
+      return read("chats", () =>
+        filter ? api.chats(workspaceId, offset, filter) : api.chats(workspaceId, offset)
+      );
+    },
+    async applyFilter(filter, chatId = null) {
+      update({ filter: filter || null });
+      const list = await controller.chatPage(0);
+      if (chatId && list?.items?.some((chat) => chat.id === chatId))
+        return controller.openChat(chatId);
+      if (list?.items?.length) return controller.openChat(list.items[0].id);
+    },
+    clearFilter() {
+      update({ filter: null });
+      return controller.chatPage(0);
     },
     openChat(id) {
       update({ selectedChat: id });

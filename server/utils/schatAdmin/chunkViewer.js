@@ -1,4 +1,10 @@
-const { maskSensitive } = require("./usageStats");
+const {
+  maskSensitive,
+  usageFilters,
+  chatOutcome,
+  topicLabel,
+  sourceDocument: citedDocumentName,
+} = require("./usageStats");
 
 const PAGE_SIZE = 50;
 const MAX_SCAN = 1000;
@@ -8,6 +14,13 @@ const REFERENCE_SCAN = 3000;
 const REFERENCE_TTL_MS = 60 * 1000;
 const REFERENCE_ITEMS = 20;
 const ANSWER_MAX_TEXT = 60000;
+// 통계에서 고른 조건(문서·주제·검색 실패 등)으로 질문을 찾을 때 읽는 최대 질문 수.
+const FILTER_SCAN = 5000;
+// 질문한 직원은 부서와 사번만 보여 준다(이름은 넣지 않음, 2026-10-17 사용자 결정).
+const ASKER_SELECT = {
+  employee_number: true,
+  department: { select: { name: true } },
+};
 function fail(status, message) {
   const error = new Error(message);
   error.status = status;
@@ -348,7 +361,42 @@ function createChunkViewer({
       id: row.id,
       question: maskSensitive(row.prompt).slice(0, 300),
       createdAt: date(row.createdAt),
+      department: text(row.users?.department?.name, 60) || null,
+      employeeNumber: text(row.users?.employee_number, 30) || null,
     };
+  }
+  /**
+   * 통계 화면에서 넘어온 조건. 조건이 없으면 null(전체 목록).
+   * kind: fail(검색 실패) | notfound(근거 없음 응답), document: 인용 문서 이름,
+   * topic: 많이 검색된 주제 이름, startDate/endDate·departmentIds: 통계와 같은 기간·부서.
+   */
+  function chatFilter(query = {}) {
+    const kind = ["fail", "notfound"].includes(query.kind) ? query.kind : null;
+    const document = text(query.document, 300) || null;
+    const topic = text(query.topic, 400) || null;
+    if (!kind && !document && !topic) return null;
+    const departmentIds = String(query.departmentIds || "")
+      .split(",")
+      .filter(Boolean);
+    const range =
+      query.startDate || query.endDate
+        ? usageFilters("custom", {
+            startDate: query.startDate,
+            endDate: query.endDate,
+            departmentIds,
+          })
+        : usageFilters("90d", { departmentIds });
+    return { kind, document, topic, ...range };
+  }
+  function matchesFilter(row, filter) {
+    const response = parseObject(row.response);
+    if (filter.kind && chatOutcome(response) !== filter.kind) return false;
+    const sources = Array.isArray(response.sources) ? response.sources : [];
+    if (filter.document && !sources.some((s) => citedDocumentName(s) === filter.document))
+      return false;
+    if (filter.topic && !sources.some((s) => topicLabel(s) === filter.topic))
+      return false;
+    return true;
   }
   return {
     async documents(workspace, query = {}) {
@@ -471,12 +519,38 @@ function createChunkViewer({
     },
     async chats(workspace, query = {}) {
       const offset = offsetOf(query.offset);
+      const filter = chatFilter(query);
+      if (filter) {
+        const scanned = await db().workspace_chats.findMany({
+          where: {
+            workspaceId: workspace.id,
+            api_session_id: null,
+            createdAt: { gte: filter.since, lt: filter.until },
+            ...(filter.departmentIds.length
+              ? { users: { department_id: { in: filter.departmentIds } } }
+              : {}),
+          },
+          orderBy: { id: "desc" },
+          take: FILTER_SCAN,
+          select: { id: true, prompt: true, response: true, createdAt: true, users: { select: ASKER_SELECT } },
+        });
+        const matched = scanned.filter((row) => matchesFilter(row, filter));
+        return {
+          ...page(
+            matched.slice(offset, offset + PAGE_SIZE).map(chatSummary),
+            offset + PAGE_SIZE,
+            matched.length > offset + PAGE_SIZE
+          ),
+          total: matched.length,
+          scanLimited: scanned.length >= FILTER_SCAN,
+        };
+      }
       const rows = await db().workspace_chats.findMany({
         where: { workspaceId: workspace.id, api_session_id: null },
         orderBy: { id: "desc" },
         skip: offset,
         take: PAGE_SIZE + 1,
-        select: { id: true, prompt: true, createdAt: true },
+        select: { id: true, prompt: true, createdAt: true, users: { select: ASKER_SELECT } },
       });
       return page(
         rows.slice(0, PAGE_SIZE).map(chatSummary),
@@ -497,7 +571,7 @@ function createChunkViewer({
           id: Number(rawId),
           api_session_id: null,
         },
-        select: { id: true, prompt: true, response: true, createdAt: true },
+        select: { id: true, prompt: true, response: true, createdAt: true, users: { select: ASKER_SELECT } },
       });
       if (!row) fail(404, "이 작업 공간에서 질문 기록을 찾을 수 없습니다.");
       const response = parseObject(row.response);

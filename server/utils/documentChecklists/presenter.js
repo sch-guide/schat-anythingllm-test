@@ -40,9 +40,25 @@ function checklistAutoKind(checklist = {}) {
   return formKind || "other";
 }
 
-function searchNames(checklist, synonymGroups = []) {
+// 예전 추출에서 한 쪽의 두 양식이 합쳐지며 본문 글자("Prepare", "수술실/S-car",
+// "금식여부 MN NPO …")가 이름에 들어간 체크리스트가 있다 (2026-10-15).
+// 이런 이름은 질문의 흔한 낱말에 걸려 엉뚱한 체크리스트를 띄우므로 직원 화면에서는 뺀다.
+// 저장된 내용과 관리자 화면은 그대로 둔다.
+const FORM_TEXT =
+  /금식여부|ivline|prepare|opgown|s-?car|이동수단|(?:검사|수술|시술)전준비|예방적항생제|npo|수술실|동의서|관찰사항|x-?ray및lab|표시$|시행$|착용$/u;
+
+function isFormTextAlias(name) {
+  return FORM_TEXT.test(String(name || "").normalize("NFKC").toLowerCase().replace(/\s+/gu, ""));
+}
+
+function searchNames(checklist, synonymGroups = [], sourceNames = []) {
   const aliases = Array.isArray(checklist.aliases) ? checklist.aliases : [];
-  const everyday = searchAliasesFor(checklist);
+  // 원문 쪽의 수술명·시술명·병명(sourceNames.js). 저장된 이름에 없는 것만 더한다.
+  const own = new Set(aliases.map((name) => String(name).normalize("NFKC").toLowerCase().replace(/\s+/g, "")));
+  const fromSource = (Array.isArray(sourceNames) ? sourceNames : []).filter(
+    (name) => !own.has(String(name).normalize("NFKC").toLowerCase().replace(/\s+/g, ""))
+  );
+  const everyday = [...searchAliasesFor(checklist), ...fromSource];
   // Active synonyms (동의어 사전): the same names with one word swapped.
   return [
     ...everyday,
@@ -84,15 +100,25 @@ function reviewReasons(checklist = {}) {
 
 function toPublicChecklist(
   checklist,
-  { originalStorageRoot, synonymGroups = [] } = {}
+  {
+    originalStorageRoot,
+    synonymGroups = [],
+    sourceNames = [],
+    sourceTitle = "",
+    hideFormTextAliases = false,
+  } = {}
 ) {
   if (!checklist) return null;
+  const stored = Array.isArray(checklist.aliases) ? checklist.aliases : [];
+  const aliases = hideFormTextAliases
+    ? stored.filter((name) => !isFormTextAlias(name))
+    : stored;
   return {
     id: checklist.id,
-    title: checklist.title,
-    aliases: Array.isArray(checklist.aliases) ? checklist.aliases : [],
+    title: hideFormTextAliases && sourceTitle ? sourceTitle : checklist.title,
+    aliases,
     // Extra everyday names used only to find the checklist from a question.
-    searchAliases: searchNames(checklist, synonymGroups),
+    searchAliases: searchNames({ ...checklist, aliases }, synonymGroups, sourceNames),
     sections: Array.isArray(checklist.sections) ? checklist.sections : [],
     active: checklist.status === "active" && checklist.active !== false,
     status: ["needs_review", "hidden"].includes(checklist.status)
@@ -130,4 +156,5 @@ module.exports = {
   checklistAutoKind,
   checklistDisplayKind,
   toPublicChecklist,
+  isFormTextAlias,
 };

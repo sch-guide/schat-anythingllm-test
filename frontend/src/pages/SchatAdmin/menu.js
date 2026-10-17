@@ -28,9 +28,11 @@ export const SCHAT_ADMIN_SECTIONS = [
       "직원 개인계정(부서·사번·이름)을 추가·일괄등록하고 부서, 권한, 사용 상태와 비밀번호를 관리합니다.",
   },
   {
+    // 2026-10-17 '사용 통계'와 '답변 근거 보기'를 합침(예전 주소 usage도 여기로).
     key: "chunks",
-    label: "답변 근거 보기",
-    description: "지침과 질문에서 답변의 근거를 확인합니다.",
+    label: "질문·답변 기록",
+    description:
+      "직원 질문의 통계를 보고, 질문별로 직원이 본 답변과 질문한 직원의 부서·사번을 확인합니다."
   },
   {
     key: "reports",
@@ -61,12 +63,6 @@ export const SCHAT_ADMIN_SECTIONS = [
     description: "같은 뜻의 말을 묶어 두면, 어떤 말로 물어도 지침을 잘 찾아요.",
   },
   {
-    key: "usage",
-    label: "사용 통계",
-    description:
-      "직원들이 무엇을 물었는지, 어떤 지침이 많이 쓰였는지 기간별로 봅니다. 개인별 기록은 보여주지 않습니다.",
-  },
-  {
     key: "status",
     label: "시스템 상태",
     description: "등록 문서, 체크리스트, 검색 데이터와 연결 상태를 확인합니다.",
@@ -77,6 +73,8 @@ export function findSchatAdminSection(key) {
   if (key === "connections") key = "status";
   // 저장공간 정리 메뉴는 없앰: 예전 주소는 현재 사용 중 요약이 있는 답변 근거 보기로.
   if (key === "storage") key = "chunks";
+  // 사용 통계는 질문·답변 기록의 [통계] 탭으로 합침.
+  if (key === "usage") key = "chunks";
   return (
     SCHAT_ADMIN_SECTIONS.find((section) => section.key === key) ||
     SCHAT_ADMIN_SECTIONS[0]

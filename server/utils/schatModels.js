@@ -8,6 +8,13 @@ const MODEL_NAME = /^gemini-[a-zA-Z0-9._-]+$/u;
 
 const PURPOSES = Object.freeze({
   answer: { envKey: "GEMINI_LLM_MODEL_PREF", label: "직원 답변" },
+  // 환자 상황을 적고 판단을 묻는 질문, 답변 모델이 근거를 두고도 못 찾은 질문
+  // (utils/agents/aibitat/utils/answerRoute.js). 생각 정도는 SCHAT_JUDGMENT_REASONING.
+  judgment: {
+    envKey: "SCHAT_JUDGMENT_MODEL",
+    label: "판단 질문 답변",
+    fixedDefault: "gemini-3.8-flash",
+  },
   quiz: { envKey: "SCHAT_QUIZ_MODEL", label: "퀴즈 생성", followsAnswer: true },
   synonym: {
     envKey: "SCHAT_SYNONYM_MODEL",

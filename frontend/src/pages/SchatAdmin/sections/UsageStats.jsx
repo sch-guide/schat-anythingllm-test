@@ -13,8 +13,10 @@ import { Card, Help, InfoRow, Loading, Notice } from "../ui";
 import DepartmentPicker from "../DepartmentPicker";
 import { selectionError } from "../usageSelection";
 
-// "사용 통계": 무엇을 물었는지 중심. 개인별 목록이나 사람끼리 비교하는 표시는 만들지 않는다.
+// '질문·답변 기록 > 통계' 탭: 무엇을 물었는지 중심. 개인별 목록이나 사람끼리 비교하는 표시는 만들지 않는다.
 // 서버가 질문 원문의 환자 정보 같은 숫자를 가린 뒤 보낸다.
+// onPick이 있으면 주제·문서·검색 실패·근거 없음 항목을 눌러 '질문별 답변' 탭에서 그 질문만 본다
+// (부서별 사용량은 누를 수 없음).
 
 export const USAGE_PERIODS = [
   ["today", "오늘"],
@@ -54,7 +56,21 @@ function Chart({ data, dataKey, label, height = 200 }) {
   );
 }
 
-function QuestionList({ items = [], total = 0, empty }) {
+/** 누를 수 있으면 링크처럼 보이는 버튼, 아니면 글자 그대로 */
+function PickLabel({ onClick, children }) {
+  if (!onClick) return children;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="min-w-0 break-words text-left text-sky-500 underline decoration-sky-500/40 underline-offset-2 hover:decoration-sky-500"
+    >
+      {children}
+    </button>
+  );
+}
+
+function QuestionList({ items = [], total = 0, empty, onPick }) {
   if (!items.length)
     return <p className="text-sm text-theme-text-secondary">{empty}</p>;
   return (
@@ -71,7 +87,9 @@ function QuestionList({ items = [], total = 0, empty }) {
             className="flex items-start justify-between gap-3 border-b border-theme-sidebar-border py-1.5 last:border-b-0"
           >
             <span className="min-w-0 break-words text-sm text-theme-text-primary">
-              {item.question}
+              <PickLabel onClick={onPick ? () => onPick(item) : null}>
+                {item.question}
+              </PickLabel>
             </span>
             <span className="shrink-0 text-xs text-theme-text-secondary">
               {item.date}
@@ -83,7 +101,7 @@ function QuestionList({ items = [], total = 0, empty }) {
   );
 }
 
-export default function UsageStatsSection() {
+export default function UsageStatsSection({ onPick = null } = {}) {
   const [period, setPeriod] = useState("7d");
   const [stats, setStats] = useState(null);
   const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -92,6 +110,17 @@ export default function UsageStatsSection() {
   const [departmentIds, setDepartmentIds] = useState([]);
   const [departments, setDepartments] = useState([]);
   const validation = selectionError(period, startDate, endDate, today);
+  // 누른 항목 + 지금 통계와 같은 기간·부서를 '질문별 답변' 탭으로 넘긴다.
+  const pickWith = (values) =>
+    onPick && stats?.selection
+      ? () =>
+          onPick({
+            ...values,
+            startDate: stats.selection.startDate,
+            endDate: stats.selection.endDate,
+            departmentIds: stats.selection.departmentIds || [],
+          })
+      : null;
 
   useEffect(() => {
     let active = true;
@@ -135,7 +164,7 @@ export default function UsageStatsSection() {
       <Help label="대상 부서 도움말" heading={<span>대상 부서</span>}>{[
         "현재 계정의 부서 기준으로 여러 부서를 골라요.",
         "질문 목록은 최근 90일 이내 최대 100건까지 보여요.",
-        "인원이 적은 부서도 모두 집계해요. 누가 질문했는지는 보이지 않아요.",
+        "인원이 적은 부서도 모두 집계해요. 통계에는 누가 질문했는지 보이지 않아요.",
       ]}</Help>
       <DepartmentPicker departments={departments} selected={departmentIds} onChange={setDepartmentIds} />
       {validation && <p role="alert" className="text-red-500">{validation}</p>}
@@ -192,12 +221,22 @@ export default function UsageStatsSection() {
             help={[
               "답변에 인용된 지침 문서의 목차를 기준으로 해요. 목차가 없으면 쪽을 사용해요.",
               "많이 인용된 주제 10개를 보여요.",
+              "주제를 누르면 그 근거를 쓴 질문을 질문별 답변 탭에서 보여요.",
             ]}
           >
             {stats.topics.length ? (
               <div>
                 {stats.topics.map((topic) => (
-                  <InfoRow key={topic.name} label={topic.name}>
+                  <InfoRow
+                    key={topic.name}
+                    label={
+                      <PickLabel
+                        onClick={pickWith({ topic: topic.name, label: `주제: ${topic.name}` })}
+                      >
+                        {topic.name}
+                      </PickLabel>
+                    }
+                  >
                     {n(topic.count)}건
                   </InfoRow>
                 ))}
@@ -214,12 +253,22 @@ export default function UsageStatsSection() {
             help={[
               "문서별로 답변의 근거로 쓰인 질문 수를 보여요.",
               "이 기간에 한 번도 인용되지 않은 문서도 확인해요.",
+              "문서를 누르면 그 문서를 인용한 질문을 질문별 답변 탭에서 보여요.",
             ]}
           >
             {stats.documents.cited.length ? (
               <div>
                 {stats.documents.cited.map((doc) => (
-                  <InfoRow key={doc.name} label={doc.name}>
+                  <InfoRow
+                    key={doc.name}
+                    label={
+                      <PickLabel
+                        onClick={pickWith({ document: doc.name, label: `문서: ${doc.name}` })}
+                      >
+                        {doc.name}
+                      </PickLabel>
+                    }
+                  >
                     {n(doc.count)}건
                   </InfoRow>
                 ))}
@@ -247,7 +296,7 @@ export default function UsageStatsSection() {
             title={`검색 실패 질문 ${n(stats.searchFailures.total)}건`}
             help={[
               "실제로 답을 찾지 못한 질문이에요.",
-              "질문 내용과 날짜만 보여요.",
+              "질문 내용과 날짜만 보여요. 누르면 질문별 답변 탭에서 실제 답변을 보여요.",
               "환자 정보로 보이는 숫자는 ***로 가려요.",
             ]}
           >
@@ -262,6 +311,11 @@ export default function UsageStatsSection() {
               items={stats.searchFailures.items}
               total={stats.searchFailures.total}
               empty="이 기간에 해당 질문이 없습니다."
+              onPick={
+                pickWith({})
+                  ? (item) => pickWith({ kind: "fail", label: "검색 실패 질문", chatId: item.id })()
+                  : null
+              }
             />
           </Card>
 
@@ -270,12 +324,18 @@ export default function UsageStatsSection() {
             help={[
               "근거를 찾았지만 ‘지침에서 확인되지 않는다’고 답한 질문이에요.",
               "검색 실패 질문과 겹치지 않아요.",
+              "누르면 질문별 답변 탭에서 실제 답변을 보여요.",
             ]}
           >
             <QuestionList
               items={stats.notFoundAnswers.items}
               total={stats.notFoundAnswers.total}
               empty="이 기간에 해당 질문이 없습니다."
+              onPick={
+                pickWith({})
+                  ? (item) => pickWith({ kind: "notfound", label: "근거 없음 응답", chatId: item.id })()
+                  : null
+              }
             />
           </Card>
 
@@ -283,7 +343,7 @@ export default function UsageStatsSection() {
             title="부서별 사용량"
             help={[
               "부서별 질문한 사용자 수와 질문 수를 가나다순으로 보여요.",
-              "인원이 적은 부서도 포함하며, 개인별 기록은 보이지 않아요.",
+              "인원이 적은 부서도 포함하며, 여기서는 개인별 기록이 보이지 않아요.",
             ]}
           >
             {stats.departments.length ? (

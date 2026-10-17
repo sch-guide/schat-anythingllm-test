@@ -280,6 +280,8 @@ class GeminiProvider extends Provider {
         messages: this.#formatMessages(messages),
         stream: true,
         stream_options: { include_usage: true },
+        // 판단 질문용 모델의 생각 정도(answerRoute.js). 없으면 모델 기본값.
+        ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
         ...(Array.isArray(functions) && functions?.length > 0
           ? {
               tools: this.#formatFunctions(functions),
@@ -409,6 +411,7 @@ class GeminiProvider extends Provider {
         model: this.model,
         stream: false,
         messages: this.#formatMessages(messages),
+        ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
         ...(Array.isArray(functions) && functions?.length > 0
           ? {
               tools: this.#formatFunctions(functions),

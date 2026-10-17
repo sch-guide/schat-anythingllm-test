@@ -179,6 +179,7 @@ const viewDeps = () => ({
   "../ui": load("./ui.jsx"),
   "../CurrentUsageCard": { __esModule: true, default: () => null },
   "./ChatReplay": { __esModule: true, default: () => null },
+  "./UsageStats": { __esModule: true, default: () => null },
   "@/models/chunkViewer": { default: {} },
   "../chunkViewerController": { createChunkViewerController },
 });
@@ -188,11 +189,15 @@ test("답변 근거 보기는 질문 목록과 답변 원문만 보여 주고 �
     controller: {}, workspace: { name: "시험", slug: "ws" },
     state: {
       loading: {}, errors: {}, chatOffset: 0, selectedChat: 7,
-      chats: { ...empty, items: [{ id: 7, question: "중심정맥관 관리", createdAt: "2026-10-14T00:00:00Z" }] },
-      detail: { id: 7, question: "중심정맥관 관리", sources: [], answer: { available: true, text: "답", sources: [], missing: [] } },
+      chats: { ...empty, items: [{ id: 7, question: "중심정맥관 관리", createdAt: "2026-10-14T00:00:00Z", department: "92병동", employeeNumber: "20152" }] },
+      detail: { id: 7, question: "중심정맥관 관리", department: "92병동", employeeNumber: "20152", sources: [], answer: { available: true, text: "답", sources: [], missing: [] } },
     },
   }));
   assert.match(html, /질문 기록/);
+  // 2026-10-17: 질문한 직원은 부서·사번만(목록과 답변 위 모두), 이름은 없음.
+  assert.match(html, /92병동 · 사번 20152/);
+  assert.match(html, /data-testid="chat-asker"/);
+  assert.match(html, /이름은 보이지 않아요/);
   assert.match(html, /중심정맥관 관리/);
   assert.match(html, /직원이 본 답변/);
   assert.doesNotMatch(html, /지침별로 보기|질문별로 보기|검색 근거 상세 보기|답할 때 참고한 내용|근거 문단/);
@@ -220,4 +225,45 @@ test("질문을 누르면 그 답변을 불러오고, 화면 시작 때 지침 �
   }
   await find(tree, (el) => el.type === "button" && el.props["aria-pressed"] !== undefined).props.onClick();
   assert.deepEqual(opened, [3]);
+});
+test("통계에서 고른 조건으로 질문 목록을 다시 부르고, 누른 질문을 바로 열며 조건을 지울 수 있음", async () => {
+  const calls = [];
+  const opened = [];
+  const controller = make({
+    documents: async () => docs,
+    chats: async (_, offset, filter) => {
+      calls.push(filter || null);
+      return { ...empty, items: filter ? [{ id: 4, question: "lovectomy" }, { id: 9, question: "MP 번호" }] : [{ id: 1, question: "전체" }] };
+    },
+    chat: async (_, id) => { opened.push(id); return { id, question: "", sources: [] }; },
+  });
+  await controller.start({ documents: false });
+  const filter = { kind: "fail", label: "검색 실패 질문", startDate: "2026-10-11", endDate: "2026-10-17", departmentIds: [] };
+  await controller.applyFilter(filter, 9);
+  assert.deepEqual(calls, [null, filter]);
+  assert.deepEqual(opened, [9]);
+  assert.equal(controller.getSnapshot().filter.label, "검색 실패 질문");
+  await controller.clearFilter();
+  assert.equal(controller.getSnapshot().filter, null);
+  assert.deepEqual(calls.at(-1), null);
+});
+test("질문 목록 조건은 정해진 값만 주소에 넣는다", async () => {
+  const source = readFileSync(new URL("../../models/chunkViewer.js", import.meta.url), "utf8");
+  const code = transformSync(source.replace(/^import .*$/gm, ""), { loader: "js", format: "cjs" }).code;
+  const mod = { exports: {} };
+  new Function("module", "exports", code)(mod, mod.exports);
+  assert.deepEqual(mod.exports.chatFilterQuery(null), {});
+  assert.deepEqual(
+    mod.exports.chatFilterQuery({ document: "수술.pdf", label: "문서: 수술.pdf", startDate: "2026-10-11", endDate: "2026-10-17", departmentIds: [3, 5], other: "x" }),
+    { document: "수술.pdf", startDate: "2026-10-11", endDate: "2026-10-17", departmentIds: "3,5" }
+  );
+});
+test("통계 탭: 주제·문서·검색 실패·근거 없음은 누를 수 있고, 부서별 사용량은 누를 수 없음", () => {
+  const source = readFileSync(new URL("./sections/UsageStats.jsx", import.meta.url), "utf8");
+  assert.match(source, /pickWith\(\{ topic: topic\.name/);
+  assert.match(source, /pickWith\(\{ document: doc\.name/);
+  assert.match(source, /kind: "fail"/);
+  assert.match(source, /kind: "notfound"/);
+  const departmentCard = source.slice(source.indexOf('title="부서별 사용량"'));
+  assert.doesNotMatch(departmentCard, /PickLabel|pickWith|onPick/);
 });

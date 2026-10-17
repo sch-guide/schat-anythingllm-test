@@ -3,7 +3,7 @@ const path = require("node:path");
 const { extractRenalBiopsyChecklist } = require("./extractor");
 const {
   isProcedureChecklistCandidate,
-  extractProcedureChecklists,
+  extractProcedureChecklistRegions,
 } = require("./procedureExtractor");
 const { ChecklistRepository } = require("./repository");
 const {
@@ -164,13 +164,21 @@ async function processDocumentChecklists(
         continue;
       }
       try {
-        const checklists = extractProcedureChecklists({
+        const { checklists, missedRegions } = extractProcedureChecklistRegions({
           documentId,
           filename: data.title,
           page,
           text: data.pageContent,
           layout,
         });
+        // 한 쪽에 양식이 둘 이상인데 일부만 읽힌 경우도 관리자에게 알린다.
+        if (checklists.length && missedRegions > 0)
+          fail({
+            document: data.title,
+            page,
+            title: null,
+            reason: "region-not-recognised",
+          });
         if (!checklists.length) {
           fail({
             document: data.title,

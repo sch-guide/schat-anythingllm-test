@@ -729,10 +729,29 @@ function workspaceEndpoints(app) {
           (!multiUserMode(response) ||
             [ROLES.admin, ROLES.manager].includes(user?.role));
         const synonymGroups = await getActiveSynonymGroups();
-        const checklists = ChecklistRepository.findByDocumentIds(
+        const found = ChecklistRepository.findByDocumentIds(
           workspaceDocumentIds(documents),
           { includeReview }
-        ).map((checklist) => toPublicChecklist(checklist, { synonymGroups }));
+        );
+        // 원문 쪽의 수술명·병명도 찾기용 이름에 더한다(저장 내용은 그대로).
+        let sourceNames = new Map();
+        let sourceTitles = new Map();
+        try {
+          sourceNames = require("../utils/documentChecklists/sourceNames")
+            .sourceNamesForChecklists(found, documents);
+          if (!includeReview) sourceTitles = require("../utils/documentChecklists/sourceNames")
+            .sourceTitlesForChecklists(found, documents);
+        } catch (error) {
+          console.error("Checklist source names skipped:", error.message);
+        }
+        const checklists = found.map((checklist) =>
+          toPublicChecklist(checklist, {
+            synonymGroups,
+            sourceNames: sourceNames.get(checklist.id) || [],
+            sourceTitle: sourceTitles.get(checklist.id) || "",
+            hideFormTextAliases: !includeReview,
+          })
+        );
         return response.status(200).json({ checklists });
       } catch (error) {
         console.error("Checklist list error:", error.message);

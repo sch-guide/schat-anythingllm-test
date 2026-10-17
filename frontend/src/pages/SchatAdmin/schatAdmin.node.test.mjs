@@ -16,13 +16,12 @@ test("the wrench opens exactly the SCHAT admin sections in order", () => {
       "답변 설정",
       "답변 재사용",
       "사용자 관리",
-      "답변 근거 보기",
+      "질문·답변 기록",
       "문제 신고",
       "퀴즈 관리",
       "지침서 원본 자료",
       "체크리스트 관리",
       "동의어 관리",
-      "사용 통계",
       "시스템 상태",
     ]
   );
@@ -33,6 +32,8 @@ test("the wrench opens exactly the SCHAT admin sections in order", () => {
   assert.doesNotMatch(labels, /위험 설정/);
   assert.equal(findSchatAdminSection("danger").key, "brand");
   assert.equal(findSchatAdminSection("connections").key, "status");
+  // 2026-10-17 사용 통계는 질문·답변 기록의 [통계] 탭으로 합침(예전 주소도 열림).
+  assert.equal(findSchatAdminSection("usage").key, "chunks");
 });
 
 test("settings sidebar no longer links the upstream menus", () => {

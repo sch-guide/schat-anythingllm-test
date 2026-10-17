@@ -106,7 +106,7 @@ test("새 폴더 버튼·창이 없고 PDF·엑셀을 받으며 영어 상태 �
   );
   const upload = read("./UploadFile/index.jsx");
   assert.match(upload, /accept: DOCUMENT_ACCEPT/);
-  assert.match(upload, /PDF와 엑셀/);
+  assert.match(upload, /connectors\.upload\.click-upload/);
   const right = read("./WorkspaceDirectory/index.jsx");
   assert.doesNotMatch(
     right,
@@ -121,10 +121,10 @@ test("새 폴더 버튼·창이 없고 PDF·엑셀을 받으며 영어 상태 �
     "utf8"
   );
   assert.match(ko, /"my-documents": "등록할 문서"/);
-  assert.match(
-    ko,
-    /클릭하여 PDF·엑셀을 업로드하거나 파일을 이곳으로 끌어다 놓으세요\./
-  );
+  assert.match(ko, /"click-upload": "PDF·엑셀 파일을 클릭하거나 끌어다 놓으세요\."/);
+  // 2026-10-17 사용자 요청: 등록 칸에는 제목 한 줄만, 안내·개인정보 문구는 표시하지 않음.
+  const uploadArea = read("./UploadFile/index.jsx");
+  assert.doesNotMatch(uploadArea, /privacy-notice|PDF와 엑셀\(\.xlsx|전화번호부 엑셀|document-formats/);
 });
 test("파일 선택·폴더 끌어놓기에 같은 확장자 규칙 적용", () => {
   assert.deepEqual(Object.values(DOCUMENT_ACCEPT).flat().sort(),[".pdf",".xls",".xlsx"]);

@@ -1,6 +1,7 @@
 // SCHAT 관리자 "사용 통계".
 // - 관리자만 조회한다 (endpoint에서 권한 확인).
 // - "누가"가 아니라 "무엇을" 물었는지만 집계한다. 이름·사번·계정은 응답에 없다.
+//   (질문별 부서·사번은 '질문·답변 기록 > 질문별 답변'에서만 본다. chunkViewer.js)
 // - Gemini 등 외부 AI를 호출하지 않는다. 저장된 대화 기록(workspace_chats)만 읽는다.
 // - 질문 원문은 응답을 만들 때 환자 정보로 보이는 숫자를 *** 로 가린다.
 
@@ -88,6 +89,15 @@ function topicLabel(source = {}) {
   return source.page ? `${document} · p.${source.page}` : document;
 }
 
+/** 질문 하나를 검색 실패('fail') / 근거 없음 응답('notfound') / 그 외(null)로 나눈다. */
+function chatOutcome(response = {}) {
+  const sources = Array.isArray(response.sources) ? response.sources : [];
+  const outcome = readSearchOutcome(response);
+  if (outcome === 'not_found' || (outcome === null && sources.length === 0)) return 'fail';
+  if (outcome === null && NOT_FOUND_PATTERN.test(String(response.text || ""))) return 'notfound';
+  return null;
+}
+
 const byCountThenName = (a, b) =>
   b.count - a.count || a.name.localeCompare(b.name, "ko");
 
@@ -168,15 +178,17 @@ function computeUsageStats({
     // 새 기록은 실제 못 찾음만 검색 실패로 센다. 표기 없는 과거 기록은
     // 무출처/근거 없음의 기존 두 목록 분류를 그대로 유지한다.
     const listed = new Date(chat.createdAt) >= textSince;
+    // id: '질문별 답변'에서 이 질문을 바로 열 때 쓴다(누가 물었는지는 넣지 않음).
     const entry = listed && {
+      ...(chat.id ? { id: chat.id } : {}),
       question: maskSensitive(chat.prompt).slice(0, 300),
       date: day,
     };
-    const outcome = readSearchOutcome(response);
-    if (outcome === 'not_found' || (outcome === null && sources.length === 0)) {
+    const outcome = chatOutcome(response);
+    if (outcome === 'fail') {
       searchFailureCount += 1;
       if (entry) searchFailures.push(entry);
-    } else if (outcome === null && NOT_FOUND_PATTERN.test(String(response.text || ""))) {
+    } else if (outcome === 'notfound') {
       notFoundCount += 1;
       if (entry) notFoundAnswers.push(entry);
     }
@@ -269,7 +281,7 @@ async function loadUsageStats(period = "7d", { now = new Date(), startDate, endD
   const [chats, users, departments, documentRows] = await Promise.all([
     prisma.workspace_chats.findMany({
       where: { createdAt: { gte: since, lt: until } },
-      select: { prompt: true, response: true, user_id: true, createdAt: true },
+      select: { id: true, prompt: true, response: true, user_id: true, createdAt: true },
     }),
     prisma.users.findMany({ select: { id: true, department_id: true } }),
     prisma.schat_departments.findMany({ select: { id: true, name: true } }),
@@ -310,6 +322,10 @@ function clearUsageStatsCache() {
 module.exports = {
   PERIODS,
   maskSensitive,
+  usageFilters,
+  chatOutcome,
+  topicLabel,
+  sourceDocument,
   periodStart,
   computeUsageStats,
   loadUsageStats,

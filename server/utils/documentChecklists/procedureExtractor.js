@@ -8,8 +8,14 @@ const STANDARD_TEMPLATE = Object.freeze([
   {
     title: "검사 전",
     marker: "검사전",
+    // 수술 문서의 일부 쪽은 이 양식에 "수 술 전"·"수술목적"으로 적혀 있다 (2026-10-15).
+    alternativeMarkers: { 수술전: "수술 전", 시술전: "시술 전" },
     items: [
-      { label: "검사목적", type: "informational", alternatives: ["시술목적"] },
+      {
+        label: "검사목적",
+        type: "informational",
+        alternatives: ["시술목적", "수술목적"],
+      },
       { label: "동의서", type: "checkable" },
       { label: "금식여부", type: "checkable" },
       { label: "IV line", type: "checkable", inline: true },
@@ -22,13 +28,14 @@ const STANDARD_TEMPLATE = Object.freeze([
       {
         label: "검사장소/이동수단",
         type: "informational",
-        alternatives: ["시술장소/이동수단"],
+        alternatives: ["시술장소/이동수단", "수술장소/이동수단"],
       },
     ],
   },
   {
     title: "검사 후",
     marker: "검사후",
+    alternativeMarkers: { 수술후: "수술 후", 시술후: "시술 후" },
     items: [
       { label: "식이", type: "checkable" },
       { label: "자세", type: "checkable" },
@@ -75,7 +82,7 @@ const SURGERY_TEMPLATE = Object.freeze([
       {
         label: "검사장소/이동수단",
         type: "informational",
-        alternatives: ["시술장소/이동수단"],
+        alternatives: ["시술장소/이동수단", "수술장소/이동수단"],
       },
     ],
   },
@@ -176,10 +183,15 @@ function matchesTemplate(normalized, sections) {
 function procedureTemplateFor(text = "") {
   const normalized = compact(text);
   if (!normalized || hasBranchMarker(text)) return null;
+  const matching = TEMPLATES.filter((template) =>
+    matchesTemplate(normalized, template.sections)
+  );
+  // 수술 양식(수술부위 표시·피부준비·적정성 줄)이 맞으면 그것을 쓴다. 일반 양식은
+  // 이 줄들을 건너뛰고도 맞을 수 있어서다.
   return (
-    TEMPLATES.find((template) =>
-      matchesTemplate(normalized, template.sections)
-    ) || null
+    matching.find((template) => template.kind === "surgery") ||
+    matching[0] ||
+    null
   );
 }
 
@@ -716,7 +728,16 @@ function splitChecklistRegions(layout, hits) {
  * region so they cannot be merged accidentally.
  */
 function extractProcedureChecklists(input = {}) {
-  if (!input.layout?.items?.length) return [];
+  return extractProcedureChecklistRegions(input).checklists;
+}
+
+/**
+ * Same as extractProcedureChecklists, and also counts the forms of a
+ * multi-form page that could not be read (missedRegions), so the upload can
+ * report them instead of dropping them silently.
+ */
+function extractProcedureChecklistRegions(input = {}) {
+  if (!input.layout?.items?.length) return { checklists: [], missedRegions: 0 };
   const candidates = TEMPLATES.map((template) => ({
     template,
     hits: firstSectionMarkerHits(input.layout, template),
@@ -724,19 +745,20 @@ function extractProcedureChecklists(input = {}) {
   const selected = candidates[0];
   if (!selected || selected.hits.length <= 1) {
     const checklist = extractProcedureChecklist(input);
-    return checklist ? [checklist] : [];
+    return { checklists: checklist ? [checklist] : [], missedRegions: 0 };
   }
 
-  return splitChecklistRegions(input.layout, selected.hits)
-    .map((region) =>
+  const results = splitChecklistRegions(input.layout, selected.hits).map(
+    (region) =>
       extractProcedureChecklist({
         ...input,
         text: region.items.map((item) => item.str).join("\n"),
         layout: region,
         identitySuffix: region.identitySuffix,
       })
-    )
-    .filter(Boolean);
+  );
+  const checklists = results.filter(Boolean);
+  return { checklists, missedRegions: results.length - checklists.length };
 }
 
 module.exports = {
@@ -748,6 +770,7 @@ module.exports = {
   checklistTemplateKind,
   extractProcedureChecklist,
   extractProcedureChecklists,
+  extractProcedureChecklistRegions,
   aliasesFromTitle,
   logicalLines,
   splitCircled,

@@ -169,12 +169,6 @@ export default function UploadFile({
             <div className="text-white text-opacity-80 text-sm font-semibold py-1 text-center">
               {t("connectors.upload.click-upload")}
             </div>
-            <div
-              className="text-white text-opacity-60 text-xs font-medium text-center max-w-xl"
-              data-testid="document-formats"
-            >
-              PDF와 엑셀(.xlsx, .xls)을 등록할 수 있어요. 전화번호부는 첫 행에 성명·단축번호·내선번호를 적고, 한 사람씩 한 행에 입력해 주세요.
-            </div>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2 overflow-auto max-h-[180px] p-1 overflow-y-scroll no-scroll">
@@ -228,9 +222,6 @@ export default function UploadFile({
           </form>
         </>
       )}
-      <div className="mt-6 text-center text-white text-opacity-80 text-xs font-medium w-[560px]">
-        {t("connectors.upload.privacy-notice")}
-      </div>
     </div>
   );
 }

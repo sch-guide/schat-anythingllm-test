@@ -176,15 +176,37 @@ async function completeWithEvidence({
       "머리글과 해당 사람의 행 연결이 확인되지 않으면 번호 종류를 확인할 수 없다고 안내하세요. " +
       "옆 사람이나 다른 부서의 번호를 섞지 마세요.";
   }
-  const stream = timedHandler ? evidenceStream(timedHandler) : null;
+  const generate = async (handler, sendMessages = sentMessages) => {
+    const stream = handler ? evidenceStream(handler) : null;
+    try {
+      return stream
+        ? await provider.stream(sendMessages, functions, stream.forward)
+        : await provider.complete(sendMessages, functions);
+    } finally {
+      stream?.finish();
+    }
+  };
+  // 판단 질문은 판단 모델로, 근거가 있는데 "확인되지 않습니다"면 판단 모델로 한 번 더 (answerRoute.js).
+  const route = require("./answerRoute");
+  const judgment = route.judgmentRoute(provider);
+  let routeCode = 0; // 시간 기록: 0 답변 모델, 1 판단 질문, 2 다시 답함
   let completion;
-  try {
-    completion = stream
-      ? await provider.stream(sentMessages, functions, stream.forward)
-      : await provider.complete(sentMessages, functions);
-  } finally {
-    stream?.finish();
-  }
+  if (judgment && route.isJudgmentQuestion(currentQuestion ?? question)) {
+    routeCode = 1;
+    completion = await route.withModel(provider, judgment, () =>
+      generate(timedHandler, route.withoutEarlierTurns(sentMessages))
+    );
+  } else if (judgment) {
+    const gate = route.notFoundGate(timedHandler);
+    completion = await generate(gate ? gate.send : null);
+    const text = typeof completion?.textResponse === "string" ? completion.textResponse.split(OPEN)[0] : "";
+    if (!completion?.functionCall && route.isNotFoundText(text)) {
+      gate?.drop();
+      routeCode = 2;
+      completion = await route.withModel(provider, judgment, () => generate(timedHandler));
+    } else gate?.release();
+  } else completion = await generate(timedHandler);
+  timer.set("route", routeCode);
   finishTiming(completion);
   if (
     !completion ||
