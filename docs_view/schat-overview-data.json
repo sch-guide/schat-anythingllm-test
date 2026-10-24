@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedOn": "2026-10-24",
+  "generatedOn": "2026-10-25",
   "project": {
     "name": "SCHAT 병원 실무지침 AI 시스템",
     "relationship": "AnythingLLM의 서비스 기반에 직접 검증한 SCHAT 검색과 병원 전용 기능을 적용함.",

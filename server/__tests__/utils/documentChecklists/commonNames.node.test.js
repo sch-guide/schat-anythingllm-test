@@ -32,6 +32,14 @@ test("an alias holding two names is split into both names", () => {
     "Thrombolysis",
   ]);
   assert.deepEqual(splitAlias("PTNB"), []);
+  // 동작 낱말만 남는 조각은 이름이 아니다("PCN change"에 요관부목 체크리스트가 뜨던 문제).
+  assert.deepEqual(splitAlias("요관부목설치술 D-J Stent insert, change"), [
+    "요관부목설치술 D-J Stent insert",
+  ]);
+  assert.equal(
+    searchAliasesFor({ aliases: ["요관부목설치술 D-J Stent insert, change"] }).includes("change"),
+    false
+  );
   const extra = searchAliasesFor({
     aliases: ["혈전제거술", "Thrombectomy, Thrombolysis"],
   });

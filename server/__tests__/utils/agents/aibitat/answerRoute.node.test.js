@@ -138,6 +138,38 @@ test("근거가 있는데 '확인되지 않습니다'만 내면 그 글자는 �
   assert.equal(provider.model, "gemini-3.5-flash-lite");
 });
 
+// 2026-10-24 "PCN change 체크리스트": 다시 답하는 판단 모델이 검색만 거듭하다 빈 답으로 끝남.
+test("다시 답할 때는 도구 없이 답하게 하고, 그래도 빈 답·도구 호출이면 처음 답을 보낸다", async () => {
+  const provider = fakeProvider({
+    "gemini-3.5-flash-lite": "등록된 문서에서 확인되지 않습니다.",
+    "gemini-3.8-flash": "",
+  });
+  const base = provider.stream;
+  const tools = [];
+  provider.stream = async function (messages, functions, send) {
+    tools.push(functions.length);
+    if (this.model === "gemini-3.8-flash") {
+      provider.calls.push({ model: this.model });
+      return { textResponse: "", functionCall: { name: "rag-memory", arguments: {} } };
+    }
+    return base.call(this, messages, functions, send);
+  };
+  const sent = [];
+  const result = await completeWithEvidence({
+    provider,
+    sources: sources(),
+    currentQuestion: "가상 단계 입력 기준 알려줘",
+    messages: [{ role: "system", content: "가상 규칙" }, { role: "user", content: "가상 단계 입력 기준 알려줘" }],
+    functions: [{ name: "rag-memory" }],
+    eventHandler: (type, data) => data?.type === "textResponseChunk" && sent.push(data.content),
+  });
+  assert.deepEqual(tools, [1, 0]);
+  assert.equal(result.functionCall, null);
+  assert.equal(result.textResponse, "등록된 문서에서 확인되지 않습니다.");
+  assert.equal(sent.join(""), result.textResponse);
+  assert.equal(provider.model, "gemini-3.5-flash-lite");
+});
+
 test("판단 모델이 실패해도 원래 모델로 되돌린다", async () => {
   const provider = fakeProvider({});
   provider.stream = async function () {

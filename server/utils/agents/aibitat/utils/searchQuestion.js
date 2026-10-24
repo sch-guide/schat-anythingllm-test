@@ -23,7 +23,14 @@ const EVERYDAY_TO_DOCUMENT = [
   [/몇\s*분\s*(?:동안|만에|에)\s*(?:줘|주|들어가|넣)[가-힣]*/gu, " 주입 시간 "],
   [/얼마나\s*빨리\s*(?:줘|주|들어가|넣)[가-힣]*/gu, " 주입 시간 "],
   [/(?:주입|투여|넣는\s*데|들어가는\s*데)\s*얼마나\s*걸려[가-힣]*/gu, " 주입 시간 "],
+  // "수혈시간", "pc 수혈시간" → 문서는 "주입 시간"(2026-10-24 운영 실패 질문)
+  [/수혈\s*시간/gu, " 수혈 주입 시간 "],
 ];
+
+// 붙여 쓴 한글 낱말 띄우기(검색어에만). "취약환자관리", "배뇨배설", "혈액주입시간"은
+// 검색 0건, "취약환자 관리", "배뇨 배설", "혈액 주입 시간"은 문서를 찾았다(2026-10-24).
+// 앞에 한글이 두 글자 이상 붙어 있을 때만 이 낱말 앞을 띄운다.
+const ATTACHED_WORDS = /(?<=[가-힣]{2})(관리|간호|시간|방법|절차|기록|교체|교환|제거|삽입|배설|사정|주입)/gu;
 
 /** 검색어 정리. 정리 뒤 아무것도 안 남으면 원래 질문. */
 function cleanSearchQuestion(question = "") {
@@ -32,6 +39,7 @@ function cleanSearchQuestion(question = "") {
     (value, [pattern, replacement]) => value.replace(pattern, replacement),
     original
   )
+    .replace(ATTACHED_WORDS, " $1")
     .replace(/([A-Za-z])(?=[가-힣])/gu, "$1 ")
     .replace(/([가-힣])(?=[A-Za-z])/gu, "$1 ")
     // "4Pint" → "4 Pint"(동의어가 맞도록). "18G"처럼 숫자 뒤 한 글자는 그대로.

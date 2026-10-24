@@ -19,6 +19,15 @@ test("검색어 정리: 붙은 영어·한글 띄우기, 약어 대문자, 요�
   assert.equal(cleanSearchQuestion("IV line 18G 준비"), "IV line 18G 준비");
   assert.equal(cleanSearchQuestion("Foley 교환 주기"), "Foley 교환 주기");
   assert.equal(cleanSearchQuestion("검사 결과 얼마나 걸려?"), "검사 결과 얼마나 걸려?");
+  // 붙여 쓴 한글 낱말 띄우기(운영 실패 질문 2026-10-24)
+  assert.equal(cleanSearchQuestion("취약환자관리"), "취약환자 관리");
+  assert.equal(cleanSearchQuestion("배뇨배설"), "배뇨 배설");
+  assert.equal(cleanSearchQuestion("혈액주입시간"), "혈액 주입 시간");
+  assert.equal(cleanSearchQuestion("pc 수혈시간 알려줘"), "pc 수혈 주입 시간");
+  assert.equal(cleanSearchQuestion("환자 입원사정 어떻게 해"), "환자 입원 사정 어떻게 해");
+  // 앞이 한 글자뿐이거나 낱말이 맨 앞이면 그대로
+  assert.equal(cleanSearchQuestion("간호필요도"), "간호필요도");
+  assert.equal(cleanSearchQuestion("간호사 업무"), "간호사 업무");
   // 요청 말만 있으면 원래 질문
   assert.equal(cleanSearchQuestion("체크리스트"), "체크리스트");
 });

@@ -50,6 +50,24 @@ function recordQuotes(sources, body) {
     }
   }
 }
+// 근거 꼬리표: 근거마다 붙인 "[evidence_source_id=…]"를 모델이 답 문장 뒤에 "[e26dc…]"처럼
+// 베껴 쓰는 일이 있다(2026-10-24). 직원 화면과 저장되는 답에서는 지운다.
+const SOURCE_ID_MARK =
+  /[ \t]?\[(?:evidence_source_id\s*=\s*|source_id\s*[:=]\s*)?[0-9a-f]{24}(?:\s*[,;]\s*(?:evidence_source_id\s*=\s*)?[0-9a-f]{24})*\]/gu;
+function stripSourceIds(text = "") {
+  return String(text).replace(SOURCE_ID_MARK, "");
+}
+// 아직 닫히지 않은 꼬리표 조각(" [e26dc")과 끝의 빈칸은 다음 조각이 올 때까지 잡아 둔다.
+// 빈칸도 잡아야 꼬리표 앞 빈칸이 먼저 나가 "10분 ."처럼 남지 않는다.
+function heldIdTail(text = "") {
+  const spaces = text.length - text.replace(/[ \t]+$/u, "").length;
+  const start = text.lastIndexOf("[");
+  if (start < 0 || text.length - start > 80 || !/^\[[0-9a-z_=:;,\s]*$/u.test(text.slice(start)))
+    return spaces;
+  let from = start;
+  while (from > 0 && /[ \t]/u.test(text[from - 1])) from -= 1;
+  return text.length - from;
+}
 // Hold only a possible opening-tag suffix. No evidence metadata reaches the UI,
 // even when the provider splits the tag across individual character chunks.
 function evidenceStream(send) {
@@ -69,14 +87,14 @@ function evidenceStream(send) {
         ) {
           send(type, {
             ...data,
-            content: data.content.split(OPEN)[0].trimEnd(),
+            content: stripSourceIds(data.content.split(OPEN)[0]).trimEnd(),
           });
         } else send(type, data);
         return;
       }
       last = { type, data };
       if (hidden) return;
-      pending += data.content || "";
+      pending = stripSourceIds(pending + (data.content || ""));
       const position = pending.indexOf(OPEN);
       if (position >= 0) {
         emit(pending.slice(0, position));
@@ -84,14 +102,14 @@ function evidenceStream(send) {
         hidden = true;
         return;
       }
-      let held = 0;
+      let held = heldIdTail(pending);
       for (let n = 1; n < OPEN.length && n <= pending.length; n++)
-        if (pending.endsWith(OPEN.slice(0, n))) held = n;
+        if (pending.endsWith(OPEN.slice(0, n))) held = Math.max(held, n);
       emit(pending.slice(0, pending.length - held));
       pending = pending.slice(pending.length - held);
     },
     finish() {
-      if (!hidden && !OPEN.startsWith(pending)) emit(pending);
+      if (!hidden && !OPEN.startsWith(pending)) emit(stripSourceIds(pending));
       pending = "";
     },
   };
@@ -156,7 +174,7 @@ async function completeWithEvidence({
     return {uuid, textResponse:directory.text, functionCall:null};
   }
   const instruction =
-    `\nFor the final answer only, append ${OPEN}{"quotes":[{"source_id":"ID","text":"exact original passage used in your answer"}]}${CLOSE}. Copy only the specific supporting sentences or table cells verbatim from the matching source, never a whole page or unrelated headers. Include each supporting passage even when paraphrasing the visible answer. Do not invent quotes. No evidence block on tool calls. Source IDs (same order as retrieved sources): ` +
+    `\nFor the final answer only, append ${OPEN}{"quotes":[{"source_id":"ID","text":"exact original passage used in your answer"}]}${CLOSE}. Copy only the specific supporting sentences or table cells verbatim from the matching source, never a whole page or unrelated headers. Include each supporting passage even when paraphrasing the visible answer. Do not invent quotes. Never write source IDs or bracketed IDs in the visible answer; they belong only inside the evidence block. No evidence block on tool calls. Source IDs (same order as retrieved sources): ` +
     sources
       .map(
         (source, index) =>
@@ -176,12 +194,12 @@ async function completeWithEvidence({
       "머리글과 해당 사람의 행 연결이 확인되지 않으면 번호 종류를 확인할 수 없다고 안내하세요. " +
       "옆 사람이나 다른 부서의 번호를 섞지 마세요.";
   }
-  const generate = async (handler, sendMessages = sentMessages) => {
+  const generate = async (handler, sendMessages = sentMessages, tools = functions) => {
     const stream = handler ? evidenceStream(handler) : null;
     try {
       return stream
-        ? await provider.stream(sendMessages, functions, stream.forward)
-        : await provider.complete(sendMessages, functions);
+        ? await provider.stream(sendMessages, tools, stream.forward)
+        : await provider.complete(sendMessages, tools);
     } finally {
       stream?.finish();
     }
@@ -189,7 +207,7 @@ async function completeWithEvidence({
   // 판단 질문은 판단 모델로, 근거가 있는데 "확인되지 않습니다"면 판단 모델로 한 번 더 (answerRoute.js).
   const route = require("./answerRoute");
   const judgment = route.judgmentRoute(provider);
-  let routeCode = 0; // 시간 기록: 0 답변 모델, 1 판단 질문, 2 다시 답함
+  let routeCode = 0; // 시간 기록: 0 답변 모델, 1 판단 질문, 2 다시 답함, 3 다시 답하기 실패(처음 답)
   let completion;
   if (judgment && route.isJudgmentQuestion(currentQuestion ?? question)) {
     routeCode = 1;
@@ -201,9 +219,26 @@ async function completeWithEvidence({
     completion = await generate(gate ? gate.send : null);
     const text = typeof completion?.textResponse === "string" ? completion.textResponse.split(OPEN)[0] : "";
     if (!completion?.functionCall && route.isNotFoundText(text)) {
-      gate?.drop();
+      // 다시 답할 때는 도구 없이 이미 찾은 근거로만 답하게 한다. 도구를 주면 판단 모델이
+      // 검색을 거듭하다 빈 답으로 끝난 일이 있었다("PCN change 체크리스트", 2026-10-24).
+      // 다시 답하기가 실패하거나 빈 답이면 처음 답("확인되지 않습니다")을 그대로 보낸다.
       routeCode = 2;
-      completion = await route.withModel(provider, judgment, () => generate(timedHandler));
+      const first = completion;
+      const retry = await route
+        .withModel(provider, judgment, () => generate(timedHandler, sentMessages, []))
+        .catch(() => null);
+      const retryText =
+        typeof retry?.textResponse === "string"
+          ? stripSourceIds(retry.textResponse.split(OPEN)[0]).trim()
+          : "";
+      if (retry && !retry.functionCall && retryText) {
+        gate?.drop();
+        completion = retry;
+      } else {
+        gate?.release();
+        completion = first;
+        routeCode = 3;
+      }
     } else gate?.release();
   } else completion = await generate(timedHandler);
   timer.set("route", routeCode);
@@ -222,6 +257,7 @@ async function completeWithEvidence({
     completion.textResponse = completion.textResponse
       .slice(0, position)
       .trimEnd();
+  completion.textResponse = stripSourceIds(completion.textResponse);
   return completion;
 }
-module.exports = { evidenceSourceId, completeWithEvidence };
+module.exports = { evidenceSourceId, completeWithEvidence, stripSourceIds };

@@ -126,3 +126,31 @@ test("a truncated evidence frame cannot certify a quote", async () => {
  await completeWithEvidence({provider:{complete:async()=>({textResponse:'Answer<schat_evidence>'+JSON.stringify({quotes:[{source_id:evidenceSourceId(sources[0]),text:'Prepare the test equipment.'}]})})},sources,messages:[],functions:[]});
  assert.ok(sources.every(source=>source.evidenceQuotes.length===0));
 });
+
+// 2026-10-24: 모델이 "[e26dcfeaceee6edfe443eb71]"처럼 근거 꼬리표를 답 문장 뒤에 베껴 쓴 일.
+test("답 문장에 베껴 쓴 근거 꼬리표는 글자 단위 스트림과 저장되는 답 모두에서 지운다", async () => {
+  const sources = makeSources();
+  const id = evidenceSourceId(sources[0]);
+  const raw =
+    `- RBC: 2~4시간 [${id}]\n- PLT: 1unit당 10분 [${id}].\n- 표 [evidence_source_id=${id}] 끝 [PASS]` +
+    `\n<schat_evidence>{"quotes":[]}</schat_evidence>`;
+  const sent = [];
+  const provider = {
+    stream: async (messages, functions, send) => {
+      assert.match(messages[0].content, /Never write source IDs/);
+      for (const char of raw)
+        send("reportStreamEvent", { type: "textResponseChunk", uuid: "t", content: char });
+      return { textResponse: raw };
+    },
+  };
+  const result = await completeWithEvidence({
+    provider,
+    sources,
+    messages: [{ role: "system", content: "Test only" }],
+    functions: [],
+    eventHandler: (t, d) => sent.push(d.content),
+  });
+  const expected = "- RBC: 2~4시간\n- PLT: 1unit당 10분.\n- 표 끝 [PASS]";
+  assert.equal(result.textResponse, expected);
+  assert.equal(sent.join("").trim(), expected);
+});

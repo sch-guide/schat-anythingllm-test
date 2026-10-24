@@ -84,12 +84,21 @@ function nameKey(value = "") {
   return String(value).normalize("NFKC").toLowerCase().replace(/\s+/g, "");
 }
 
+// 쪼갠 조각이 동작 낱말뿐이면 이름이 아니다. "요관부목설치술 D-J Stent insert, change"의
+// "change"가 찾기용 이름이 되어 "PCN change"에 요관부목 체크리스트가 떴다 (2026-10-24).
+const ACTION_ONLY = new Set([
+  "change", "insert", "insertion", "remove", "removal", "exchange", "replace",
+  "교체", "교환", "삽입", "제거", "발거", "거치", "설치",
+]);
+
 // "Thrombectomy, Thrombolysis" and "A / B" hold two names in one alias.
 function splitAlias(alias = "") {
   const parts = String(alias)
     .split(/\s*[,/]\s*/u)
     .map((part) => part.trim())
     .filter((part) => part.length >= 2);
+  const names = parts.filter((part) => !ACTION_ONLY.has(part.normalize("NFKC").toLowerCase()));
+  if (names.length < parts.length) return names;
   return parts.length > 1 ? parts : [];
 }
 
