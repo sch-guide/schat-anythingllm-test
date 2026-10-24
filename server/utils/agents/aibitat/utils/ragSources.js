@@ -35,12 +35,35 @@ function matchesQuestionFocus(question = "", description = "") {
   );
 }
 
+// 2026-10-24: 근거 쪽에 "표 정리"(표를 행·열대로 옮긴 글)가 있으면 그 쪽 근거 뒤에 한 번 붙인다.
+// 글자만 뽑은 본문에서는 합친 칸이 어느 열의 내용인지 알 수 없어서다(documentTables/store.js).
+function tableTextFor(source = {}, seen) {
+  const documentId = String(source.document_id || source.documentId || "");
+  const page = normalizePage(
+    typeof source.page === "number" ? source.page : String(source.page ?? "")
+  );
+  if (!documentId || !page) return "";
+  const key = `${documentId}:${page}`;
+  if (seen.has(key)) return "";
+  seen.add(key);
+  try {
+    const text = require("../../../documentTables/store").readTableText(
+      documentId,
+      page
+    );
+    return text ? `\n[이 쪽의 표를 행·열대로 옮긴 정리]\n${text}` : "";
+  } catch {
+    return "";
+  }
+}
+
 function buildRagContext(sources = []) {
+  const seenTablePages = new Set();
   const sourceTexts = Array.isArray(sources)
     ? sources
         .map((source) =>
           typeof source?.text === "string" && source.text.trim()
-            ? `[evidence_source_id=${evidenceSourceId(buildPublicRagSource(source))}]\n${source.text.trim()}`
+            ? `[evidence_source_id=${evidenceSourceId(buildPublicRagSource(source))}]\n${source.text.trim()}${tableTextFor(source, seenTablePages)}`
             : ""
         )
         .filter(Boolean)

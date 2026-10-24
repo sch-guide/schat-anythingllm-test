@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedOn": "2026-10-17",
+  "generatedOn": "2026-10-24",
   "project": {
     "name": "SCHAT 병원 실무지침 AI 시스템",
     "relationship": "AnythingLLM의 서비스 기반에 직접 검증한 SCHAT 검색과 병원 전용 기능을 적용함.",
@@ -293,10 +293,10 @@
     "document": "docs/00_현재상태/SCHAT_버전_체계.md"
   },
   "tests": {
-    "totalFiles": 312,
+    "totalFiles": 313,
     "byArea": {
       "frontend": 84,
-      "server": 191,
+      "server": 192,
       "collector": 13,
       "Python 안전검사": 13,
       "저장소 검사": 11
@@ -310,6 +310,13 @@
     "검색 관련 변경 뒤 기존 질문 회귀검사를 실행함."
   ],
   "history": [
+    {
+      "date": "2026-10-24",
+      "title": "표 정리를 답변 근거에 함께 넘기기 (3001 시험 반영)",
+      "summary": "날짜: 2026-10-24",
+      "feature": "표 정리 답변근거",
+      "document": "docs/01_작업일지/2026-10-24_표_정리_답변근거.md"
+    },
     {
       "date": "2026-10-17",
       "title": "판단 질문 답변 모델 나눠 쓰기 (3001 반영)",
