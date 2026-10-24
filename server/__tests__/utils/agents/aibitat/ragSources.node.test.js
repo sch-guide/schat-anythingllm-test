@@ -479,7 +479,10 @@ for (const question of [
     const answer = await aibitat.reply({ from: "agent", to: "user" });
 
     assert.equal(answer, "Automatic 자유형 답변");
-    assert.deepEqual(forcedSearches, [{ action: "search", content: question }]);
+    // 2026-10-24: 검색어에서는 "알려줘" 같은 요청 말을 뺀다(searchQuestion.js).
+    assert.deepEqual(forcedSearches, [
+      { action: "search", content: question.replace(/\s*알려줘$/u, "") },
+    ]);
     assert.equal(aibitat.getRagMemorySources().length, 1);
     assert.equal(
       providerMessages[0].filter(

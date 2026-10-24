@@ -1004,10 +1004,29 @@ ${this.getHistory({ to: route.to })
       ?.map((name) => this.functions.get(this.#parseFunctionName(name)))
       .filter((a) => !!a);
 
+    // 2026-10-24: 검색에만 쓰는 질문을 다듬고, 앞 대화에 기대는 질문은 혼자 뜻이 통하게 바꾼다
+    // (searchQuestion.js). 화면의 원래 질문은 그대로.
+    const { query: searchQuestion, rewritten: rewrittenQuestion } =
+      await require("./utils/searchQuestion").standaloneSearchQuestion(
+        userPrompt,
+        chatHistory
+      );
     const hospitalRetrievalQuery = buildHospitalRetrievalQuery(
-      userPrompt,
+      searchQuestion,
       chatHistory
     );
+    if (rewrittenQuestion) {
+      // 앞 대화를 반영한 질문을 먼저 보여 준다(뒤에 덧붙이면 "Pint"만 보고 RBC로 답하는 일이 있었다).
+      // 판단 질문은 앞 대화 없이 답하므로 이 문장이 주제를 알려 주는 유일한 단서이기도 하다.
+      for (let index = messages.length - 1; index >= 0; index -= 1) {
+        if (messages[index].role !== "user") continue;
+        messages[index] = {
+          ...messages[index],
+          content: `${rewrittenQuestion}\n(직원이 입력한 말: ${messages[index].content})`,
+        };
+        break;
+      }
+    }
     const forcedRagContext = await this.forceHospitalRagSearch(
       hospitalRetrievalQuery,
       functions?.find((fn) => fn.name === "rag-memory")

@@ -293,10 +293,10 @@
     "document": "docs/00_현재상태/SCHAT_버전_체계.md"
   },
   "tests": {
-    "totalFiles": 313,
+    "totalFiles": 314,
     "byArea": {
       "frontend": 84,
-      "server": 192,
+      "server": 193,
       "collector": 13,
       "Python 안전검사": 13,
       "저장소 검사": 11
@@ -316,6 +316,13 @@
       "summary": "날짜: 2026-10-24",
       "feature": "표 정리 답변근거",
       "document": "docs/01_작업일지/2026-10-24_표_정리_답변근거.md"
+    },
+    {
+      "date": "2026-10-24",
+      "title": "검색용 질문 다듬기·이어지는 질문·계산 허용 (3001 반영)",
+      "summary": "날짜: 2026-10-24",
+      "feature": "검색질문 다듬기와 이어지는질문",
+      "document": "docs/01_작업일지/2026-10-24_검색질문_다듬기와_이어지는질문.md"
     },
     {
       "date": "2026-10-17",
