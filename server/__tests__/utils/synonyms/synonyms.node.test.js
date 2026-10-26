@@ -124,3 +124,25 @@ test("checklist names get synonym variants (English words as whole words)", () =
     0
   );
 });
+
+// 2026-10-26 "kalimate enema 챙기는 물품": 처음 검색이 0건일 때 쓰는 다시 찾기 검색어.
+test("다시 찾기 검색어는 질문에 든 동의어 묶음의 다른 이름만 덧붙인다", () => {
+  const { synonymQueryText } = require("../../../utils/synonyms");
+  const groups = [
+    { terms: ["kalimate enema", "카리메트 관장", "kalimate", "카리메트"] },
+    { terms: ["enema", "관장"] },
+    { terms: ["CT", "전산화단층촬영"] },
+  ];
+  assert.equal(
+    synonymQueryText("kalimate enema", groups),
+    "kalimate enema (카리메트 관장, 카리메트, 관장)"
+  );
+  // 동의어가 없으면 그대로, 영어 약어는 낱말 단위로만("CTx"에는 CT를 붙이지 않음)
+  assert.equal(synonymQueryText("수혈 시간", groups), "수혈 시간");
+  assert.equal(synonymQueryText("IT CTx", groups), "IT CTx");
+  // 덧붙이는 이름은 최대 개수까지만
+  assert.equal(
+    synonymQueryText("kalimate", groups, { maxTerms: 2 }),
+    "kalimate (kalimate enema, 카리메트 관장)"
+  );
+});

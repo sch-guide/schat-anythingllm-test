@@ -370,6 +370,37 @@ function termPattern(term) {
 }
 
 /**
+ * 다시 찾기용 검색어: 질문에 들어 있는 동의어 묶음의 다른 이름을 괄호로 덧붙인다
+ * (2026-10-26, 사용자 승인). 동의어는 낱말 검색(BM25)에만 쓰여서 "kalimate enema"처럼
+ * 영어로 물으면 한글 문서("카리메트 관장")를 못 찾았다. 처음 검색이 0건일 때만 쓴다
+ * (plugins/memory.js). 화면의 질문은 그대로. 묶음 3개, 덧붙이는 이름 8개까지.
+ */
+function synonymQueryText(query = "", groups = [], { maxGroups = 3, maxTerms = 8 } = {}) {
+  const text = cleanTerm(query);
+  if (!text || !groups.length) return text;
+  const present = (term) => {
+    const pattern = termPattern(term);
+    if (!pattern) return false;
+    pattern.lastIndex = 0;
+    return pattern.test(text);
+  };
+  const added = [];
+  let used = 0;
+  for (const group of groups) {
+    if (used >= maxGroups || added.length >= maxTerms) break;
+    const terms = (group.terms || []).map(cleanTerm).filter(Boolean);
+    if (!terms.some(present)) continue;
+    used += 1;
+    for (const term of terms) {
+      if (added.length >= maxTerms) break;
+      if (present(term) || added.some((item) => termKey(item) === termKey(term))) continue;
+      added.push(term);
+    }
+  }
+  return added.length ? `${text} (${added.join(", ")})` : text;
+}
+
+/**
  * Checklist names with one synonym swapped in, e.g. "HD 카테터" ->
  * "HD cath", "HD catheter". Capped so a checklist never gets a huge list.
  */
@@ -422,4 +453,5 @@ module.exports = {
   synonymsVersion,
   termAlternatives,
   synonymNameVariants,
+  synonymQueryText,
 };

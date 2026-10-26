@@ -28,6 +28,9 @@ test("검색어 정리: 붙은 영어·한글 띄우기, 약어 대문자, 요�
   // 앞이 한 글자뿐이거나 낱말이 맨 앞이면 그대로
   assert.equal(cleanSearchQuestion("간호필요도"), "간호필요도");
   assert.equal(cleanSearchQuestion("간호사 업무"), "간호사 업무");
+  // "챙기는 물품"·"필요한 물품"도 준비물처럼 요청 말(2026-10-26)
+  assert.equal(cleanSearchQuestion("kalimate enema 챙기는 물품"), "kalimate enema");
+  assert.equal(cleanSearchQuestion("PCI 필요한 물품"), "PCI");
   // 요청 말만 있으면 원래 질문
   assert.equal(cleanSearchQuestion("체크리스트"), "체크리스트");
 });

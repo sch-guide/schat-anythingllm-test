@@ -259,6 +259,18 @@ const memory = {
                   rerank: workspace?.vectorSearchMode === "rerank",
                 });
               let result = await searchOnce(query);
+              // 근거를 하나도 못 찾았을 때만 동의어 묶음의 다른 이름을 덧붙여 한 번 더 찾는다
+              // (2026-10-26, 사용자 승인). "kalimate enema"처럼 영어로 물으면 한글 문서와 뜻이
+              // 멀다고 보아 못 찾았다. 늘 덧붙이면 잘 찾던 질문("중심정맥관 관리")의 결과가
+              // 바뀌어서, 못 찾은 경우에만 쓴다.
+              if (!result?.message && !result?.sources?.length) {
+                const { getActiveGroups, synonymQueryText } = require("../../../synonyms");
+                const expanded = synonymQueryText(query, await getActiveGroups());
+                if (expanded && expanded !== query) {
+                  const retry = await searchOnce(expanded).catch(() => null);
+                  if (retry && !retry.message && retry.sources?.length) result = retry;
+                }
+              }
               // 전화번호부 질문("○○ 전화번호")은 연락처 단어를 뺀 검색을 한 번 더 해서
               // 원래 결과와 합침(원래 검색이 먼저). 다른 질문은 그대로 한 번만 검색.
               const {

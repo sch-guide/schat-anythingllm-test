@@ -181,6 +181,9 @@ function schatAdminEndpoints(app) {
         const workspaces = await Workspace.where();
         const VectorDb = getVectorDbClass();
         const details = [];
+        // 체크리스트 관리 화면과 같은 기준: 지금 등록된(예전 판 제외) 문서의 체크리스트만 센다.
+        // 지운 문서·예전 판의 체크리스트 파일까지 세어 "검토 필요 23"처럼 관리 화면과 달랐다(2026-10-25).
+        const currentDocumentIds = new Set();
         for (const workspace of workspaces) {
           const documents = await Document.where(
             { workspaceId: workspace.id },
@@ -189,6 +192,17 @@ function schatAdminEndpoints(app) {
             null,
             { docpath: true, metadata: true }
           );
+          for (const document of documents) {
+            let metadata = {};
+            try {
+              metadata = JSON.parse(document.metadata || "{}") || {};
+            } catch {
+              metadata = {};
+            }
+            if (metadata.schat_document_update_archived === true) continue;
+            const id = String(metadata.document_id || "").trim();
+            if (id) currentDocumentIds.add(id);
+          }
           let vectors = null;
           try {
             vectors = await VectorDb.namespaceCount(workspace.slug);
@@ -205,7 +219,11 @@ function schatAdminEndpoints(app) {
         }
         let checklists = null;
         try {
-          checklists = summarizeChecklists(ChecklistRepository.listAll());
+          checklists = summarizeChecklists(
+            ChecklistRepository.listAll().filter((checklist) =>
+              currentDocumentIds.has(String(checklist?.documentId || ""))
+            )
+          );
         } catch {
           checklists = null;
         }
