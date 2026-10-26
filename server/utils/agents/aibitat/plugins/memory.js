@@ -294,16 +294,18 @@ const memory = {
               // 판단 질문("…전실 왔는데 … 체크해야 해?")은 상황(전실·입원·외박 등)으로 한 번 더
               // 찾아 새 근거를 최대 2개 뒤에 더한다(answerRoute.situationQuery).
               if (!result?.message) {
-                const { situationQuery, appendSituationSources } = require("../utils/answerRoute");
+                const { situationSearches, appendSituationSources } = require("../utils/answerRoute");
                 const { sourceIdentity } = require("../../../chats/expandedBodySearch");
-                const situation = situationQuery(
+                const searches = situationSearches(
                   String(this.super.handlerProps?.invocation?.prompt || query).replace(/^@agent\s*/u, "")
                 );
-                if (situation) {
-                  const extra = await searchOnce(situation).catch(() => null);
+                const extras = await Promise.all(
+                  searches.map(({ query: extraQuery }) => searchOnce(extraQuery).catch(() => null))
+                );
+                extras.forEach((extra, index) => {
                   if (extra && !extra.message)
-                    result = appendSituationSources(result, extra, sourceIdentity);
-                }
+                    result = appendSituationSources(result, extra, sourceIdentity, searches[index].limit);
+                });
               }
               if (result.sources?.length) {
                 const { enrichDirectorySources } = require("../utils/directoryEvidence");

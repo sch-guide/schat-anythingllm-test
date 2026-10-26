@@ -127,6 +127,50 @@ export function asksDeviceUseOnly(question = "") {
   return !/(^| )(전|후)(에|에는|부터|까지)?( |$)/u.test(normalized);
 }
 
+// One document across editions: "수술(260306).pdf" and "수술(26.09.10).pdf"
+// are both "수술".
+function documentFamily(filename = "") {
+  return String(filename)
+    .normalize("NFKC")
+    .replace(/\.[a-z0-9]+$/iu, "")
+    .replace(/\([^)]*\d[^)]*\)/gu, "")
+    .replace(/[\s_]+/gu, "")
+    .toLowerCase();
+}
+
+// Documents the answer actually quoted (server-verified evidenceQuotes), or
+// null when the answer carries no quote record (old chats, unquoted answers).
+function quotedDocuments(sources) {
+  if (!Array.isArray(sources)) return null;
+  const quoted = sources.filter(
+    (source) => Array.isArray(source?.evidenceQuotes) && source.evidenceQuotes.length > 0
+  );
+  if (quoted.length === 0) return null;
+  return new Set(
+    quoted.map((source) => documentFamily(source.documentName || source.document_name))
+  );
+}
+
+/**
+ * "CAG는 당일수술이야?" quotes only the nursing-needs document: the CAG
+ * procedure checklist is not offered when the answer quoted other documents.
+ */
+function citedByAnswer(checklist, quoted) {
+  const filename = checklist?.source?.filename;
+  return !quoted || !filename || quoted.has(documentFamily(filename));
+}
+
+// 간호필요도 입력·평가를 묻는 질문("PCI는 당일수술여부에 수술로 입력해?")은 시술 이름이 있어도
+// 시술 준비를 묻는 것이 아니므로 체크리스트를 띄우지 않는다(2026-10-27).
+// "PCI 준비", "PCI 체크리스트"처럼 준비를 함께 물으면 그대로 띄운다.
+const NURSING_NEED_WORDS = /간호\s*필요도|필요도|당일\s*수술|수술\s*여부|수술로\s*(?:입력|봐|보|인정|평가|체크)|수술\s*(?:실시|미실시)/u;
+const PREPARATION_WORDS = /준비|체크\s*리스트|동의서|금식|시술\s*전|검사\s*전|수술\s*전|시술\s*후|검사\s*후|간호(?!\s*필요도)/u;
+
+export function asksNursingNeedOnly(question = "") {
+  const text = String(question).normalize("NFKC");
+  return NURSING_NEED_WORDS.test(text) && !PREPARATION_WORDS.test(text);
+}
+
 /**
  * 관리자 '질문별 답변'에서 저장된 답변에 직원 화면과 같은 체크리스트 버튼이 떴는지 계산한다.
  * 직원 채팅 화면과 같은 규칙(matchChecklists)과 같은 공개 체크리스트 목록을 쓴다.
@@ -135,6 +179,7 @@ export function checklistsForStoredAnswer(question = "", answer = null, checklis
   if (!answer?.available) return [];
   return matchChecklists(question || "", checklists, {
     content: answer.text,
+    sources: answer.sources,
     searchOutcome: answer.searchOutcome || undefined,
     closed: true,
   });
@@ -149,10 +194,12 @@ export function matchChecklists(question = "", checklists = [], response) {
     isNoEvidenceAnswer(response.content)
   )) return [];
   const normalizedQuestion = normalizeChecklistQuestion(question);
-  if (!normalizedQuestion || asksDeviceUseOnly(question)) return [];
+  if (!normalizedQuestion || asksDeviceUseOnly(question) || asksNursingNeedOnly(question)) return [];
+  const quoted = quotedDocuments(response?.sources);
 
   const matches = (Array.isArray(checklists) ? checklists : [])
     .filter((checklist) => checklist?.active !== false)
+    .filter((checklist) => citedByAnswer(checklist, quoted))
     .map((checklist) => {
       const ownSpans = (checklist?.aliases || []).flatMap((alias) =>
         aliasSpans(normalizedQuestion, alias)

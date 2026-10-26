@@ -24,6 +24,9 @@ const DESCRIBES_SITUATION =
 function isJudgmentQuestion(question) {
   if (typeof question !== "string") return false;
   const text = question.slice(0, 2000);
+  // 어떤 행위가 (당일)수술인지 묻는 질문도 기준을 적용해 판단해야 한다. 답변 모델은 같은 근거로
+  // "PCI는 수술로 입력해?"에 2번 중 1번 반대로 답했다(2026-10-27).
+  if (SURGERY_KIND.test(text)) return true;
   return ASKS_JUDGMENT.test(text) && DESCRIBES_SITUATION.test(text);
 }
 
@@ -71,9 +74,21 @@ const SITUATIONS = [
 const PLACE = /[가-힣A-Za-z0-9]*병동|ICU|CCU|중환자실/giu;
 const SITUATION_EXTRA = 2;
 
+// "심도자술은 간호필요도에서 당일수술이야?"(2026-10-26, 사용자 승인): 문서에 없는 시술 이름에
+// 검색이 끌려가 0건이었다. 매뉴얼 110쪽 Q21(수술·시술 구분: 수가파일 수술여부 '코드 9')을
+// 찾도록, 어떤 행위가 (당일)수술인지 묻는 질문은 판단 질문 모양이 아니어도 한 번 더 찾는다.
+const SURGERY_KIND =
+  /당일\s*수술|수술\s*(?:이야|인가|인지|이에요|인가요|이죠|맞|에\s*해당|로\s*(?:봐|보|인정|입력|평가|체크|들어가))|수술\s*여부/u;
+// 이 검색어로 110쪽(수가파일 수술여부 '코드 9'), 115쪽(제9·10·18장 수술 항목)이 잡힌다.
+// 기준 쪽이 둘이라 이 검색만 새 근거를 3개까지 더한다.
+const SURGERY_KIND_QUERY = "당일수술여부 수술 시술 구분 수가파일 수술여부 코드";
+const SURGERY_KIND_EXTRA = 3;
+
 /** 상황 검색어(예: "통합병동 전실 전동 전입 평가"). 판단 질문이 아니거나 상황 말이 없으면 null. */
 function situationQuery(question, env = process.env) {
   if (String(env.SCHAT_SITUATION_SEARCH || "on").toLowerCase() === "off") return null;
+  if (typeof question === "string" && SURGERY_KIND.test(question.slice(0, 2000)))
+    return SURGERY_KIND_QUERY;
   if (!isJudgmentQuestion(question)) return null;
   const text = String(question).slice(0, 2000);
   const words = SITUATIONS.filter(([pattern]) => pattern.test(text)).map(([, word]) => word);
@@ -82,8 +97,30 @@ function situationQuery(question, env = process.env) {
   return [...places, ...words, "평가"].join(" ");
 }
 
+/** 상황 검색에서 더할 새 근거 수(수술·시술 구분 검색만 3개). */
+function situationExtraLimit(query) {
+  return query === SURGERY_KIND_QUERY ? SURGERY_KIND_EXTRA : SITUATION_EXTRA;
+}
+
+// 병원 정리본 "간호필요도 및 평가" 7쪽(27. 당일 수술 여부: 수술실 수술·심뇌혈관센터 시술은 실시,
+// 단순 조영술·대동맥말초혈관조영실·소화기내시경센터 시술은 미실시)은 위 검색어로는 안 잡혀
+// 이 검색어로 한 번 더 찾는다(2026-10-27).
+const SURGERY_KIND_LOCAL_QUERY = "당일 수술 여부 수술 실시 미실시 시술";
+
+/** 한 번 더 찾을 검색어와 각각 더할 새 근거 수. 없으면 []. */
+function situationSearches(question, env = process.env) {
+  const query = situationQuery(question, env);
+  if (!query) return [];
+  if (query === SURGERY_KIND_QUERY)
+    return [
+      { query: SURGERY_KIND_LOCAL_QUERY, limit: SITUATION_EXTRA },
+      { query: SURGERY_KIND_QUERY, limit: SURGERY_KIND_EXTRA },
+    ];
+  return [{ query, limit: SITUATION_EXTRA }];
+}
+
 /** 처음 결과는 그대로 두고, 상황 검색에서 새로 나온 근거만 뒤에 최대 2개 붙인다. */
-function appendSituationSources(result = {}, extra = {}, keyOf = (source) => source?.id) {
+function appendSituationSources(result = {}, extra = {}, keyOf = (source) => source?.id, limit = SITUATION_EXTRA) {
   const sources = result.sources || [];
   const seen = new Set(sources.map(keyOf));
   const added = (extra.sources || [])
@@ -93,7 +130,7 @@ function appendSituationSources(result = {}, extra = {}, keyOf = (source) => sou
       seen.add(key);
       return true;
     })
-    .slice(0, SITUATION_EXTRA);
+    .slice(0, limit);
   if (!added.length) return result;
   return {
     ...result,
@@ -156,6 +193,8 @@ module.exports = {
   withModel,
   withoutEarlierTurns,
   situationQuery,
+  situationExtraLimit,
+  situationSearches,
   appendSituationSources,
   notFoundGate,
 };

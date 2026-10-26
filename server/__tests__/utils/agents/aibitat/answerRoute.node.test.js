@@ -203,3 +203,33 @@ test("처음 결과는 그대로 두고 상황 검색의 새 근거만 최대 2�
   assert.equal(merged.other, 1);
   assert.equal(appendSituationSources(first, { sources: [{ id: "a" }] }), first);
 });
+
+// 2026-10-26: "심도자술은 간호필요도에서 당일수술이야?" 0건 → 수술·시술 구분 기준(매뉴얼 Q21)으로 한 번 더 찾기.
+test("어떤 행위가 (당일)수술인지 묻는 질문은 수술·시술 구분으로 한 번 더 찾는다", () => {
+  assert.equal(situationQuery("심도자술은 간호필요도에서 당일수술이야?", {}), "당일수술여부 수술 시술 구분 수가파일 수술여부 코드");
+  const { situationExtraLimit } = require("../../../../utils/agents/aibitat/utils/answerRoute");
+  assert.equal(situationExtraLimit(situationQuery("가상시술은 당일수술이야?", {})), 3);
+  assert.equal(situationExtraLimit("통합병동 전실 전동 전입 평가"), 2);
+  assert.equal(situationQuery("가상시술은 수술로 봐?", {}), "당일수술여부 수술 시술 구분 수가파일 수술여부 코드");
+  assert.equal(situationQuery("수술 전 준비", {}), null);
+  assert.equal(situationQuery("수술 후 간호", {}), null);
+  assert.equal(situationQuery("심도자술은 당일수술이야?", { SCHAT_SITUATION_SEARCH: "off" }), null);
+});
+
+// 2026-10-27: 병원 정리본(간호필요도 및 평가 7쪽)도 잡히도록 수술·시술 질문은 두 번 찾는다.
+test("수술·시술 질문은 정리본용·매뉴얼용 두 검색어로, 다른 상황 질문은 하나로 찾는다", () => {
+  const { situationSearches } = require("../../../../utils/agents/aibitat/utils/answerRoute");
+  assert.deepEqual(situationSearches("심도자술은 간호필요도에서 당일수술이야?", {}), [
+    { query: "당일 수술 여부 수술 실시 미실시 시술", limit: 2 },
+    { query: "당일수술여부 수술 시술 구분 수가파일 수술여부 코드", limit: 3 },
+  ]);
+  assert.deepEqual(situationSearches("통합병동에서 전실 왔는데 심전도 체크해야 해?", {}), [
+    { query: "통합병동 전실 전동 전입 평가", limit: 2 },
+  ]);
+  assert.deepEqual(situationSearches("수술 전 준비", {}), []);
+});
+
+test("(당일)수술인지 묻는 질문은 판단 질문으로 본다", () => {
+  assert.equal(isJudgmentQuestion("PCI는 당일수술여부에 수술로 입력해?"), true);
+  assert.equal(isJudgmentQuestion("가상 시술 준비물 알려줘"), false);
+});

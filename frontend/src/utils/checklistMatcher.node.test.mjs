@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { matchChecklists } from "./checklistMatcher.js";
+import { matchChecklists, checklistsForStoredAnswer as checklistsForStoredAnswerSync } from "./checklistMatcher.js";
 
 const renalChecklist = {
   id: "renal",
@@ -240,4 +240,55 @@ test("저장된 답변에도 직원 화면과 같은 체크리스트 버튼 판�
   assert.deepEqual(checklistsForStoredAnswer("가상시술 준비 알려줘", { ...ok, searchOutcome: { version: 2, status: "not_found" } }, lists), []);
   assert.deepEqual(checklistsForStoredAnswer("가상시술 준비 알려줘", { available: false, text: "" }, lists), []);
   assert.deepEqual(checklistsForStoredAnswer("다른 질문", ok, lists), []);
+});
+
+// 2026-10-27: "CAG는 당일수술이야?"는 간호필요도 문서만 인용했는데 CAG 시술 체크리스트가 떴다.
+// 답이 인용한 문서가 확인되면, 그 체크리스트 문서를 인용한 답에만 버튼을 띄운다.
+test("답이 다른 문서만 인용했으면 시술 이름이 있어도 체크리스트를 띄우지 않는다", () => {
+  const cag = {
+    id: "cag", title: "가상조영술 ANG", aliases: ["ANG", "가상조영술"], active: true,
+    source: { filename: "가상 시술 안내.pdf", page: 66 },
+  };
+  const quoted = (documentName, quotes) => ({ documentName, page: 1, evidenceQuotes: quotes });
+  const answer = (sources) => ({ content: "아닙니다. 해당하지 않습니다.", sources });
+  // 평가 문서만 인용: 시술 문서는 검색만 되고 인용되지 않음 → 숨김
+  assert.deepEqual(matchChecklists("ANG는 당일수술이야?", [cag], answer([
+    quoted("가상 평가 기준.pdf", ["단순 조영술(예. ANG)은 해당 X"]),
+    quoted("가상 시술 안내.pdf", []),
+  ])), []);
+  // 시술 문서를 인용 → 표시
+  assert.deepEqual(matchChecklists("ANG 준비 알려줘", [cag], answer([
+    quoted("가상 시술 안내.pdf", ["양측 서혜부 면도"]),
+  ])), [cag]);
+  // 같은 문서의 다른 판(날짜 표시만 다름)을 인용해도 같은 문서로 본다
+  assert.deepEqual(matchChecklists("ANG 준비 알려줘", [cag], answer([
+    quoted("가상 시술 안내(260306).pdf", ["양측 서혜부 면도"]),
+  ])), [cag]);
+  // document_name 필드만 있는 출처도 같은 문서로 본다
+  assert.deepEqual(matchChecklists("ANG 준비 알려줘", [cag], answer([
+    { document_name: "가상 시술 안내.pdf", evidenceQuotes: ["양측 서혜부 면도"] },
+  ])), [cag]);
+  // 인용 기록이 없는 예전 답·출처 없는 답은 지금처럼 이름으로만 판단
+  for (const sources of [undefined, [], [{ documentName: "가상 평가 기준.pdf" }],
+    [quoted("가상 평가 기준.pdf", [])]])
+    assert.deepEqual(matchChecklists("ANG 준비 알려줘", [cag], answer(sources)), [cag]);
+  // 체크리스트에 원본 파일 이름이 없으면 지금처럼 이름으로만 판단
+  const noSource = { ...cag, source: undefined };
+  assert.deepEqual(matchChecklists("ANG 알려줘", [noSource], answer([
+    quoted("가상 평가 기준.pdf", ["단순 조영술(예. ANG)은 해당 X"]),
+  ])), [noSource]);
+  // 관리자 '질문별 답변'도 같은 규칙
+  const stored = { available: true, text: "아닙니다.", sources: [quoted("가상 평가 기준.pdf", ["ANG 해당 X"])] };
+  assert.deepEqual(checklistsForStoredAnswerSync("ANG는 당일수술이야?", stored, [cag]), []);
+});
+
+// 2026-10-27: "PCI는 당일수술여부에 수술로 입력해?"는 답이 시술 문서도 인용해 버튼이 떴다.
+// 간호필요도 입력·평가를 묻는 질문은 준비를 함께 묻지 않으면 띄우지 않는다.
+test("간호필요도 입력을 묻는 질문은 시술 이름이 있어도 체크리스트를 띄우지 않는다", () => {
+  const pci = { id: "pci", title: "가상중재술 PCX", aliases: ["PCX"], active: true };
+  const answer = { content: "네, 수술 실시(코드 1)로 입력합니다." };
+  for (const question of ["PCX는 당일수술여부에 수술로 입력해?", "PCX 필요도 당일 수술", "PCX 수술 여부"])
+    assert.deepEqual(matchChecklists(question, [pci], answer), [], question);
+  for (const question of ["PCX 준비", "PCX 체크리스트", "PCX 시술 전 간호", "PCX 당일 수술 준비물"])
+    assert.deepEqual(matchChecklists(question, [pci], answer), [pci], question);
 });
