@@ -22,11 +22,10 @@ export function clearLegacyChecklistCopies(storage) {
   }
 }
 const DAY = 86400000;
-// 2026-10-17 사용자 결정: 서버에는 지금처럼 이름 가운데 글자를 가려(홍○동) 저장하고,
-// 이 PC 화면(입력 중·새로고침·로그아웃 후 별도 창)에서는 적은 그대로(홍길동) 보여 준다.
-// localNames: 이 PC에 둔 원래 글자 {read, write, clear}. 서버 값이 그 글자를 가린 값과
-// 같을 때만 원래 글자로 바꿔 보여 준다(다른 PC에서 고친 내용이면 서버 값 그대로).
-// 채팅 화면 체크리스트 창의 "이 PC 원래 글자" 보관(사용자·작업 공간·체크리스트별, 24시간).
+// 2026-10-27 사용자 결정: 예전처럼 이름을 적고 엔터(또는 칸을 벗어남)를 누르면 화면에서도
+// 바로 가운데 글자를 가린다(홍○동). 2026-10-17에 넣은 "이 PC에서는 적은 그대로 보여 주기"
+// (localNames)는 쓰지 않는다. 남아 있는 이 PC 원래 글자는 화면을 열 때 지운다
+// (clearExpiredLocalNames(storage, () => Infinity)). localNames 인자는 시험·예전 호출용으로 남김.
 export const localNamesKey = (userId, slug, checklistId) =>
   `schat_checklist_names_v1:${encodeURIComponent(String(userId))}:${encodeURIComponent(slug)}:${encodeURIComponent(checklistId)}`;
 export function createLocalNames(storage, key, clock = Date.now) {
@@ -144,8 +143,13 @@ export function createPersonalSession(
       if ("patient" in patch || "other" in patch) rememberNames();
       publish();
     },
-    // 화면 글자는 가리지 않는다(서버로 보낼 때만 가림). 예전 호출과 맞추려고 남겨 둠.
-    mask() {},
+    // 엔터·칸 벗어남·체크 때 화면 글자도 가린다(서버에는 늘 가린 값만 보냄).
+    mask() {
+      if (disposed) return;
+      state.patient = maskChecklistPatient(state.patient);
+      state.other = maskChecklistOther(state.other);
+      publish();
+    },
     save() {
       if (busy) return flight;
       if (disposed || !dirty || !state.ready || state.error)

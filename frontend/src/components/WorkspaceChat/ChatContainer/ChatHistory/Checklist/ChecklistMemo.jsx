@@ -84,6 +84,14 @@ export default function ChecklistMemo({
           spellCheck={false}
           onChange={(event) => onChange?.(event.target.value)}
           onBlur={onBlur}
+          onKeyDown={(event) => {
+            // 환자정보(한 줄): 엔터를 누르면 줄을 바꾸지 않고 바로 이름 가운데를 가려 저장한다
+            // (2026-10-27). 한글 입력이 끝나기 전(조합 중) 엔터와 Shift+엔터는 그대로 둔다.
+            if (!compact || event.key !== "Enter" || event.shiftKey) return;
+            if (event.nativeEvent?.isComposing || event.keyCode === 229) return;
+            event.preventDefault();
+            onBlur?.();
+          }}
           className={`block w-full min-w-0 rounded-md ${compact ? "h-[52px] min-h-[52px] resize-none py-[13px]" : "min-h-[88px] resize-y py-2"} border border-blue-400/40 bg-zinc-800/60 px-3 text-base leading-6 text-zinc-100 placeholder:text-zinc-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/30 light:border-blue-200 light:bg-white light:text-slate-900 light:placeholder:text-slate-400 light:focus:border-blue-500 md:text-sm`}
         />
       </div>

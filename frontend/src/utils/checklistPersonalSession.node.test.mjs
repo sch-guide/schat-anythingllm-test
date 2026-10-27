@@ -228,3 +228,25 @@ test("close waits for an in-flight write and drains later edits", async () => {
   assert.equal(state.other, "");
   assert.equal(state.ready, false);
 });
+
+// 2026-10-27 사용자 결정: 예전처럼 엔터(또는 칸 벗어남) 때 화면 이름도 바로 가린다.
+test("엔터·칸 벗어남(mask) 때 화면 이름도 가리고, 이 PC에 남은 원래 이름은 모두 지운다", async () => {
+  let server = null;
+  const api = {
+    read: async () => server,
+    write: async (body) => (server = { ...body, revision: "r", updatedAt: 1, expiresAt: Date.now() + 86400000 }),
+  };
+  let shown;
+  const s = createPersonalSession(api, (next) => (shown = next), Date.now);
+  await s.load();
+  s.edit({ patient: "홍길동" });
+  assert.equal(shown.patient, "홍길동"); // 입력하는 동안은 그대로
+  s.mask();
+  await s.save();
+  assert.equal(shown.patient, "홍○동");
+  assert.equal(server.patient, "홍○동");
+  const store = new Map([["schat_checklist_names_v1:7:ws:c1", JSON.stringify({ patient: "홍길동", expiresAt: Date.now() + 86400000 })], ["other", "x"]]);
+  const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k), get length() { return store.size; }, key: (i) => [...store.keys()][i] };
+  clearExpiredLocalNames(storage, () => Infinity);
+  assert.deepEqual([...store.keys()], ["other"]);
+});

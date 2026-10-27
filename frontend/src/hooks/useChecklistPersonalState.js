@@ -12,8 +12,6 @@ import {
   createPersonalSession,
   clearLegacyChecklistCopies,
   clearExpiredLocalNames,
-  createLocalNames,
-  localNamesKey,
 } from "@/utils/checklistPersonalSession";
 
 const blank = () => ({
@@ -50,7 +48,8 @@ export default function useChecklistPersonalState(
   const visible = loadedIdentity === identity ? state : blank();
   useEffect(() => {
     clearLegacyChecklistCopies(window.localStorage);
-    clearExpiredLocalNames(window.localStorage);
+    // 예전(10-17~10-27)에 이 PC에 둔 원래 이름은 모두 지운다. 이제 화면에서도 가린다.
+    clearExpiredLocalNames(window.localStorage, () => Infinity);
     if (!popup) setState(blank());
     setLoadedIdentity(identity);
     setLeftover(null);
@@ -91,23 +90,8 @@ export default function useChecklistPersonalState(
           storage: window.localStorage,
           key: popupStorageKey(slug, checklistId),
           owner: token ? String(user?.id || "") : null,
-          sharedNames:
-            token && user?.id
-              ? createLocalNames(
-                  window.localStorage,
-                  localNamesKey(user.id, slug, checklistId)
-                )
-              : null,
         })
-      : createPersonalSession(
-          api,
-          notify,
-          Date.now,
-          createLocalNames(
-            window.localStorage,
-            localNamesKey(user?.id, slug, checklistId)
-          )
-        );
+      : createPersonalSession(api, notify, Date.now);
     sessionRef.current = session;
     void session.load();
     const checkAuth = (event) => {

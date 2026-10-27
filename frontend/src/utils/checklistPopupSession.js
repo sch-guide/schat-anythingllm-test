@@ -1,4 +1,8 @@
 import { createPersonalSession } from "./checklistPersonalSession.js";
+import {
+  maskChecklistOther,
+  maskChecklistPatient,
+} from "./checklistPatientMask.js";
 
 const DAY = 86400000;
 const blank = () => ({
@@ -150,8 +154,11 @@ export function createPopupSession({
       if (closed || localOnly) return;
       localOnly = true; // Ignore dispose and every late HTTP response before clearing the server session.
       server.dispose();
+      // 로그아웃 뒤 이 PC에 남는 별도 창에도 가린 이름만 남긴다(2026-10-27, 예전 방식).
       state = {
         ...state,
+        patient: maskChecklistPatient(state.patient),
+        other: maskChecklistOther(state.other),
         ready: true,
         saving: false,
         error: null,
@@ -192,8 +199,15 @@ export function createPopupSession({
       persist();
       publish();
     },
-    // 화면·PC 저장본의 글자는 가리지 않는다. 예전 호출과 맞추려고 남겨 둠.
-    mask() {},
+    // 엔터·칸 벗어남 때 별도 창 화면·PC 저장본의 글자도 가린다(2026-10-27, 예전 방식으로 되돌림).
+    mask() {
+      if (localOnly) {
+        state.patient = maskChecklistPatient(state.patient);
+        state.other = maskChecklistOther(state.other);
+        persist();
+        publish();
+      } else server.mask();
+    },
     save() {
       if (localOnly) {
         result.mask();
