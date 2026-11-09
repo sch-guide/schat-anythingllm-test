@@ -131,7 +131,8 @@ test("기존 묶음에 더하는 질문 후보에도 자기 횟수와 예시를 
   assert.match(html, /반코 확인/);
 });
 
-test("자동 생성은 날짜별 한 줄 요약과 접힌 기록이며 실패하면 이유·쪽·재시도를 펼친다", () => {
+// 2026-11-09: 기록은 늘 접혀 있고(실패해도), 접힌 줄은 짧게. 숫자·이유·다시 시도는 펼친 안쪽에.
+test("자동 생성 기록은 늘 접힌 짧은 한 줄이고 숫자·실패 이유·재시도는 안쪽에 있다", () => {
   const run = {
     id: 77,
     startedAt: "2026-10-12T03:00:00Z",
@@ -143,7 +144,7 @@ test("자동 생성은 날짜별 한 줄 요약과 접힌 기록이며 실패하
   const renderRuns = (item) =>
     renderToStaticMarkup(React.createElement(RunsCard, { runs: [item] }));
   const normal = renderRuns(run);
-  assert.match(normal, /마지막 AI 후보 찾기:/);
+  assert.match(normal, /AI 후보 찾기 기록 · 마지막/);
   assert.match(normal, /문서 1개.*새 제안 5개.*실패 0/);
   assert.match(normal, /기록 보기 ›/);
   assert.doesNotMatch(normal, /<details[^>]*open|#77/);
@@ -164,7 +165,8 @@ test("자동 생성은 날짜별 한 줄 요약과 접힌 기록이며 실패하
       },
     ],
   });
-  assert.match(failed, /<details[^>]*open/);
+  assert.doesNotMatch(failed, /<details[^>]*open/);
+  assert.match(failed, /실패 있음\(펼쳐서 다시 시도\)/);
   assert.match(failed, /응답이 늦어/);
   assert.match(failed, /7, 8쪽/);
   assert.match(failed, /실패한 부분 다시 시도|전체 실패 다시 시도/);
@@ -709,4 +711,42 @@ test("분류 수정 저장 후 등록만 실패해 편집행이 필터 밖으로
     nodes(tree).some((node) => node.props["data-synonym-creating"]),
     true
   );
+});
+
+// 2026-11-09 사용자 결정: 직원 질문 후보는 꺼 두어 설정 칸을 화면에 그리지 않는다.
+test("동의어 관리 화면에는 직원 질문 후보 설정 칸이 없다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("./sections/Synonyms.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /<QuestionSettings[\s>]/);
+  assert.doesNotMatch(source, /SchatSynonyms\.questionSettings\(\)/);
+});
+
+test("검토할 후보가 있으면 개수와 검토하러 가기, 없으면 없다는 한 줄", () => {
+  const { ReviewNotice } = load("./sections/Synonyms.jsx", sectionDeps);
+  const some = renderToStaticMarkup(React.createElement(ReviewNotice, { count: 3, onReview: () => {} }));
+  assert.match(some, /검토할 동의어 후보 3개/);
+  assert.match(some, /검토하러 가기/);
+  const none = renderToStaticMarkup(React.createElement(ReviewNotice, { count: 0 }));
+  assert.match(none, /새로 검토할 동의어 후보가 없어요/);
+  assert.doesNotMatch(none, /검토하러 가기/);
+});
+
+// 2026-11-09 사용자 결정(A): 실행 기록 칸은 그리지 않고, 최근 실행에 다시 시도할 실패가 있을 때만 한 줄.
+test("실패한 AI 후보 찾기가 있을 때만 한 줄과 다시 시도, 평소에는 아무것도 없다", async () => {
+  const { FailedRunNotice } = load("./sections/Synonyms.jsx", sectionDeps);
+  const render = (runs) => renderToStaticMarkup(React.createElement(FailedRunNotice, { runs }));
+  assert.equal(render([]), "");
+  assert.equal(render([{ id: 1, status: "done", documents: [{ status: "done" }] }]), "");
+  // 다시 시도할 수 없는 실패(예전 기록·저장 확인 필요)는 보이지 않음
+  assert.equal(render([{ id: 2, status: "persistence_failed", documents: [{ status: "running" }] }]), "");
+  assert.equal(render([{ id: 3, status: "done", documents: [{ status: "failed" }] }]), "");
+  const html = render([{ id: 4, status: "done", documents: [{ status: "failed", retryable: true }, { status: "stopped", retryable: true }] }]);
+  assert.match(html, /실패한 문서 2개/);
+  assert.match(html, /다시 시도/);
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("./sections/Synonyms.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /<RunsCard[\s>]/);
+  // 2026-11-10: 검토 대기 탭과 겹치는 안내 줄도 그리지 않는다.
+  assert.doesNotMatch(source, /<ReviewNotice[\s>]/);
+  assert.match(source, /<FailedRunNotice[\s>]/);
 });

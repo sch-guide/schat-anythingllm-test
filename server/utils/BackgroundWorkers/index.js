@@ -140,8 +140,12 @@ class BackgroundService {
     );
 
     await this.#bootScheduledJobs();
-    this.#questionCandidateTimer = require("../synonyms/questionCandidateService")
-      .installQuestionSchedule(later);
+    // 2026-11-09 사용자 결정: "직원 질문 후보"(매일 새벽 3시 Gemini 20회)는 하루에 앞쪽 문서
+    // 1~2개만 보고 매일 처음부터 다시 봐서 후보가 늘 0개였다. 기본으로 끈다. 다시 쓰려면
+    // SCHAT_QUESTION_SYNONYMS_ENABLED=true. 문서 등록 때의 AI 동의어 후보 찾기는 그대로.
+    if (process.env.SCHAT_QUESTION_SYNONYMS_ENABLED === "true")
+      this.#questionCandidateTimer = require("../synonyms/questionCandidateService")
+        .installQuestionSchedule(later);
   }
 
   /**

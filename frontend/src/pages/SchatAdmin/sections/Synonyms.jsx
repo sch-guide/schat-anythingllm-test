@@ -166,6 +166,89 @@ const FAILURE_REASONS = {
   pending: "앞선 요청이 중단되어 아직 처리하지 못한 범위예요.",
 };
 
+/**
+ * 2026-11-09 사용자 결정: 관리자가 알아야 할 것은 "새로 검토할 동의어 후보가 있나"뿐이라
+ * 한 줄 안내로 보여 준다. 누르면 목록이 "검토 대기"만 보이게 바뀐다. 실행 기록(RunsCard)은
+ * 접어 두고, 문제가 있을 때 "기록 보기"로 연다.
+ */
+export function ReviewNotice({ count = 0, onReview }) {
+  return (
+    <div
+      className="schat-admin-card flex flex-wrap items-center justify-between gap-2 rounded-xl p-4 text-sm"
+      data-testid="synonym-review-notice"
+    >
+      {count > 0 ? (
+        <>
+          <span className="font-medium text-theme-text-primary">
+            검토할 동의어 후보 {count}개가 있어요. (문서 등록 때 AI가 찾은 후보 포함)
+          </span>
+          <button
+            type="button"
+            onClick={onReview}
+            className="rounded-lg bg-sky-600 px-3 py-1.5 font-medium text-white hover:bg-sky-500"
+          >
+            검토하러 가기
+          </button>
+        </>
+      ) : (
+        <span className="text-theme-text-secondary">새로 검토할 동의어 후보가 없어요.</span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 2026-11-09 사용자 결정(A): AI 후보 찾기 실행 기록 칸은 화면에서 뺐다. 가장 최근 실행에서
+ * 다시 시도할 수 있는 실패 문서가 있을 때만 한 줄과 [다시 시도]를 보인다. 평소에는 아무것도 없다.
+ * (RunsCard는 기술 확인용으로 코드만 남겨 두고 그리지 않는다.)
+ */
+export function FailedRunNotice({ runs = [], onRetried }) {
+  const [retrying, setRetrying] = useState(false);
+  const [error, setError] = useState("");
+  const inFlight = useRef(false);
+  const latest = runs[0];
+  const failed = (latest?.documents || []).filter(
+    (item) => ["failed", "stopped"].includes(item.status) && item.retryable
+  );
+  if (!latest || !failed.length) return null;
+  async function retry() {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setRetrying(true);
+    setError("");
+    try {
+      const result = await SchatSynonyms.retryRun(latest.id, null);
+      if (!result.ok)
+        setError(result.error || "다시 시도하지 못했어요. 잠시 뒤 확인해 주세요.");
+      await onRetried?.();
+      window.dispatchEvent(new Event("schat-notifications-refresh"));
+    } catch {
+      setError("결과를 확인하지 못했어요. 잠시 뒤 다시 확인해 주세요.");
+    } finally {
+      inFlight.current = false;
+      setRetrying(false);
+    }
+  }
+  return (
+    <div
+      className="schat-admin-card flex flex-wrap items-center justify-between gap-2 rounded-xl p-4 text-sm"
+      data-testid="synonym-failed-run"
+    >
+      <span className="text-theme-text-primary">
+        AI 후보 찾기 중 실패한 문서 {failed.length}개가 있어요.
+      </span>
+      <Button disabled={retrying} onClick={retry}>
+        {retrying ? "다시 찾는 중..." : "다시 시도"}
+      </Button>
+      {error && (
+        <p role="alert" className="w-full text-xs text-red-500">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function RunsCard({ runs, onRetried }) {
   const [selected, setSelected] = useState(runs[0]?.id);
   const [retrying, setRetrying] = useState(false);
@@ -201,27 +284,27 @@ export function RunsCard({ runs, onRetried }) {
   }
   return (
     <details
-      open={
-        failed.length > 0 ||
-        ["persistence_failed", "retrying", "running"].includes(run.status)
-      }
       className={`schat-admin-card synonym-run-history rounded-xl p-4${latestFailures ? " synonym-run-history--failed" : ""}`}
     >
-      <summary className="cursor-pointer text-sm font-medium text-theme-text-primary">
+      {/* 접힌 줄은 짧게. 자세한 숫자·문서별 표·다시 시도는 펼쳤을 때만(문제가 있을 때 기술 담당자용). */}
+      <summary className="cursor-pointer text-sm text-theme-text-secondary">
         <span>
-          마지막 AI 후보 찾기:{" "}
+          AI 후보 찾기 기록 · 마지막{" "}
           {createdText(latest.startedAt).slice(0, 10) || "날짜 미기록"}
-          {" · "}문서{" "}
-          {latest.summary?.documents ?? latest.documents?.length ?? 0}개{" · "}
-          새 제안{" "}
-          {(latest.summary?.newGroups || 0) + (latest.summary?.additions || 0)}
-          개{" · "}실패 {latestFailures}
-          {" · "}직원 질문에서 {latest.summary?.staffQuestions || 0}개
+          {latestFailures > 0 && " · 실패 있음(펼쳐서 다시 시도)"}
         </span>
-        <span className="synonym-run-history-link">기록 보기 ›</span>
+        <span className="synonym-run-history-link"> 기록 보기 ›</span>
         {["running", "retrying"].includes(runs[0].status) && " · 진행 중"}
-        {runs[0].status === "persistence_failed" && " · 저장 확인 필요"}
       </summary>
+      <p className="mt-2 text-xs text-theme-text-secondary">
+        마지막 실행: 문서{" "}
+        {latest.summary?.documents ?? latest.documents?.length ?? 0}개 · 새 제안{" "}
+        {(latest.summary?.newGroups || 0) + (latest.summary?.additions || 0)}개 · 실패{" "}
+        {latestFailures}
+        {latest.summary?.staffQuestions > 0 &&
+          ` · 직원 질문에서 ${latest.summary.staffQuestions}개`}
+        {runs[0].status === "persistence_failed" && " · 저장 확인 필요"}
+      </p>
       <div className="mt-3 flex flex-col gap-3">
         <select
           aria-label="자동 생성 실행 기록"
@@ -968,7 +1051,6 @@ export default function SynonymsSection() {
   const [loadError, setLoadError] = useState(false);
   const [notice, setNotice] = useState(null);
   const [runs, setRuns] = useState([]);
-  const [questionSettings, setQuestionSettings] = useState(null);
   async function reload() {
     try {
       const list = await SchatSynonyms.list();
@@ -988,11 +1070,6 @@ export default function SynonymsSection() {
     reload();
     SchatSynonyms.runs()
       .then(setRuns)
-      .catch(() => {});
-    SchatSynonyms.questionSettings()
-      .then((result) => {
-        if (result.ok) setQuestionSettings(result.settings);
-      })
       .catch(() => {});
   }, []);
   const view = useMemo(
@@ -1424,7 +1501,9 @@ export default function SynonymsSection() {
           이름이 비슷해도 다를 수 있어요. 확실하지 않으면 원문을 확인해 주세요.
         </p>
       </details>
-      <RunsCard
+      {/* "검토할 동의어 후보 N개 [검토하러 가기]" 안내는 뺐다(2026-11-10 사용자 결정). 위쪽
+          "검토 대기" 탭이 개수를 보여 주고 누르면 바로 걸러진다. */}
+      <FailedRunNotice
         key={runs[0]?.id ?? "none"}
         runs={runs}
         onRetried={async () => {
@@ -1432,10 +1511,7 @@ export default function SynonymsSection() {
           await reload();
         }}
       />
-      <QuestionSettings
-        settings={questionSettings}
-        onSaved={setQuestionSettings}
-      />
+      {/* "직원 질문 후보 설정"은 기능을 꺼서 화면에서 뺐다(2026-11-09). */}
     </div>
   );
 }
