@@ -82,6 +82,19 @@ export default function GuidelineBrowserViewer({ source, title, jump = null }) {
         src={browserViewerUrl(objectUrl, jump?.page)}
         className="h-[78vh] min-h-[480px] w-full rounded-lg border border-zinc-700 bg-white light:border-slate-300"
       />
+      {/* 2026-11-09: 답변 근거 원문처럼 원본 PDF를 새 창에서 연다. 이미 받아 둔 원본(이 화면의
+          임시 주소)을 쓰므로 다시 받지 않는다. 검색 결과로 고른 쪽부터 열린다. */}
+      <div className="mt-1 flex justify-center">
+        <a
+          href={browserViewerUrl(objectUrl, jump?.page)}
+          target="_blank"
+          rel="noreferrer"
+          data-testid="guideline-open-new-window"
+          className="text-xs font-medium text-blue-300 hover:text-blue-200 light:text-blue-700 light:hover:text-blue-800"
+        >
+          원본 PDF를 새 창에서 열기
+        </a>
+      </div>
     </div>
   );
 }

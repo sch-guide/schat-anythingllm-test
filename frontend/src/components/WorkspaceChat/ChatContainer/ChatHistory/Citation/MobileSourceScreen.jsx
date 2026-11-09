@@ -12,6 +12,8 @@ import RelatedImages from "../RelatedImages";
 import { sourceHighlightTexts } from "@/utils/pdfEvidenceHighlight";
 import EvidenceText from "../../SourcesSidebar/EvidenceText";
 import SpreadsheetViewer from "./SpreadsheetViewer";
+import StorageFiles from "@/models/files";
+import { openPdfInNewWindow } from "@/utils/openPdfWindow";
 
 // pdf.js is only downloaded when a phone opens an original PDF.
 const PdfPageCanvas = lazy(() => import("./PdfPageCanvas"));
@@ -38,8 +40,9 @@ export function useMobileViewport() {
 
 /**
  * Mobile-only full-screen source view: "← 채팅으로", the source name/page and
- * [PDF 원문] [텍스트 원문] tabs that stay visible so the reader can switch
- * back and forth. The chat stays mounted underneath, so its scroll position
+ * the original PDF page with "원본 PDF를 새 창에서 열기" (2026-11-09: same as
+ * the PC view; the [PDF 원문][텍스트 원문] tabs were removed). The text
+ * evidence is shown only when there is no PDF or it cannot be opened. The chat stays mounted underneath, so its scroll position
  * is kept. Opening pushes one history entry (the router's own state is
  * preserved) so the phone's back button closes this view instead of leaving
  * the chat.
@@ -55,8 +58,10 @@ export default function MobileSourceScreen({
 }) {
   const isExcel = /\.(xlsx|xls)$/iu.test(documentName || "");
   const hasPdf = Boolean(source?.pdfRef && workspaceSlug);
-  const [tab, setTab] = useState(hasPdf ? "pdf" : "text");
   const [pdfFailed, setPdfFailed] = useState(!hasPdf);
+  const [opening, setOpening] = useState(false);
+  const [openError, setOpenError] = useState("");
+  const tab = pdfFailed ? "text" : "pdf";
   const [pdfDeleted, setPdfDeleted] = useState(false);
   const closedByHistory = useRef(false);
   const titleRef = useRef(null);
@@ -94,15 +99,18 @@ export default function MobileSourceScreen({
   const markPdfFailed = useCallback((reason) => {
     setPdfFailed(true);
     setPdfDeleted(reason === 'deleted');
-    setTab("text");
   }, []);
-
-  const tabClass = (active) =>
-    `flex-1 rounded-md py-2 text-sm font-medium transition-colors disabled:opacity-40 ${
-      active
-        ? "bg-sky-600 !text-white"
-        : "text-zinc-300 light:text-slate-600 hover:bg-zinc-800 light:hover:bg-slate-200"
-    }`;
+  const openNewWindow = async () => {
+    if (opening) return;
+    setOpening(true);
+    setOpenError("");
+    const ok = await openPdfInNewWindow(
+      () => StorageFiles.originalPdf(workspaceSlug, source.pdfRef),
+      source.page
+    );
+    setOpening(false);
+    if (!ok) setOpenError("새 창을 열지 못했습니다. 브라우저의 팝업 차단을 확인해 주세요.");
+  };
 
   return createPortal(
     <div
@@ -139,34 +147,27 @@ export default function MobileSourceScreen({
         >
           {summary || documentName || "근거 원문"}
         </p>
-        {!isExcel && <div
-          role="tablist"
-          aria-label="원문 보기 방식"
-          className="flex gap-1 rounded-lg bg-zinc-800/70 p-1 light:bg-slate-100"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "pdf"}
-            disabled={pdfFailed}
-            onClick={() => setTab("pdf")}
-            className={tabClass(tab === "pdf")}
-          >
-            PDF 원문
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "text"}
-            onClick={() => setTab("text")}
-            className={tabClass(tab === "text")}
-          >
-            텍스트 원문
-          </button>
-        </div>}
+        {!isExcel && hasPdf && !pdfFailed && (
+          <div className="flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={openNewWindow}
+              disabled={opening}
+              data-testid="mobile-open-new-window"
+              className="text-sm font-medium text-blue-300 disabled:opacity-60 light:text-blue-700"
+            >
+              {opening ? "원본 PDF를 여는 중입니다." : "원본 PDF를 새 창에서 열기"}
+            </button>
+            {openError && (
+              <p role="alert" className="text-xs text-red-400 light:text-red-600">
+                {openError}
+              </p>
+            )}
+          </div>
+        )}
       </header>
 
-      {/* Both panels stay mounted so switching tabs keeps the rendered page. */}
+      {/* PDF를 열 수 있으면 PDF만, 열 수 없으면 글자 원문만 보인다. */}
       <div
         className={`${tab !== "pdf" || pdfFailed ? "hidden" : "flex"} min-h-0 flex-1 flex-col`}
       >

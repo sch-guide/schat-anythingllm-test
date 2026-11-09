@@ -421,7 +421,7 @@ export default function Citations({
           문서 근거를 확인하지 못했습니다.
         </p>
       )}
-      {display.mode === "unverified" && (
+      {display.mode === "unverified" && referenceSources.length > 0 && (
         <div className="rounded-lg border border-theme-sidebar-border p-3 text-sm">
           {referenceSources.length > 0 && (
             <details className="mt-2">

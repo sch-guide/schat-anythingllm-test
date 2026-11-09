@@ -201,3 +201,18 @@ test("평가 상세의 질문·답변은 왼쪽 정렬 전체 폭이고 처리 �
   assert.match(done, /data-testid="feedback-resolved"/);
   assert.match(done, />삭제</);
 });
+
+// 2026-11-09: 처리 완료 전에는 직원 알림에 갈 처리 결과 칸이 보이고, 완료 뒤에는 없다.
+test("처리 결과 칸은 처리 완료 전에만 보이고 적은 글자를 그대로 보여 준다", () => {
+  const base = { id: 3, question: "질문", answer: "답", sources: [], status: "open" };
+  const open = renderToStaticMarkup(
+    React.createElement(section.FeedbackContent, { feedback: base, onResolve: () => {}, resolution: "3쪽 반영" })
+  );
+  assert.match(open, /data-testid="feedback-resolution"/);
+  assert.match(open, /3쪽 반영/);
+  assert.match(open, /직원에게 알림/);
+  const done = renderToStaticMarkup(
+    React.createElement(section.FeedbackContent, { feedback: { ...base, status: "resolved" }, onResolve: () => {} })
+  );
+  assert.doesNotMatch(done, /feedback-resolution/);
+});

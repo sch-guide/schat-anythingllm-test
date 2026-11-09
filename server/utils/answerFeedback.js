@@ -74,6 +74,32 @@ function present(row, full = false) {
 }
 // The caller must supply a dedicated Prisma client with logging disabled.
 // Do not log raw driver exceptions; they can contain private free text.
+const FEEDBACK_NOTIFICATION_KIND = "feedback_resolved";
+const FEEDBACK_DEFAULT_RESOLUTION = "보내 주신 의견을 확인하고 답변을 수정했습니다.";
+const FEEDBACK_REASON_LABELS = { wrong: "틀린 내용", not_found: "원하는 내용을 못 찾음" };
+
+/**
+ * 알림함에 보일 모양. 문제신고 알림과 같은 칸(report.title·statusLabel·resolution)을 써서
+ * 직원 화면(알림 종)은 그대로 둔다. 질문은 직원 본인의 질문이다.
+ */
+function presentFeedbackNotification(row = {}) {
+  let data = {};
+  try {
+    data = JSON.parse(row.message || "{}") || {};
+  } catch {}
+  const label = FEEDBACK_REASON_LABELS[data.reason] || "답변 평가";
+  return {
+    message: `보내 주신 답변 의견(${label})을 처리했습니다.`,
+    report: {
+      id: null,
+      title: String(data.question || "질문"),
+      statusLabel: "처리 완료",
+      resolution: String(data.resolution || FEEDBACK_DEFAULT_RESOLUTION),
+      resolvedAt: row.createdAt,
+    },
+  };
+}
+
 function createAnswerFeedbackStore(db, clock = Date.now) {
   return {
     async save(userId, workspaceId, chatId, input) {
@@ -150,14 +176,42 @@ function createAnswerFeedbackStore(db, clock = Date.now) {
       if (!rows.length) throw fault("NOT_FOUND");
       return present(rows[0], true);
     },
-    async resolve(id) {
-      const count = await db.$executeRawUnsafe(
-        "UPDATE schat_answer_feedback SET status='resolved',resolvedAt=?,updatedAt=? WHERE id=? AND feedback=0",
-        clock(),
-        clock(),
-        Number(id)
-      );
-      if (!count) throw fault("NOT_FOUND");
+    // 처리 완료. 처음 완료할 때 👎를 보낸 직원에게 알림을 보낸다(2026-11-09, 문제신고와 같은 알림함).
+    // resolution: 관리자가 적은 처리 결과(선택, 1000자). 비우면 기본 문장.
+    async resolve(id, { resolution } = {}) {
+      if (!Number.isSafeInteger(Number(id)) || Number(id) < 1)
+        throw fault("NOT_FOUND");
+      const text =
+        String(resolution ?? "").trim().slice(0, 1000) ||
+        FEEDBACK_DEFAULT_RESOLUTION;
+      await db.$transaction(async (tx) => {
+        const rows = await tx.$queryRawUnsafe(
+          `SELECT f.id, f.userId, f.status, f.reason, c.prompt AS question
+          FROM schat_answer_feedback f JOIN workspace_chats c ON c.id=f.chatId
+          WHERE f.id=? AND f.feedback=0`,
+          Number(id)
+        );
+        if (!rows.length) throw fault("NOT_FOUND");
+        const now = clock();
+        await tx.$executeRawUnsafe(
+          "UPDATE schat_answer_feedback SET status='resolved',resolvedAt=?,updatedAt=? WHERE id=? AND feedback=0",
+          now,
+          now,
+          Number(id)
+        );
+        if (rows[0].status === "resolved") return;
+        await tx.$executeRawUnsafe(
+          "INSERT INTO schat_user_notifications (user_id,report_id,kind,message,read_at,createdAt) VALUES (?,NULL,?,?,NULL,?)",
+          Number(rows[0].userId),
+          FEEDBACK_NOTIFICATION_KIND,
+          JSON.stringify({
+            reason: rows[0].reason,
+            question: String(rows[0].question || "").slice(0, 200),
+            resolution: text,
+          }),
+          now
+        );
+      });
       return this.detail(id);
     },
     // 처리 완료된 👎 평가만 지움. 직원 계정·채팅 기록은 그대로 둠.
@@ -189,4 +243,10 @@ function answerFeedbackStore() {
   }
   return privateStore;
 }
-module.exports = { createAnswerFeedbackStore, answerFeedbackStore, maskMemo };
+module.exports = {
+  createAnswerFeedbackStore,
+  answerFeedbackStore,
+  maskMemo,
+  FEEDBACK_NOTIFICATION_KIND,
+  presentFeedbackNotification,
+};

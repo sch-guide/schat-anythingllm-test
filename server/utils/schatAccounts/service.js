@@ -765,7 +765,36 @@ async function createReport(userId, input = {}) {
         core.normalizeText(input.relatedFeature).slice(0, 100) || null,
     },
   });
+  await notifyAdminsOfReport(report, user.id);
   return presentReport(report);
+}
+
+// 새 문제신고가 들어오면 관리자(정지되지 않은 admin) 알림함에도 알린다(2026-11-09).
+// 알림을 못 넣어도 신고 저장은 그대로 둔다. 신고를 지우면 이 알림도 함께 지워진다(deleteReport).
+const ADMIN_REPORT_NOTIFICATION = "admin_new_report";
+async function notifyAdminsOfReport(report, reporterId, { db = prisma } = {}) {
+  try {
+    const admins = await db.users.findMany({
+      where: { role: "admin", suspended: 0, id: { not: Number(reporterId) } },
+      select: { id: true },
+    });
+    if (!admins.length) return;
+    // Prisma 5.3 SQLite는 createMany가 없어 한 줄씩 넣는다.
+    await db.$transaction(
+      admins.map((admin) =>
+        db.schat_user_notifications.create({
+          data: {
+            user_id: admin.id,
+            report_id: report.id,
+            kind: ADMIN_REPORT_NOTIFICATION,
+            message: `새 문제신고가 접수되었습니다 (${report.category}).`,
+          },
+        })
+      )
+    );
+  } catch (error) {
+    console.error("[schat-report] admin notification skipped:", error?.code || "error");
+  }
 }
 
 async function listMyReports(userId) {
@@ -893,9 +922,19 @@ async function listNotifications(userId) {
     orderBy: { createdAt: "desc" },
     take: 50,
   });
+  const {
+    FEEDBACK_NOTIFICATION_KIND,
+    presentFeedbackNotification,
+  } = require("../answerFeedback");
   return {
     unread: rows.filter((n) => !n.read_at).length,
-    items: rows.map((n) => ({
+    items: rows.map((n) => n.kind === FEEDBACK_NOTIFICATION_KIND ? {
+      id: n.id,
+      kind: n.kind,
+      read: !!n.read_at,
+      createdAt: n.createdAt,
+      ...presentFeedbackNotification(n),
+    } : ({
       id: n.id,
       message: n.message,
       kind: n.kind,
@@ -906,7 +945,11 @@ async function listNotifications(userId) {
             id: n.report.id,
             title: n.report.title,
             // Each notice shows the status it announced, not the latest one.
-            statusLabel: core.REPORT_STATUS[n.kind] || n.report.status,
+            // 관리자용 새 신고 알림은 지금 상태를 보여 준다.
+            statusLabel:
+              core.REPORT_STATUS[n.kind] ||
+              core.REPORT_STATUS[n.report.status] ||
+              n.report.status,
             resolution: n.kind === "resolved" ? n.report.resolution : null,
             resolvedAt: n.kind === "resolved" ? n.report.resolved_at : null,
           }
@@ -1072,6 +1115,7 @@ async function suggestFaqs(query) {
 
 module.exports = {
   REPORT_CATEGORIES,
+  notifyAdminsOfReport,
   presentUser,
   listDepartments,
   saveDepartment,

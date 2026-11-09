@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { openPdfInNewWindow } from "@/utils/openPdfWindow";
 
 const ZOOMS = [1, 1.25, 1.5, 2, 3];
 
@@ -10,7 +11,8 @@ export function clampPage(value, total) {
 
 /**
  * 지침서 원본 PDF 보기. 보고 있는 쪽만 서버에서 받아 와 그린다(큰 문서도 빨리 열림).
- * 화면 보기 전용이며 내려받기 버튼은 두지 않는다.
+ * 2026-11-09 사용자 요청: PC처럼 "원본 PDF를 새 창에서 열기"를 둔다(누를 때 원본 전체를 받아
+ * 보고 있는 쪽부터 연다).
  */
 export default function GuidelinePdfViewer({ source, title, jump = null }) {
   const initialPage = jump?.page || 1;
@@ -23,6 +25,20 @@ export default function GuidelinePdfViewer({ source, title, jump = null }) {
   const [zoomIndex, setZoomIndex] = useState(0);
   const [rendering, setRendering] = useState(false);
   const total = pdf?.numPages || 0;
+  const [opening, setOpening] = useState(false);
+  const [openError, setOpenError] = useState("");
+  async function openNewWindow() {
+    if (opening) return;
+    setOpening(true);
+    setOpenError("");
+    const ok = await openPdfInNewWindow(async () => {
+      const response = await fetch(source.url, { headers: source.httpHeaders, cache: "no-store" });
+      if (!response.ok) throw new Error("원본을 열지 못했습니다.");
+      return response.blob();
+    }, page);
+    setOpening(false);
+    if (!ok) setOpenError("새 창을 열지 못했습니다. 브라우저의 팝업 차단을 확인해 주세요.");
+  }
 
   useEffect(() => {
     let active = true;
@@ -155,6 +171,22 @@ export default function GuidelinePdfViewer({ source, title, jump = null }) {
           </p>
         )}
         <canvas ref={canvasRef} aria-label={`${title} ${page}쪽`} className="mx-auto block bg-white" />
+      </div>
+      <div className="flex flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={openNewWindow}
+          disabled={opening}
+          data-testid="guideline-mobile-open-new-window"
+          className="text-sm font-medium text-blue-300 disabled:opacity-60 light:text-blue-700"
+        >
+          {opening ? "원본 PDF를 여는 중입니다. 큰 문서는 몇 초 걸릴 수 있습니다." : "원본 PDF를 새 창에서 열기"}
+        </button>
+        {openError && (
+          <p role="alert" className="text-xs text-red-400 light:text-red-600">
+            {openError}
+          </p>
+        )}
       </div>
     </section>
   );

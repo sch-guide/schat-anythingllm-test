@@ -104,6 +104,8 @@ export function FeedbackContent({
   onResolve,
   onDelete,
   saving = false,
+  resolution = "",
+  onResolutionChange,
 }) {
   return (
     <div className="w-full min-w-0 rounded-lg border border-theme-sidebar-border p-4 flex flex-col gap-3">
@@ -140,9 +142,28 @@ export function FeedbackContent({
         )}
       </div>
       {feedback.status !== "resolved" ? (
-        <Button onClick={onResolve} disabled={saving}>
-          {saving ? "저장 중..." : "처리 완료"}
-        </Button>
+        <>
+          {/* 2026-11-09: 처리 완료하면 👎를 보낸 직원의 알림함에 이 처리 결과가 간다. */}
+          <label
+            htmlFor={`schat-feedback-resolution-${feedback.id}`}
+            className="text-sm font-medium text-theme-text-primary"
+          >
+            처리 결과 (직원 알림에 표시)
+          </label>
+          <textarea
+            id={`schat-feedback-resolution-${feedback.id}`}
+            data-testid="feedback-resolution"
+            rows={3}
+            maxLength={1000}
+            placeholder="비워 두면 '보내 주신 의견을 확인하고 답변을 수정했습니다.'로 보냅니다."
+            className="w-full rounded-lg border border-theme-sidebar-border bg-theme-settings-input-bg p-2 text-sm text-theme-text-primary resize-y"
+            value={resolution}
+            onChange={(event) => onResolutionChange?.(event.target.value)}
+          />
+          <Button onClick={onResolve} disabled={saving}>
+            {saving ? "저장 중..." : "처리 완료하고 직원에게 알림"}
+          </Button>
+        </>
       ) : (
         <div
           className="flex flex-wrap items-center gap-3"
@@ -165,6 +186,7 @@ function FeedbackDetail({ id, onSaved, onDeleted }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [resolution, setResolution] = useState("");
   useEffect(() => {
     let active = true;
     SchatAccount.answerFeedback(id)
@@ -185,7 +207,7 @@ function FeedbackDetail({ id, onSaved, onDeleted }) {
     setSaving(true);
     setError("");
     try {
-      const result = await SchatAccount.resolveAnswerFeedback(id);
+      const result = await SchatAccount.resolveAnswerFeedback(id, resolution);
       if (!result?.success || !result.feedback) throw new Error();
       setFeedback(result.feedback);
       onSaved();
@@ -204,6 +226,8 @@ function FeedbackDetail({ id, onSaved, onDeleted }) {
           onResolve={resolve}
           onDelete={() => setConfirmDelete(true)}
           saving={saving}
+          resolution={resolution}
+          onResolutionChange={setResolution}
         />
       ) : (
         !error && <Loading />

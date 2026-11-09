@@ -69,7 +69,24 @@ function buildRagContext(sources = []) {
         .filter(Boolean)
     : [];
   if (sourceTexts.length === 0) return CLOSED_BOOK_NO_EVIDENCE;
-  return `등록된 병원 문서에서 검색한 근거:\n\n${sourceTexts.join("\n\n")}`;
+  return `등록된 병원 문서에서 검색한 근거:\n${checklistDashNote(sources)}\n${sourceTexts.join("\n\n")}`;
+}
+
+// 2026-11-09(간호교육파트 확인): 검사 및 시술·수술 체크리스트 표에서 칸 값이 "-"이면
+// 그 항목은 필요 없음(해당 없음)이다. "tfca 자정금식 해야되는지"에 금식여부 "-"를 읽지 못해
+// 금식 여부를 답하지 않았다. 이 두 문서가 근거에 있을 때만 근거 앞에 한 줄 붙인다.
+function checklistDashNote(sources = []) {
+  const { checklistDocumentKind } = require("../../../documentChecklists/versionMatch");
+  const fromChecklistDocument = (Array.isArray(sources) ? sources : []).some((source) =>
+    checklistDocumentKind(
+      String(source?.document_name || source?.documentName || source?.title || "")
+        .split(/[\\/]/)
+        .pop()
+    )
+  );
+  return fromChecklistDocument
+    ? '(검사 및 시술·수술 체크리스트 표에서 항목 값이 "-"이면 그 항목은 필요 없음(해당 없음)을 뜻합니다. 예: 금식여부 "-" → 금식 필요 없음)\n'
+    : "";
 }
 
 function publicDocumentName(source = {}) {

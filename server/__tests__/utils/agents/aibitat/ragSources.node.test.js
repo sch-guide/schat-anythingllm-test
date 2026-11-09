@@ -512,3 +512,15 @@ test("Automatic general weather chat does not force rag-memory", async () => {
     0
   );
 });
+
+// 2026-11-09: 체크리스트 표의 "-"는 필요 없음. 검사 및 시술·수술 문서가 근거일 때만 알려 준다.
+test("검사 및 시술·수술 근거에만 '-'는 필요 없음이라는 설명을 붙인다", () => {
+  const { buildRagContext: build } = require("../../../../utils/agents/aibitat/utils/ragSources");
+  const withChecklist = build([{ document_name: "검사 및 시술(20261002).pdf", page: 64, text: "금식여부 - IV line 18G" }]);
+  assert.match(withChecklist, /"-"이면 그 항목은 필요 없음/);
+  assert.match(withChecklist, /금식여부 - IV line 18G/);
+  const surgery = build([{ document_name: "수술(20261023).pdf", page: 4, text: "금식여부 MN NPO" }]);
+  assert.match(surgery, /필요 없음/);
+  const other = build([{ document_name: "2026실무지침서 (26.7).pdf", page: 3, text: "본문" }]);
+  assert.doesNotMatch(other, /필요 없음/);
+});

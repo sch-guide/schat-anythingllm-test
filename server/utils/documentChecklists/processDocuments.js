@@ -206,6 +206,8 @@ async function processDocumentChecklists(
   // Compare with earlier editions: taken once, before this upload saves
   // anything, so checklists of the same upload never match each other.
   const existing = existingChecklists(repository);
+  // 이번 올리기에서 이미 짝지은 예전 공개본(같은 내용을 두 체크리스트가 함께 가져가지 않게).
+  const claimed = new Set();
   const titleCounts = new Map();
   for (const checklist of extracted) {
     const key = `${checklist.documentId}\u0000${identityKey(checklist)}`;
@@ -216,6 +218,7 @@ async function processDocumentChecklists(
       const key = `${checklist.documentId}\u0000${identityKey(checklist)}`;
       const versionMatch = matchPreviousVersion(checklist, existing, {
         duplicateInDocument: titleCounts.get(key) > 1,
+        claimed,
       });
       saveResult(result, repository, checklist, versionMatch);
     } catch (error) {

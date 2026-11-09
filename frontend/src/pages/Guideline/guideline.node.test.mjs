@@ -59,14 +59,17 @@ test("문서 목록은 이름과 쪽 수만 보이고 고른 문서를 표시한
   assert.match(empty, /아직 올라온 지침서가 없습니다/);
 });
 
-test("쪽 이동은 1쪽과 마지막 쪽 사이로 맞추고, 내려받기 버튼은 없다", () => {
-  const viewer = load("../../components/SchatGuideline/GuidelinePdfViewer.jsx");
+test("쪽 이동은 1쪽과 마지막 쪽 사이로 맞추고, 내려받기 버튼은 없고 새 창 열기만 있다", () => {
+  const viewer = load("../../components/SchatGuideline/GuidelinePdfViewer.jsx", { "@/utils/openPdfWindow": { openPdfInNewWindow: async () => true } });
   assert.equal(viewer.clampPage("0", 461), 1);
   assert.equal(viewer.clampPage("999", 461), 461);
   assert.equal(viewer.clampPage("120", 461), 120);
   assert.equal(viewer.clampPage("abc", 461), 1);
   const source = read("../../components/SchatGuideline/GuidelinePdfViewer.jsx");
-  assert.doesNotMatch(source, /download|내려받기<\/|새 창에서 열기/);
+  assert.doesNotMatch(source, /download|내려받기<\//);
+  // 2026-11-09 사용자 요청: 휴대폰 지침서 원본 보기에도 원본 PDF를 새 창에서 열기(보고 있는 쪽부터)
+  assert.match(source, /원본 PDF를 새 창에서 열기/);
+  assert.match(source, /openPdfInNewWindow\(/);
   assert.match(read("../../utils/pdfEvidenceDocument.js"), /disableAutoFetch: true/);
 });
 
@@ -97,4 +100,9 @@ test("PC는 브라우저 PDF 보기로 원본을 열어 원본 안 찾기·쪽 �
   const page = read("./index.jsx");
   assert.match(page, /isMobile \? \(\s*<GuidelinePdfViewer[\s\S]*\) : \(\s*<GuidelineBrowserViewer/);
   assert.match(read("../../components/SchatGuideline/GuidelineBrowserViewer.jsx"), /Ctrl\+F/);
+  // 2026-11-09: 지침서 원본 보기에도 원본 PDF를 새 창에서 열기(받아 둔 원본, 고른 쪽부터)
+  const browser = read("../../components/SchatGuideline/GuidelineBrowserViewer.jsx");
+  assert.match(browser, /원본 PDF를 새 창에서 열기/);
+  assert.match(browser, /href=\{browserViewerUrl\(objectUrl, jump\?\.page\)\}/);
+  assert.match(browser, /target="_blank"/);
 });

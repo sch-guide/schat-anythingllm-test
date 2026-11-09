@@ -610,7 +610,8 @@ test("a previous checklist that was not public is never published automatically"
   assert.equal(v2.versionMatch.result, "previous-not-public");
 });
 
-test("two checklists with the same title in one edition are left for review", async () => {
+// 2026-11-09: 똑같은 내용 하나는 예전 공개본과 짝지어 공개, 짝이 없는 나머지 하나만 검토.
+test("two identical same-title checklists: one matches the public one, the extra waits for review", async () => {
   const repository = tempRepository();
   await publishedFirstEdition(repository, [{ page: 7, ...procedurePage() }]);
   await upload(repository, {
@@ -624,10 +625,44 @@ test("two checklists with the same title in one edition are left for review", as
   const statuses = repository
     .findByDocumentIds(["doc-v2"], { includeReview: true })
     .map((c) => [c.status, c.versionMatch.result]);
-  assert.deepEqual(statuses, [
-    ["needs_review", "ambiguous"],
+  assert.deepEqual(statuses.sort(), [
+    ["active", "same"],
     ["needs_review", "ambiguous"],
   ]);
+});
+
+// 2026-11-09: 수술 문서의 "유방암 Breast Cancer" ×3처럼 같은 제목이 여럿이어도 내용이 각각
+// 예전 공개본과 같으면 모두 다시 공개하고, 한 곳만 바뀌면 그 하나만 검토로 남긴다.
+test("same-title checklists with different content each match their own public version", async () => {
+  const repository = tempRepository();
+  const pages = [
+    { page: 7, ...procedurePage({ fasting: ["금식", "6시간"] }) },
+    { page: 8, ...procedurePage({ fasting: ["금식", "4시간"] }) },
+    { page: 9, ...procedurePage({ fasting: ["금식", "2시간"] }) },
+  ];
+  await publishedFirstEdition(repository, pages);
+  await upload(repository, {
+    documentId: "doc-v2",
+    filename: PROCEDURE_V2,
+    pages: [pages[0], pages[1], { page: 9, ...procedurePage({ fasting: ["금식", "3시간"] }) }],
+  });
+  const statuses = repository
+    .findByDocumentIds(["doc-v2"], { includeReview: true })
+    .map((c) => [c.page, c.status, c.versionMatch.result])
+    .sort((a, b) => a[0] - b[0]);
+  assert.deepEqual(statuses, [
+    [7, "active", "same"],
+    [8, "active", "same"],
+    [9, "needs_review", "ambiguous"],
+  ]);
+  // 예전 판이 지워지지 않고 여러 벌 남아 있어도(도중 판도 공개) 같은 내용이면 다시 공개
+  for (const c of repository.findByDocumentIds(["doc-v2"], { includeReview: true }))
+    if (c.status !== "active") repository.setStatus(c.id, "active");
+  await upload(repository, { documentId: "doc-v3", filename: "검사 및 시술(27.01.01).pdf", pages });
+  assert.deepEqual(
+    repository.findByDocumentIds(["doc-v3"], { includeReview: true }).map((c) => c.status),
+    ["active", "active", "active"]
+  );
 });
 
 test("checklists saved before this change (no fingerprint) still match", async () => {

@@ -138,10 +138,33 @@ export function isNoEvidenceAnswer(answer = "") {
   );
 }
 
+// 2026-11-09: "고실 개방술에 대한 내용은 등록된 문서에서 확인되지 않습니다."처럼 다른 말로 시작한
+// "못 찾음" 답은 근거 없음으로 보지 못해, 검색에 걸린 다른 수술·검사 자료를 "검색된 참고 자료"로
+// 모두 보여 줬다. 답이 짧은 못 찾음 문장뿐이고(내용이 있는 답은 제외) 문서에서 인용한 문장이 하나도
+// 없으면 근거 없음으로 본다.
+const NOT_FOUND_ANYWHERE =
+  /(?:등록된|제공된|검색된)\s*(?:병원\s*)?(?:문서|근거|자료)[^.。\n]{0,40}(?:확인되지\s*않|찾을\s*수\s*없|포함되어\s*있지\s*않|명시되어\s*있지\s*않|나와\s*있지\s*않)|확인되지\s*않습니다|찾을\s*수\s*없습니다/u;
+
+function hasEvidenceQuotes(sources = []) {
+  return sources.some(
+    (source) => Array.isArray(source?.evidenceQuotes) && source.evidenceQuotes.length > 0
+  );
+}
+
+export function isNotFoundWithoutEvidence(answer = "", sources = []) {
+  if (isNoEvidenceAnswer(answer)) return true;
+  const text = String(answer).replace(/[#*>`_\-\s]+/gu, " ").trim();
+  return (
+    text.length <= 120 &&
+    NOT_FOUND_ANYWHERE.test(text) &&
+    !hasEvidenceQuotes(sources)
+  );
+}
+
 export function buildCitationDisplay(options = {}) {
   const { question = "", answer = "", sources = [] } = options;
   const available = Array.isArray(sources) ? sources : [];
-  if (isNoEvidenceAnswer(answer))
+  if (isNotFoundWithoutEvidence(answer, available))
     return { mode: "no-evidence", sources: [], references: [], missingTopics: [] };
   const direct = filterDirectCitationSources(options);
   const missingTopics = questionTopics(question)
@@ -150,7 +173,13 @@ export function buildCitationDisplay(options = {}) {
   return {
     mode: direct.length ? "direct" : "unverified",
     sources: direct,
-    references: direct.length ? [] : available,
+    // 참고 자료도 질문의 낱말이 들어간 것만(점수만 비슷한 다른 수술·검사는 빼기).
+    // 질문 낱말이 없으면(질문 기록이 없는 예전 화면 등) 가를 수 없어 그대로 둔다.
+    references: direct.length
+      ? []
+      : meaningfulTokens(question).length
+        ? available.filter((source) => hasQuestionFocus(question, source))
+        : available,
     missingTopics,
   };
 }

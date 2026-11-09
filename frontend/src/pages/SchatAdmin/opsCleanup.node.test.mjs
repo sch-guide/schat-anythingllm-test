@@ -51,12 +51,13 @@ test("mobile citations open a full-screen PDF/텍스트 source view", () => {
   // PC keeps the inline viewer; mobile opens the dedicated screen instead
   assert.match(row, /!isMobile && isOpen && \(excerpt \|\| source\?\.pdfRef \|\| isExcel\)/);
   assert.match(row, /isMobile && mobileOpen && \(\s*<MobileSourceScreen/);
-  // header: back to chat, source name, both tabs always visible
+  // header: back to chat, source name. 2026-11-09: PC와 같이 탭 없이 PDF와 "원본 PDF를 새 창에서 열기",
+  // PDF를 못 열 때만 글자 원문
   assert.match(screen, /채팅으로/);
-  assert.match(screen, /PDF 원문/);
-  assert.match(screen, /텍스트 원문/);
-  assert.match(screen, /role="tablist"/);
-  assert.match(screen, /useState\(hasPdf \? "pdf" : "text"\)/);
+  assert.doesNotMatch(screen, /role="tablist"|텍스트 원문<|PDF 원문</);
+  assert.match(screen, /const tab = pdfFailed \? "text" : "pdf";/);
+  assert.match(screen, /원본 PDF를 새 창에서 열기/);
+  assert.match(screen, /openPdfInNewWindow\(\s*\(\) => StorageFiles\.originalPdf\(workspaceSlug, source\.pdfRef\)/);
   assert.match(screen, /원본 PDF를 불러올 수 없어 텍스트 근거를 표시합니다\./);
   // browser back closes the view (one history entry, router state kept)
   assert.match(
@@ -64,8 +65,9 @@ test("mobile citations open a full-screen PDF/텍스트 source view", () => {
     /window\.history\.pushState\(\s*\{ \.\.\.\(window\.history\.state \|\| \{\}\), \[HISTORY_FLAG\]: true \}/
   );
   assert.match(screen, /addEventListener\("popstate", onPop\)/);
-  // no duplicate links inside the mobile view
-  assert.doesNotMatch(screen, /새 창에서 열기|텍스트 원문으로 보기/);
+  // the text-view switch is gone (only one new-window link)
+  assert.doesNotMatch(screen, /텍스트 원문으로 보기/);
+  assert.equal((screen.match(/>\s*\{opening \? "원본 PDF를 여는 중입니다\." : "원본 PDF를 새 창에서 열기"\}/g) || []).length, 1);
   // the PDF still comes from the authenticated original-PDF endpoint
   assert.match(canvas, /StorageFiles\.originalPdf\(workspaceSlug, pdfRef\)/);
   assert.match(canvas, /getPage\(pageNumber\)/);
@@ -93,8 +95,9 @@ test("PC citation: text view is a toggle and the PDF can be shown again", () => 
     "../../components/WorkspaceChat/ChatContainer/ChatHistory/Citation/";
   const row = src(`${dir}index.jsx`);
   const viewer = src(`${dir}PdfPageViewer.jsx`);
-  // 텍스트 원문으로 보기 switches the view instead of marking the PDF broken
-  assert.match(viewer, /onShowText \? onShowText\(\) : onUnavailable\?\.\(\)/);
+  // 2026-11-09 사용자 요청: "텍스트 원문으로 보기" 버튼은 없고 "원본 PDF를 새 창에서 열기"만 남는다.
+  assert.doesNotMatch(viewer, /텍스트 원문으로 보기/);
+  assert.match(viewer, /원본 PDF를 새 창에서 열기/);
   assert.match(row, /onShowText=\{\(\) => setTextMode\(true\)\}/);
   assert.match(row, /const showPdf = pdfAvailable && !textMode;/);
   // The number stays inside the PDF URL so the correct page opens, while the

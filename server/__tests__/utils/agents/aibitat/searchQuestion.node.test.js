@@ -31,6 +31,10 @@ test("검색어 정리: 붙은 영어·한글 띄우기, 약어 대문자, 요�
   // "챙기는 물품"·"필요한 물품"도 준비물처럼 요청 말(2026-10-26)
   assert.equal(cleanSearchQuestion("kalimate enema 챙기는 물품"), "kalimate enema");
   assert.equal(cleanSearchQuestion("PCI 필요한 물품"), "PCI");
+  // 2026-11-09: 붙여 쓴 "금식", "어딜까" 같은 말
+  assert.equal(cleanSearchQuestion("tfca 자정금식"), "tfca 자정 금식");
+  assert.equal(cleanSearchQuestion("8865 번호 어딜까"), "8865 번호");
+  assert.equal(cleanSearchQuestion("금식여부"), "금식여부");
   // 요청 말만 있으면 원래 질문
   assert.equal(cleanSearchQuestion("체크리스트"), "체크리스트");
 });
@@ -44,6 +48,8 @@ const history = [
 test("앞 질문이 있고 이어 말하는 표현이 있을 때만 이어지는 질문으로 본다", () => {
   assert.equal(looksDependent("4Pint 면 20분~30분 안에 끝나도 괜찮지?", history), true);
   assert.equal(looksDependent("4Pint 면 20분~30분 안에 끝나도 괜찮지?", history.slice(2)), false);
+  // 2026-11-09: "~면"만으로는 이어지는 질문이 아님
+  assert.equal(looksDependent("A line빼면 드레싱 챙겨?", history), false);
   assert.equal(looksDependent("CAG 체크리스트", [...history.slice(0, 2), { role: "user", content: "CAG 체크리스트" }]), false);
 });
 

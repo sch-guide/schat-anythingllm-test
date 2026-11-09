@@ -32,6 +32,7 @@ function setup(t) {
   const sqlite = new DatabaseSync(":memory:");
   t.after(() => sqlite.close());
   sqlite.exec(`CREATE TABLE workspace_chats(id INTEGER PRIMARY KEY, workspaceId INTEGER, user_id INTEGER, prompt TEXT, response TEXT, feedbackScore BOOLEAN);
+    CREATE TABLE schat_user_notifications(id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, report_id INTEGER, kind TEXT NOT NULL, message TEXT NOT NULL, read_at DATETIME, createdAt DATETIME NOT NULL);
     CREATE TABLE users(id INTEGER PRIMARY KEY, department_id INTEGER); CREATE TABLE schat_departments(id INTEGER PRIMARY KEY, name TEXT);
     INSERT INTO users VALUES(7,1),(8,1); INSERT INTO schat_departments VALUES(1,'시험부서');
     INSERT INTO workspace_chats VALUES(11,2,7,'가짜 질문','{"text":"전체 답변","sources":[{"title":"합성 지침","page":3}]}',1);`);
@@ -186,4 +187,29 @@ test("처리 완료된 평가만 삭제하고 직원·대화 기록은 남김", 
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM users").get().n, 2);
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM workspace_chats").get().n, 1);
   await assert.rejects(store.remove(id), { code: "NOT_FOUND" });
+});
+
+// 2026-11-09: 👎를 보낸 직원에게도 관리자가 처리하면 알림이 간다(문제신고와 같은 알림함).
+test("처음 처리 완료할 때만 👎를 보낸 직원에게 처리 결과 알림을 보낸다", async (t) => {
+  const { sqlite, store } = setup(t);
+  await store.save(7, 2, 11, { feedback: false, reason: "not_found" });
+  const id = sqlite.prepare("SELECT id FROM schat_answer_feedback").get().id;
+  await store.resolve(id, { resolution: "  가상 지침 3쪽 내용을 답변에 넣었습니다.  " });
+  await store.resolve(id, { resolution: "두 번째" }); // 이미 완료 → 알림 다시 안 보냄
+  const rows = sqlite.prepare("SELECT * FROM schat_user_notifications").all();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].user_id, 7);
+  assert.equal(rows[0].report_id, null);
+  assert.equal(rows[0].kind, api.FEEDBACK_NOTIFICATION_KIND);
+  const shown = api.presentFeedbackNotification(rows[0]);
+  assert.equal(shown.message, "보내 주신 답변 의견(원하는 내용을 못 찾음)을 처리했습니다.");
+  assert.equal(shown.report.title, "가짜 질문");
+  assert.equal(shown.report.statusLabel, "처리 완료");
+  assert.equal(shown.report.resolution, "가상 지침 3쪽 내용을 답변에 넣었습니다.");
+  // 직원이 다시 👎를 보내면 다시 열리고, 다시 완료하면 새 알림(처리 결과를 비우면 기본 문장)
+  await store.save(7, 2, 11, { feedback: false, reason: "wrong" });
+  await store.resolve(id);
+  const last = sqlite.prepare("SELECT * FROM schat_user_notifications ORDER BY id DESC").get();
+  assert.equal(api.presentFeedbackNotification(last).report.resolution, "보내 주신 의견을 확인하고 답변을 수정했습니다.");
+  await assert.rejects(store.resolve(999), { code: "NOT_FOUND" });
 });

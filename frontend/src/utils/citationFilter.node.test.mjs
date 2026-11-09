@@ -96,12 +96,27 @@ test("RI refusal hides every source including insulin background material", () =
   assert.deepEqual(result.references,[]);
 });
 
-test("substantive answer without direct evidence only offers clearly separated references", () => {
-  const sources=[source(8,"다른 자료")];
-  const result=buildCitationDisplay({question:"알 수 없는 질문",answer:"구체적인 답변 내용",sources});
+// 2026-11-09: 참고 자료도 질문 낱말이 들어간 것만(점수만 비슷한 다른 수술·검사는 숨김).
+test("substantive answer without direct evidence only offers related, clearly separated references", () => {
+  const unrelated=source(8,"다른 자료");
+  const related=source(9,"가상고실술 후 관찰 사항");
+  const result=buildCitationDisplay({question:"가상고실술 관찰",answer:"구체적인 답변 내용",sources:[unrelated,related]});
   assert.equal(result.mode,"unverified");
   assert.deepEqual(result.sources,[]);
-  assert.deepEqual(result.references,sources);
+  assert.deepEqual(result.references,[related]);
+});
+
+// 2026-11-09: "고실 개방술에 대한 내용은 등록된 문서에서 확인되지 않습니다."처럼 다른 말로 시작한
+// 짧은 못 찾음 답은 근거 없음(참고 자료도 보이지 않음). 내용이 있는 답·인용이 있는 답은 그대로.
+test("a short not-found answer that starts differently shows no references", () => {
+  const sources=[source(4,"가상 다른 수술 준비 동의서")];
+  const short=buildCitationDisplay({question:"가상고실술",answer:"가상고실술에 대한 내용은 등록된 문서에서 확인되지 않습니다.",sources});
+  assert.equal(short.mode,"no-evidence");
+  assert.deepEqual(short.references,[]);
+  const quoted=[{...sources[0],evidenceQuotes:["가상 다른 수술 준비 동의서"]}];
+  assert.notEqual(buildCitationDisplay({question:"가상고실술",answer:"가상고실술에 대한 내용은 등록된 문서에서 확인되지 않습니다.",sources:quoted}).mode,"no-evidence");
+  const long="가상 준비 동의서와 금식 기준은 다음과 같습니다. ".repeat(4)+"회복 후 관찰은 등록된 문서에서 확인되지 않습니다.";
+  assert.notEqual(buildCitationDisplay({question:"가상 준비",answer:long,sources}).mode,"no-evidence");
 });
 
 test("incidental CT mention in another checklist does not qualify as CT fasting evidence", () => {

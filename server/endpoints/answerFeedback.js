@@ -102,7 +102,9 @@ function registerFeedbackAdminEndpoints(
         .status(200)
         .json({
           success: true,
-          feedback: await getStore().resolve(request.params.id),
+          feedback: await getStore().resolve(request.params.id, {
+            resolution: request.body?.resolution,
+          }),
         });
     })
   );

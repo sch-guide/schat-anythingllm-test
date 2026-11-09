@@ -191,12 +191,22 @@ test("no-evidence answer renders notice only, never even a hidden reference row"
 });
 
 test("unverified substantive answer has a closed disclosure without a missing-evidence banner", async () => {
-  const html = await renderCitations([{documentName:"참고문서.pdf",page:8,excerpt:"다른 주제"}],
-    {question:"CT 금식 시간?",answer:"금식 시간을 확인하세요."});
+  // 2026-11-09: 질문 낱말이 들어간 자료만 참고 자료로, 상관없는 자료(다른 주제)는 숨김.
+  const html = await renderCitations([{documentName:"참고문서.pdf",page:8,excerpt:"가상검사 금식 관련 다른 주제"},
+    {documentName:"상관없는문서.pdf",page:9,excerpt:"다른 수술 동의서"}],
+    {question:"가상검사 금식 시간?",answer:"금식 시간을 확인하세요."});
+  assert.match(html,/참고문서/);
+  assert.doesNotMatch(html,/상관없는문서/);
   assert.doesNotMatch(html,/직접 근거를 특정하지 못했습니다|원문 확인이 필요합니다/);
   assert.match(html,/<summary[^>]*>검색된 참고 자료 보기/);
   assert.match(html,/답변의 직접 근거로 확인되지 않은 자료입니다/);
   assert.doesNotMatch(html,/<details[^>]*\bopen\b/);
+});
+
+test("an unverified answer whose references are all unrelated shows no empty box", async () => {
+  const html = await renderCitations([{documentName:"상관없는문서.pdf",page:9,excerpt:"다른 수술 동의서"}],
+    {question:"가상고실술 관찰",answer:"관찰 내용입니다."});
+  assert.doesNotMatch(html,/상관없는문서|검색된 참고 자료 보기|rounded-lg border/);
 });
 
 test("CT and MRI render separate directly relevant source rows", async () => {

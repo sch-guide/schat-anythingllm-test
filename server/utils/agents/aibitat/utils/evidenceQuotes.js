@@ -188,6 +188,11 @@ async function completeWithEvidence({
   );
   if (system) system.content += instruction;
   else sentMessages.unshift({ role: "system", content: instruction });
+  // 2026-11-09: "A line빼면 드레싱 챙겨?"에 뇌수두증 수술 쪽 "Portex tube suture remove 드레싱"으로
+  // 답했다. 질문이 묻는 대상과 다른 대상에 대한 근거로는 답하지 않게 한다(관리자 답변 규칙은 그대로).
+  sentMessages.find((message) => message.role === "system").content +=
+    "\n근거 문장이 질문이 묻는 대상(기구·관·시술·검사·약 이름)과 다른 대상에 대한 내용이면 그 근거로 답하지 마세요. " +
+    "비슷한 말(제거·드레싱·준비 등)이 있어도 대상이 다르면 질문의 대상에 대해서는 확인되지 않는다고 답하세요.";
   if (sources.some(source => /전화번호부/u.test(source.documentName || source.title || ""))) {
     sentMessages.find(message=>message.role==="system").content +=
       "\n전화번호부 표의 번호 종류(단축·내선·직통)는 숫자의 길이나 나열 순서로 추측하지 마세요. " +

@@ -1,4 +1,4 @@
-import { isNoEvidenceAnswer } from "./citationFilter.js";
+import { isNotFoundWithoutEvidence } from "./citationFilter.js";
 
 export function normalizeChecklistQuestion(value = "") {
   return String(value)
@@ -191,7 +191,7 @@ export function matchChecklists(question = "", checklists = [], response) {
     !String(response.content || "").trim() || response.error || response.pending ||
     (response.animate && !response.closed) ||
     (response.searchOutcome?.version === 2 && response.searchOutcome.status === "not_found") ||
-    isNoEvidenceAnswer(response.content)
+    isNotFoundWithoutEvidence(response.content, response.sources)
   )) return [];
   const normalizedQuestion = normalizeChecklistQuestion(question);
   if (!normalizedQuestion || asksDeviceUseOnly(question) || asksNursingNeedOnly(question)) return [];

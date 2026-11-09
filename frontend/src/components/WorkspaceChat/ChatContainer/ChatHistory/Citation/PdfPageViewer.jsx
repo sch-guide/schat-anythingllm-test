@@ -174,15 +174,8 @@ export default function PdfPageViewer({
         >
           원본 PDF를 새 창에서 열기
         </a>
-        <span className="mx-2 text-zinc-600 light:text-slate-400">|</span>
-        <button
-          type="button"
-          // Only switches the view; the PDF can be shown again afterwards.
-          onClick={() => (onShowText ? onShowText() : onUnavailable?.())}
-          className="text-xs font-medium text-zinc-300 hover:text-white light:text-slate-600 light:hover:text-slate-900"
-        >
-          텍스트 원문으로 보기
-        </button>
+        {/* 2026-11-09 사용자 요청: 글자 원문으로 바꿔 보는 버튼은 뺐다. PDF를 못 열 때는 지금처럼
+            onUnavailable로 텍스트 원문을 보여 준다. */}
       </div>
     </div>
   );

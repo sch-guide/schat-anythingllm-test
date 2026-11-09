@@ -95,6 +95,7 @@ test("관리자 목록·상세·완료 경로 모두 adminOnly 사용, 신고와
     question: "합성 질문",
     createdAt: "2026-10-12",
   };
+  const resolved = [];
   api.registerFeedbackAdminEndpoints(app, {
     adminOnly,
     listReports: async () => [
@@ -103,7 +104,7 @@ test("관리자 목록·상세·완료 경로 모두 adminOnly 사용, 신고와
     getStore: () => ({
       list: async () => [row],
       detail: async () => ({ ...row, answer: "전체 답변", sources: [] }),
-      resolve: async () => ({ ...row, status: "resolved" }),
+      resolve: async (id, options) => (resolved.push([id, options]), { ...row, status: "resolved" }),
       remove: async (id) => {
         if (Number(id) === 2)
           throw Object.assign(new Error("x"), { code: "NOT_RESOLVED" });
@@ -130,8 +131,9 @@ test("관리자 목록·상세·완료 경로 모두 adminOnly 사용, 신고와
   await routes[1][3]({ params: { id: 1 } }, detail);
   assert.equal(detail.body.feedback.answer, "전체 답변");
   const done = response();
-  await routes[2][3]({ params: { id: 1 } }, done);
+  await routes[2][3]({ params: { id: 1 }, body: { resolution: "처리 결과" } }, done);
   assert.equal(done.body.feedback.status, "resolved");
+  assert.deepEqual(resolved, [[1, { resolution: "처리 결과" }]]);
   const removed = response();
   removed.locals.user = { id: 5 };
   await routes[3][3]({ params: { id: 1 } }, removed);
